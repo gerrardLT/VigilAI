@@ -1,0 +1,4 @@
+# file: D:\5个项目\VigilAI\app\backend\scrapers\airdrop_scraper.py
+# hypothesis_version: 6.148.7
+
+['+00:00', '--headless', '--no-sandbox', '.cmc-table tbody tr', '.description, p', 'Z', '[class*="airdrop"]', '[class*="campaign"]', '[class*="card"]', '[class*="community"]', '[class*="member"]', '[class*="quest"]', 'a', 'a, h3, .name', 'a[href]', 'airdrop', 'airdrops.io', 'article', 'coinmarketcap', 'crypto', 'defi', 'defillama', 'galxe', 'href', 'html.parser', 'http', 'p, [class*="desc"]', 'points', 'quest', 'scrape', 'table tbody tr', 'use_selenium', 'web3', 'zealy']

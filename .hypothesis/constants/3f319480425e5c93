@@ -1,0 +1,4 @@
+# file: D:\5个项目\VigilAI\app\backend\data_manager.py
+# hypothesis_version: 6.148.7
+
+[7200, ' AND ', '1=1', 'ASC', 'DESC', 'USD', '[]', 'activity_count', 'activity_count = ?', 'category', 'category = ?', 'count', 'created_at', 'deadline', 'desc', 'description', 'enabled', 'end_date', 'error_message', 'error_message = ?', 'error_message = NULL', 'id', 'idle', 'last_run', 'last_run = ?', 'last_success', 'last_success = ?', 'location', 'name', 'organizer', 'priority', 'prize_amount', 'prize_currency', 'prize_description', 'search', 'source_id', 'source_id = ?', 'source_name', 'start_date', 'status', 'status = ?', 'tags', 'title', 'total', 'type', 'update_interval', 'updated_at', 'url']

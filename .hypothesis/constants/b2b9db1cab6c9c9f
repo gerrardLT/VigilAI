@@ -1,0 +1,4 @@
+# file: D:\5个项目\VigilAI\app\backend\scrapers\rss_scraper.py
+# hypothesis_version: 6.148.7
+
+[1000, ',', '<[^>]+>', 'CNY', 'USD', '\\s+', 'description', 'link', 'published_parsed', 'summary', 'tags', 'term', 'title', 'updated_parsed']

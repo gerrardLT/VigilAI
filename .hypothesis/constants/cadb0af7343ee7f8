@@ -1,0 +1,4 @@
+# file: D:\5个项目\VigilAI\app\backend\models.py
+# hypothesis_version: 6.148.7
+
+['USD', 'airdrop', 'api', 'bounty', 'competition', 'error', 'event', 'grant', 'hackathon', 'high', 'idle', 'low', 'medium', 'rss', 'running', 'success', 'upcoming', 'web']

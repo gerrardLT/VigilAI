@@ -1,0 +1,4 @@
+# file: D:\5个项目\VigilAI\app\backend\utils\proxy_pool.py
+# hypothesis_version: 6.148.7
+
+['available', 'failed', 'http', 'https', 'total']

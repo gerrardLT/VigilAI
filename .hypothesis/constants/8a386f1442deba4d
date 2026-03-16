@@ -1,0 +1,4 @@
+# file: D:\5个项目\VigilAI\app\backend\scrapers\kaggle_scraper.py
+# hypothesis_version: 6.148.7
+
+[',', '.kaggle', 'KAGGLE_KEY', 'KAGGLE_USERNAME', 'Kaggle', 'USD', 'USERPROFILE', '\\$\\s*([\\d,]+)', 'active', 'category', 'competition', 'data-science', 'deadline', 'description', 'enabledDate', 'kaggle', 'kaggle.json', 'knowledge', 'kudos', 'ref', 'reward', 'title', 'upcoming']

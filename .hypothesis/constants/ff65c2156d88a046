@@ -1,0 +1,4 @@
+# file: D:\5个项目\VigilAI\app\backend\scheduler.py
+# hypothesis_version: 6.148.7
+
+[7200, 'airdrop', 'api', 'bounty', 'coding_competition', 'consecutive_failures', 'data_competition', 'design_competition', 'enabled', 'enterprise', 'error_count', 'government', 'hackathon_aggregator', 'is_paused', 'kaggle', 'last_activity_count', 'last_error', 'last_error_time', 'last_run', 'last_success', 'medium', 'pause_until', 'priority', 'rss', 'source_id', 'tech_media', 'total_activities', 'type', 'web', 'web3']
