@@ -1,104 +1,228 @@
-// 活动类别枚举
-export type Category = 'hackathon' | 'data_competition' | 'coding_competition' | 'other_competition' | 'airdrop' | 'bounty' | 'grant' | 'dev_event' | 'news';
+export type Category =
+  | 'hackathon'
+  | 'data_competition'
+  | 'coding_competition'
+  | 'other_competition'
+  | 'airdrop'
+  | 'bounty'
+  | 'grant'
+  | 'dev_event'
+  | 'news'
 
-// 优先级枚举
-export type Priority = 'high' | 'medium' | 'low';
+export type Priority = 'high' | 'medium' | 'low'
 
-// 信息源类型枚举
-export type SourceType = 'rss' | 'web' | 'api';
+export type SourceType =
+  | 'rss'
+  | 'web'
+  | 'api'
+  | 'firecrawl'
+  | 'kaggle'
+  | 'tech_media'
+  | 'airdrop'
+  | 'data_competition'
+  | 'hackathon_aggregator'
+  | 'bounty'
+  | 'enterprise'
+  | 'government'
+  | 'design_competition'
+  | 'coding_competition'
+  | 'universal'
 
-// 信息源状态枚举
-export type SourceStatus = 'idle' | 'running' | 'success' | 'error';
+export type SourceStatus = 'idle' | 'running' | 'success' | 'error'
+export type SourceFreshnessLevel = 'fresh' | 'aging' | 'stale' | 'critical' | 'never'
+export type TrackingStatus = 'saved' | 'tracking' | 'done' | 'archived'
+export type DigestStatus = 'draft' | 'sent'
+export type DeadlineLevel = 'urgent' | 'soon' | 'upcoming' | 'later' | 'none' | 'expired'
+export type TrustLevel = 'high' | 'medium' | 'low'
 
-// 奖金信息
 export interface Prize {
-  amount: number | null;
-  currency: string;
-  description: string | null;
+  amount: number | null
+  currency: string
+  description: string | null
 }
 
-// 活动时间信息
 export interface ActivityDates {
-  start_date: string | null;
-  end_date: string | null;
-  deadline: string | null;
+  start_date: string | null
+  end_date: string | null
+  deadline: string | null
 }
 
-// 活动实体 - 与后端Activity模型完全匹配
-export interface Activity {
-  id: string;
-  title: string;
-  description: string | null;
-  source_id: string;
-  source_name: string;
-  url: string;
-  category: Category;
-  tags: string[];
-  prize: Prize | null;
-  dates: ActivityDates | null;
-  location: string | null;
-  organizer: string | null;
-  image_url: string | null;
-  status: string;
-  created_at: string;
-  updated_at: string;
+export interface TimelineEvent {
+  key: string
+  label: string
+  timestamp: string
 }
 
-// 信息源实体 - 与后端Source模型完全匹配
+export interface ActivityListItem {
+  id: string
+  title: string
+  description: string | null
+  full_content?: string | null
+  source_id: string
+  source_name: string
+  url: string
+  category: Category
+  tags: string[]
+  prize: Prize | null
+  dates: ActivityDates | null
+  location: string | null
+  organizer: string | null
+  image_url?: string | null
+  summary?: string | null
+  score?: number | null
+  score_reason?: string | null
+  deadline_level?: DeadlineLevel | null
+  trust_level?: TrustLevel | null
+  updated_fields?: string[]
+  is_tracking?: boolean
+  is_favorited?: boolean
+  is_digest_candidate?: boolean
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export type Activity = ActivityListItem
+
+export interface TrackingState {
+  activity_id: string
+  is_favorited: boolean
+  status: TrackingStatus
+  notes: string | null
+  next_action: string | null
+  remind_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TrackingItem extends TrackingState {
+  activity: ActivityListItem
+}
+
+export interface ActivityDetail extends ActivityListItem {
+  timeline?: TimelineEvent[]
+  related_items?: ActivityListItem[]
+  tracking?: TrackingState | null
+}
+
 export interface Source {
-  id: string;
-  name: string;
-  type: SourceType;
-  category: Category;
-  status: SourceStatus;
-  last_run: string | null;
-  last_success: string | null;
-  activity_count: number;
-  error_message: string | null;
+  id: string
+  name: string
+  type: SourceType
+  category?: Category
+  status: SourceStatus
+  last_run: string | null
+  last_success: string | null
+  activity_count: number
+  error_message: string | null
+  health_score?: number
+  freshness_level?: SourceFreshnessLevel
+  last_success_age_hours?: number | null
+  needs_attention?: boolean
 }
 
-// 活动列表响应 - 与后端ActivityListResponse匹配
 export interface ActivityListResponse {
-  total: number;
-  page: number;
-  page_size: number;
-  items: Activity[];
+  total: number
+  page: number
+  page_size: number
+  total_pages?: number
+  items: ActivityListItem[]
 }
 
-// 统计信息响应 - 与后端StatsResponse匹配
 export interface StatsResponse {
-  total_activities: number;
-  total_sources: number;
-  activities_by_category: Record<string, number>;
-  activities_by_source: Record<string, number>;
-  last_update: string | null;
+  total_activities: number
+  total_sources: number
+  activities_by_category: Record<string, number>
+  activities_by_source: Record<string, number>
+  recent_activities: number
+  last_update: string | null
 }
 
-// 刷新响应 - 与后端RefreshResponse匹配
+export interface WorkspaceOverview extends StatsResponse {
+  tracked_count: number
+  favorited_count: number
+}
+
+export interface WorkspaceTrend {
+  date: string
+  count: number
+}
+
+export interface DigestSummary {
+  id: string
+  digest_date: string
+  title: string
+  summary: string | null
+  content: string
+  item_ids: string[]
+  status: DigestStatus
+  created_at: string
+  updated_at: string
+  last_sent_at: string | null
+  send_channel: string | null
+}
+
+export type DigestDetail = DigestSummary
+
+export interface WorkspaceResponse {
+  overview: WorkspaceOverview
+  top_opportunities: ActivityListItem[]
+  digest_preview: DigestSummary | null
+  trends: WorkspaceTrend[]
+  alert_sources: Source[]
+  first_actions: ActivityListItem[]
+}
+
 export interface RefreshResponse {
-  success: boolean;
-  message: string;
+  success: boolean
+  message: string
 }
 
-// 类别选项
+export interface SuccessResponse {
+  success: boolean
+}
+
 export interface CategoryOption {
-  value: string;
-  label: string;
+  value: string
+  label: string
 }
 
-// 筛选参数
 export interface ActivityFilters {
-  category?: string;
-  source_id?: string;
-  status?: string;
-  search?: string;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  page?: number;
-  page_size?: number;
+  category?: string
+  source_id?: string
+  status?: string
+  search?: string
+  deadline_level?: string
+  trust_level?: string
+  tracking_state?: string
+  is_tracking?: boolean
+  is_favorited?: boolean
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+  page?: number
+  page_size?: number
 }
 
-// 类别标签映射
+export interface TrackingUpsertRequest {
+  is_favorited?: boolean
+  status?: TrackingStatus
+  notes?: string | null
+  next_action?: string | null
+  remind_at?: string | null
+}
+
+export interface DigestGenerateRequest {
+  digest_date?: string
+}
+
+export interface DigestSendRequest {
+  send_channel?: string
+}
+
+export interface DigestCandidateRequest {
+  digest_date?: string
+}
+
 export const CATEGORY_LABELS: Record<Category, string> = {
   hackathon: '黑客松',
   data_competition: '数据竞赛',
@@ -109,20 +233,18 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   grant: '资助',
   dev_event: '开发者活动',
   news: '科技新闻',
-};
+}
 
-// 状态颜色映射
 export const STATUS_COLORS: Record<SourceStatus, string> = {
   idle: 'bg-gray-400',
   running: 'bg-blue-500',
   success: 'bg-green-500',
   error: 'bg-red-500',
-};
+}
 
-// 状态标签映射
 export const STATUS_LABELS: Record<SourceStatus, string> = {
   idle: '空闲',
   running: '运行中',
   success: '成功',
   error: '错误',
-};
+}

@@ -155,7 +155,17 @@ class TestEnumValidation:
         }
         activity = Activity(**data)
         assert activity.category in list(Category)
-        assert activity.category.value in ["hackathon", "competition", "airdrop", "bounty", "grant", "event"]
+        assert activity.category.value in [
+            "hackathon",
+            "data_competition",
+            "coding_competition",
+            "other_competition",
+            "airdrop",
+            "bounty",
+            "grant",
+            "dev_event",
+            "news",
+        ]
     
     @given(priority=st.sampled_from(list(Priority)))
     @settings(max_examples=100)

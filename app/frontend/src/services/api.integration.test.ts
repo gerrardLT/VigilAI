@@ -11,10 +11,13 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { ApiService } from './api'
-import type { Activity, Source, StatsResponse } from '../types'
+import type { Activity, Source } from '../types'
 
 // 跳过集成测试，除非明确启用
-const SKIP_INTEGRATION = process.env.RUN_INTEGRATION_TESTS !== 'true'
+const runtimeProcess = globalThis as typeof globalThis & {
+  process?: { env?: Record<string, string | undefined> }
+}
+const SKIP_INTEGRATION = runtimeProcess.process?.env?.RUN_INTEGRATION_TESTS !== 'true'
 
 describe.skipIf(SKIP_INTEGRATION)('API Integration Tests', () => {
   let api: ApiService

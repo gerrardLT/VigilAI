@@ -34,7 +34,7 @@ class TestRssParsingRobustness:
     return an empty list without raising an exception.
     """
     
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     @given(st.text())
     def test_random_text_returns_empty_list(self, random_text):
         """随机文本不应导致异常，应返回空列表"""

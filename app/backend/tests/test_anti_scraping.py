@@ -6,7 +6,7 @@ Validates: Requirements 15.3
 """
 
 import pytest
-from hypothesis import given, strategies as st, settings, assume
+from hypothesis import given, strategies as st, settings
 from datetime import datetime, timedelta
 import sys
 import os
@@ -121,7 +121,14 @@ class TestProxyPool:
         assert stats['available'] == 1
     
     @settings(max_examples=50)
-    @given(st.lists(st.text(min_size=5, max_size=50), min_size=1, max_size=10))
+    @given(
+        st.lists(
+            st.integers(min_value=1, max_value=10_000).map(lambda value: f"http://proxy{value}:8080"),
+            min_size=2,
+            max_size=10,
+            unique=True,
+        )
+    )
     def test_property_proxy_rotation(self, proxy_list):
         """
         Property: 代理轮换
@@ -129,9 +136,6 @@ class TestProxyPool:
         Validates: Requirements 11.1, 11.4
         """
         # 过滤空字符串
-        proxy_list = [p for p in proxy_list if p.strip()]
-        assume(len(proxy_list) >= 2)
-        
         pool = ProxyPool(proxy_list)
         
         # 获取多个代理
@@ -142,8 +146,7 @@ class TestProxyPool:
                 selected_proxies.add(proxy['http'])
         
         # 如果有多个代理，应该选择到多个不同的
-        if len(proxy_list) > 1:
-            assert len(selected_proxies) >= 1
+        assert len(selected_proxies) >= 1
 
 
 class TestUserAgentRotator:
