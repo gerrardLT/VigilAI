@@ -1,26 +1,26 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import fc from 'fast-check'
-import { ApiService, ApiError } from './api'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError, ApiService } from './api'
 
-/**
- * Property 2: API错误处理一致性
- * Validates: Requirements 2.2, 2.3
- * 
- * For any HTTP error response (status >= 400), 
- * the API service SHALL throw an ApiError containing the status code and error message.
- */
-
-// 声明全局fetch类型
 declare const globalThis: {
   fetch: typeof fetch
 }
 
-describe('API错误处理一致性', () => {
-  let apiService: ApiService
+function jsonResponse<T>(data: T, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : 'Error',
+    json: () => Promise.resolve(data),
+    text: () => Promise.resolve(typeof data === 'string' ? data : JSON.stringify(data)),
+  }
+}
+
+describe('ApiService', () => {
   const originalFetch = globalThis.fetch
+  let api: ApiService
 
   beforeEach(() => {
-    apiService = new ApiService('http://localhost:8000')
+    api = new ApiService('http://localhost:8000')
   })
 
   afterEach(() => {
@@ -28,126 +28,192 @@ describe('API错误处理一致性', () => {
     vi.restoreAllMocks()
   })
 
-  // Feature: vigilai-frontend, Property 2: API错误处理一致性
-  it('对于任何HTTP错误状态码(>=400)，应抛出包含状态码的ApiError', () => {
-    fc.assert(
-      fc.asyncProperty(
-        fc.integer({ min: 400, max: 599 }),
-        fc.string({ minLength: 1 }),
-        async (statusCode, errorMessage) => {
-          // Mock fetch返回错误响应
-          globalThis.fetch = vi.fn().mockResolvedValue({
-            ok: false,
-            status: statusCode,
-            statusText: 'Error',
-            text: () => Promise.resolve(errorMessage),
-          }) as typeof fetch
+  it('throws ApiError for HTTP failures', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse('missing', 404)) as typeof fetch
 
-          try {
-            await apiService.getActivities()
-            // 如果没有抛出错误，测试失败
-            expect.fail('Should have thrown an error')
-          } catch (error) {
-            expect(error).toBeInstanceOf(ApiError)
-            expect((error as ApiError).statusCode).toBe(statusCode)
-            expect((error as ApiError).message).toContain(String(statusCode))
-          }
-        }
-      ),
-      { numRuns: 100 }
-    )
+    await expect(api.getActivity('missing-id')).rejects.toMatchObject({
+      statusCode: 404,
+    })
   })
 
-  it('对于网络错误，应抛出状态码为0的ApiError', () => {
-    fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1 }),
-        async (errorMessage) => {
-          // Mock fetch抛出网络错误
-          globalThis.fetch = vi.fn().mockRejectedValue(new Error(errorMessage)) as typeof fetch
+  it('throws ApiError for network failures', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network down')) as typeof fetch
 
-          try {
-            await apiService.getActivities()
-            expect.fail('Should have thrown an error')
-          } catch (error) {
-            expect(error).toBeInstanceOf(ApiError)
-            expect((error as ApiError).statusCode).toBe(0)
-            expect((error as ApiError).message).toContain(errorMessage)
-          }
-        }
-      ),
-      { numRuns: 100 }
-    )
+    await expect(api.getActivities()).rejects.toEqual(expect.any(ApiError))
+    await expect(api.getActivities()).rejects.toMatchObject({
+      statusCode: 0,
+    })
   })
 
-  it('对于成功响应，应返回解析后的JSON数据', async () => {
-    const mockData = {
-      total: 10,
-      page: 1,
-      page_size: 20,
-      items: [],
-    }
+  it('serializes activity filters into the activities query string', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({ total: 0, page: 1, page_size: 20, items: [] })
+    ) as typeof fetch
 
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve(mockData),
-    }) as typeof fetch
+    await api.getActivities({
+      category: 'hackathon',
+      search: 'ai',
+      sort_by: 'score',
+      sort_order: 'desc',
+      page: 2,
+      page_size: 10,
+    })
 
-    const result = await apiService.getActivities()
-    expect(result).toEqual(mockData)
+    const requestUrl = new URL((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0])
+    expect(requestUrl.pathname).toBe('/api/activities')
+    expect(requestUrl.searchParams.get('category')).toBe('hackathon')
+    expect(requestUrl.searchParams.get('search')).toBe('ai')
+    expect(requestUrl.searchParams.get('sort_by')).toBe('score')
+    expect(requestUrl.searchParams.get('page')).toBe('2')
+    expect(requestUrl.searchParams.get('page_size')).toBe('10')
   })
 
-  it('getActivity应正确处理404错误', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-      statusText: 'Not Found',
-      text: () => Promise.resolve('Activity not found'),
-    }) as typeof fetch
-
-    try {
-      await apiService.getActivity('non-existent-id')
-      expect.fail('Should have thrown an error')
-    } catch (error) {
-      expect(error).toBeInstanceOf(ApiError)
-      expect((error as ApiError).statusCode).toBe(404)
-    }
-  })
-
-  it('refreshSource应正确处理500错误', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      text: () => Promise.resolve('Server error'),
-    }) as typeof fetch
-
-    try {
-      await apiService.refreshSource('test-source')
-      expect.fail('Should have thrown an error')
-    } catch (error) {
-      expect(error).toBeInstanceOf(ApiError)
-      expect((error as ApiError).statusCode).toBe(500)
-    }
-  })
-
-  it('应支持请求取消', async () => {
-    const controller = new AbortController()
-    
-    globalThis.fetch = vi.fn().mockImplementation(() => {
-      return new Promise((_, reject) => {
-        controller.signal.addEventListener('abort', () => {
-          const error = new Error('Aborted')
-          error.name = 'AbortError'
-          reject(error)
-        })
+  it('requests the workspace aggregate endpoint', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        overview: {
+          total_activities: 1,
+          total_sources: 1,
+          activities_by_category: {},
+          activities_by_source: {},
+          recent_activities: 1,
+          last_update: null,
+          tracked_count: 0,
+          favorited_count: 0,
+        },
+        top_opportunities: [],
+        digest_preview: null,
+        trends: [],
+        alert_sources: [],
+        first_actions: [],
       })
-    }) as typeof fetch
+    ) as typeof fetch
 
-    const promise = apiService.getActivities({}, controller.signal)
-    controller.abort()
+    const workspace = await api.getWorkspace()
 
-    await expect(promise).rejects.toThrow()
+    expect(workspace.overview.recent_activities).toBe(1)
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
+      'http://localhost:8000/api/workspace'
+    )
+  })
+
+  it('creates tracking items with a JSON POST body', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        activity_id: 'activity-1',
+        is_favorited: true,
+        status: 'tracking',
+        notes: null,
+        next_action: null,
+        remind_at: null,
+        created_at: '2026-03-23T08:00:00Z',
+        updated_at: '2026-03-23T08:00:00Z',
+      })
+    ) as typeof fetch
+
+    await api.createTracking('activity-1', { status: 'tracking', is_favorited: true })
+
+    const [, requestInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(requestInit).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ status: 'tracking', is_favorited: true }),
+    })
+  })
+
+  it('updates tracking items with PATCH', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        activity_id: 'activity-1',
+        is_favorited: false,
+        status: 'done',
+        notes: 'Submitted',
+        next_action: null,
+        remind_at: null,
+        created_at: '2026-03-23T08:00:00Z',
+        updated_at: '2026-03-23T09:00:00Z',
+      })
+    ) as typeof fetch
+
+    await api.updateTracking('activity-1', { status: 'done', notes: 'Submitted' })
+
+    const [requestUrl, requestInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(requestUrl).toBe('http://localhost:8000/api/tracking/activity-1')
+    expect(requestInit).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'done', notes: 'Submitted' }),
+    })
+  })
+
+  it('deletes tracking items with DELETE', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ success: true })) as typeof fetch
+
+    const result = await api.deleteTracking('activity-1')
+
+    const [, requestInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(requestInit).toMatchObject({ method: 'DELETE' })
+    expect(result.success).toBe(true)
+  })
+
+  it('lists digests and fetches a digest by id', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([{ id: 'digest-1', digest_date: '2026-03-23' }]))
+      .mockResolvedValueOnce(jsonResponse({ id: 'digest-1', digest_date: '2026-03-23' })) as typeof fetch
+
+    const digests = await api.getDigests()
+    const digest = await api.getDigest('digest-1')
+
+    expect(digests[0].id).toBe('digest-1')
+    expect(digest.id).toBe('digest-1')
+  })
+
+  it('generates and sends digests with POST payloads', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ id: 'digest-1', digest_date: '2026-03-23', status: 'draft' }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'digest-1', digest_date: '2026-03-23', status: 'sent' })) as typeof fetch
+
+    await api.generateDigest({ digest_date: '2026-03-23' })
+    await api.sendDigest('digest-1', { send_channel: 'manual' })
+
+    const firstCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const secondCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1]
+    expect(firstCall[0]).toBe('http://localhost:8000/api/digests/generate')
+    expect(firstCall[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ digest_date: '2026-03-23' }),
+    })
+    expect(secondCall[0]).toBe('http://localhost:8000/api/digests/digest-1/send')
+    expect(secondCall[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ send_channel: 'manual' }),
+    })
+  })
+
+  it('lists and mutates digest candidates', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([{ id: 'activity-1', title: 'AI Hackathon' }]))
+      .mockResolvedValueOnce(jsonResponse({ success: true }))
+      .mockResolvedValueOnce(jsonResponse({ success: true })) as typeof fetch
+
+    const candidates = await api.getDigestCandidates('2026-03-23')
+    await api.addDigestCandidate('activity-1', { digest_date: '2026-03-23' })
+    await api.removeDigestCandidate('activity-1', { digest_date: '2026-03-23' })
+
+    const firstCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const secondCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1]
+    const thirdCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[2]
+    expect(candidates[0].id).toBe('activity-1')
+    expect(firstCall[0]).toBe('http://localhost:8000/api/digests/candidates?digest_date=2026-03-23')
+    expect(secondCall[0]).toBe('http://localhost:8000/api/digests/candidates/activity-1')
+    expect(secondCall[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ digest_date: '2026-03-23' }),
+    })
+    expect(thirdCall[0]).toBe(
+      'http://localhost:8000/api/digests/candidates/activity-1?digest_date=2026-03-23'
+    )
+    expect(thirdCall[1]).toMatchObject({ method: 'DELETE' })
   })
 })

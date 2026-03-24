@@ -3,9 +3,10 @@
 Feature: vigilai-core
 """
 
-import pytest
-import tempfile
 import os
+import uuid
+
+import pytest
 from hypothesis import given, strategies as st, settings, HealthCheck
 from datetime import datetime
 
@@ -19,9 +20,14 @@ from models import Activity, Category, Prize, ActivityDates
 @pytest.fixture
 def temp_db():
     """创建临时数据库用于测试"""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "test.db")
+    temp_root = os.path.join(os.path.dirname(__file__), ".tmp")
+    os.makedirs(temp_root, exist_ok=True)
+    db_path = os.path.join(temp_root, f"{uuid.uuid4().hex}.db")
+    try:
         yield db_path
+    finally:
+        if os.path.exists(db_path):
+            os.remove(db_path)
 
 
 @pytest.fixture

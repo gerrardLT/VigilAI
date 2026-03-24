@@ -294,7 +294,7 @@ class TestTypeInference:
     def test_infer_type_competition(self):
         """测试推断竞赛类型"""
         scraper = create_test_scraper({'name': 'Kaggle Competition', 'category': 'competition'})
-        assert scraper._infer_type() == 'competition'
+        assert scraper._infer_type() == 'data_competition'
     
     def test_infer_type_bounty(self):
         """测试推断赏金类型"""
@@ -312,7 +312,7 @@ class TestTypeInference:
     def test_infer_type_default(self):
         """测试默认类型"""
         scraper = create_test_scraper({'name': 'Unknown Source', 'category': 'unknown'})
-        assert scraper._infer_type() == 'event'
+        assert scraper._infer_type() == 'dev_event'
     
     @settings(max_examples=50)
     @given(st.sampled_from(['hackathon', 'airdrop', 'competition', 'bounty', 'grant', 'event', 'unknown']))
@@ -328,7 +328,17 @@ class TestTypeInference:
         
         assert inferred_type is not None
         assert isinstance(inferred_type, str)
-        assert inferred_type in ['hackathon', 'airdrop', 'competition', 'bounty', 'grant', 'event']
+        assert inferred_type in [
+            'hackathon',
+            'airdrop',
+            'data_competition',
+            'coding_competition',
+            'other_competition',
+            'bounty',
+            'grant',
+            'dev_event',
+            'news',
+        ]
 
 
 class TestNormalizeActivity:
