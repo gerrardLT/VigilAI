@@ -1,27 +1,29 @@
 """
-REST API for VigilAI.
+VigilAI REST API服务
+使用FastAPI提供数据查询和管理接口
 """
 
-from __future__ import annotations
-
-from datetime import datetime
 import logging
-from typing import List, Optional
+from typing import Optional, List
+from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import SOURCES_CONFIG
+from config import API_HOST, API_PORT
+from models import Activity, Category, Priority
 
 logger = logging.getLogger(__name__)
 
+# 创建FastAPI应用
 app = FastAPI(
     title="VigilAI API",
-    description="Developer opportunity intelligence API",
-    version="2.0.0",
+    description="开发者搞钱机会监控系统API",
+    version="1.0.0"
 )
 
+# 配置CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,290 +33,235 @@ app.add_middleware(
 )
 
 
+# 响应模型
+class ActivityListResponse(BaseModel):
+    """活动列表响应"""
+    total: int
+    page: int
+    page_size: int
+    items: List[dict]
+
+
+class SourceStatusResponse(BaseModel):
+    """信息源状态响应"""
+    id: str
+    name: str
+    type: str
+    category: str
+    status: str
+    last_run: Optional[str]
+    last_success: Optional[str]
+    activity_count: int
+    error_message: Optional[str]
+
+
+class StatsResponse(BaseModel):
+    """统计信息响应"""
+    total_activities: int
+    total_sources: int
+    activities_by_category: dict
+    activities_by_source: dict
+    last_update: Optional[str]
+
+
 class RefreshResponse(BaseModel):
+    """刷新响应"""
     success: bool
     message: str
 
 
-class TrackingUpsertRequest(BaseModel):
-    is_favorited: Optional[bool] = None
-    status: Optional[str] = None
-    notes: Optional[str] = None
-    next_action: Optional[str] = None
-    remind_at: Optional[str] = None
-
-
-class DigestGenerateRequest(BaseModel):
-    digest_date: Optional[str] = None
-
-
-class DigestSendRequest(BaseModel):
-    send_channel: str = "manual"
-
-
-class DigestCandidateRequest(BaseModel):
-    digest_date: Optional[str] = None
-
-
-def _serialize_model(value):
-    if hasattr(value, "model_dump"):
-        return value.model_dump(mode="json")
-    return value
-
-
-def _source_health_snapshot(source) -> dict:
-    now = datetime.now()
-    status = source.status.value if hasattr(source.status, "value") else str(source.status)
-    last_success_age_hours = None
-    freshness_level = "never"
-
-    if source.last_success:
-        last_success_age_hours = round((now - source.last_success).total_seconds() / 3600, 1)
-        if last_success_age_hours <= 24:
-            freshness_level = "fresh"
-        elif last_success_age_hours <= 72:
-            freshness_level = "aging"
-        else:
-            freshness_level = "stale"
-
-    if status == "error":
-        freshness_level = "critical" if source.last_success else "never"
-
-    score = 40
-    score += {"success": 35, "running": 25, "idle": 10, "error": -20}.get(status, 0)
-    score += {"fresh": 20, "aging": 8, "stale": -10, "critical": -25, "never": -15}[freshness_level]
-    if source.activity_count >= 10:
-        score += 10
-    elif source.activity_count > 0:
-        score += 5
-
-    health_score = max(0, min(100, int(score)))
-    needs_attention = status == "error" or freshness_level in {"stale", "critical", "never"}
-
-    return {
-        "health_score": health_score,
-        "freshness_level": freshness_level,
-        "last_success_age_hours": last_success_age_hours,
-        "needs_attention": needs_attention,
-    }
-
-
-@app.get("/api/activities")
+# API端点
+@app.get("/api/activities", response_model=ActivityListResponse)
 async def list_activities(
     request: Request,
-    category: Optional[str] = Query(None),
-    source_id: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    deadline_level: Optional[str] = Query(None),
-    trust_level: Optional[str] = Query(None),
-    is_tracking: Optional[bool] = Query(None),
-    is_favorited: Optional[bool] = Query(None),
-    sort_by: str = Query("created_at"),
-    sort_order: str = Query("desc"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    category: Optional[str] = Query(None, description="按类别过滤"),
+    source_id: Optional[str] = Query(None, description="按信息源过滤"),
+    status: Optional[str] = Query(None, description="按状态过滤"),
+    search: Optional[str] = Query(None, description="搜索关键词"),
+    sort_by: Optional[str] = Query("created_at", description="排序字段"),
+    sort_order: Optional[str] = Query("desc", description="排序方向"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量")
 ):
+    """
+    获取活动列表
+    
+    支持按类别、信息源、状态过滤
+    支持按创建时间、截止日期、奖金排序
+    支持分页
+    """
+    data_manager = request.app.state.data_manager
+    
+    # 构建过滤条件
     filters = {}
     if category:
-        filters["category"] = category
+        filters['category'] = category
     if source_id:
-        filters["source_id"] = source_id
+        filters['source_id'] = source_id
     if status:
-        filters["status"] = status
+        filters['status'] = status
     if search:
-        filters["search"] = search
-    if deadline_level:
-        filters["deadline_level"] = deadline_level
-    if trust_level:
-        filters["trust_level"] = trust_level
-    if is_tracking is not None:
-        filters["is_tracking"] = is_tracking
-    if is_favorited is not None:
-        filters["is_favorited"] = is_favorited
-    activities, total = request.app.state.data_manager.get_activities(
+        filters['search'] = search
+    
+    # 查询活动
+    activities, total = data_manager.get_activities(
         filters=filters,
         sort_by=sort_by,
         sort_order=sort_order,
         page=page,
-        page_size=page_size,
+        page_size=page_size
     )
-    return {
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "items": [_serialize_model(activity) for activity in activities],
-    }
+    
+    # 转换为字典列表
+    items = [act.model_dump() for act in activities]
+    
+    # 处理datetime序列化
+    for item in items:
+        for key, value in item.items():
+            if isinstance(value, datetime):
+                item[key] = value.isoformat()
+            elif isinstance(value, dict):
+                for k, v in value.items():
+                    if isinstance(v, datetime):
+                        item[key][k] = v.isoformat()
+    
+    return ActivityListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items
+    )
 
 
 @app.get("/api/activities/{activity_id}")
 async def get_activity(request: Request, activity_id: str):
-    detail = request.app.state.data_manager.get_activity_detail(activity_id)
-    if detail is None:
+    """获取活动详情"""
+    data_manager = request.app.state.data_manager
+    
+    activity = data_manager.get_activity_by_id(activity_id)
+    if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
-    return detail
+    
+    result = activity.model_dump()
+    
+    # 处理datetime序列化
+    for key, value in result.items():
+        if isinstance(value, datetime):
+            result[key] = value.isoformat()
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                if isinstance(v, datetime):
+                    result[key][k] = v.isoformat()
+    
+    return result
 
 
-@app.get("/api/sources")
+@app.get("/api/sources", response_model=List[SourceStatusResponse])
 async def list_sources(request: Request):
-    sources = request.app.state.data_manager.get_sources_status()
+    """获取所有信息源状态"""
+    from config import SOURCES_CONFIG
+    
+    data_manager = request.app.state.data_manager
+    
+    sources = data_manager.get_sources_status()
+    
     return [
-        {
-            "id": source.id,
-            "name": source.name,
-            "type": source.type.value if hasattr(source.type, "value") else source.type,
-            "category": SOURCES_CONFIG.get(source.id, {}).get("category", "dev_event"),
-            "status": source.status.value if hasattr(source.status, "value") else source.status,
-            "last_run": source.last_run.isoformat() if source.last_run else None,
-            "last_success": source.last_success.isoformat() if source.last_success else None,
-            "activity_count": source.activity_count,
-            "error_message": source.error_message,
-            **_source_health_snapshot(source),
-        }
-        for source in sources
+        SourceStatusResponse(
+            id=s.id,
+            name=s.name,
+            type=s.type.value if hasattr(s.type, 'value') else s.type,
+            category=SOURCES_CONFIG.get(s.id, {}).get('category', 'event'),
+            status=s.status.value if hasattr(s.status, 'value') else s.status,
+            last_run=s.last_run.isoformat() if s.last_run else None,
+            last_success=s.last_success.isoformat() if s.last_success else None,
+            activity_count=s.activity_count,
+            error_message=s.error_message
+        )
+        for s in sources
     ]
 
 
 @app.post("/api/sources/{source_id}/refresh", response_model=RefreshResponse)
 async def refresh_source(request: Request, source_id: str):
-    success = await request.app.state.scheduler.refresh_source(source_id)
-    if not success:
-        raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
-    return RefreshResponse(success=True, message=f"Source {source_id} refresh started")
+    """手动刷新指定信息源"""
+    scheduler = request.app.state.scheduler
+    
+    try:
+        success = await scheduler.refresh_source(source_id)
+        if success:
+            return RefreshResponse(
+                success=True,
+                message=f"Source {source_id} refresh started"
+            )
+        else:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Source {source_id} not found"
+            )
+    except Exception as e:
+        logger.error(f"Error refreshing source {source_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/sources/refresh-all", response_model=RefreshResponse)
 async def refresh_all_sources(request: Request):
-    await request.app.state.scheduler.refresh_all()
-    return RefreshResponse(success=True, message="All sources refresh started")
-
-
-@app.get("/api/stats")
-async def get_stats(request: Request):
-    return request.app.state.data_manager.get_stats().model_dump(mode="json")
-
-
-@app.get("/api/workspace")
-async def get_workspace(request: Request):
-    return request.app.state.data_manager.get_workspace()
-
-
-@app.get("/api/tracking")
-async def get_tracking(request: Request, status: Optional[str] = Query(None)):
-    return request.app.state.data_manager.get_tracking_items(status=status)
-
-
-@app.post("/api/tracking/{activity_id}")
-async def create_tracking(request: Request, activity_id: str, payload: TrackingUpsertRequest):
+    """刷新所有信息源"""
+    scheduler = request.app.state.scheduler
+    
     try:
-        tracking = request.app.state.data_manager.upsert_tracking_item(activity_id, payload.model_dump(exclude_none=True))
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return tracking.model_dump()
-
-
-@app.patch("/api/tracking/{activity_id}")
-async def update_tracking(request: Request, activity_id: str, payload: TrackingUpsertRequest):
-    try:
-        tracking = request.app.state.data_manager.upsert_tracking_item(activity_id, payload.model_dump(exclude_none=True))
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return tracking.model_dump()
-
-
-@app.delete("/api/tracking/{activity_id}")
-async def delete_tracking(request: Request, activity_id: str):
-    deleted = request.app.state.data_manager.delete_tracking_item(activity_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Tracking item not found")
-    return {"success": True}
-
-
-@app.get("/api/digests")
-async def list_digests(request: Request):
-    return [_serialize_model(digest) for digest in request.app.state.data_manager.get_digests()]
-
-
-@app.get("/api/digests/candidates")
-async def list_digest_candidates(request: Request, digest_date: Optional[str] = Query(None)):
-    candidates = request.app.state.data_manager.get_digest_candidates(digest_date)
-    return [_serialize_model(candidate) for candidate in candidates]
-
-
-@app.post("/api/digests/candidates/{activity_id}")
-async def add_digest_candidate(
-    request: Request,
-    activity_id: str,
-    payload: Optional[DigestCandidateRequest] = None,
-):
-    try:
-        success = request.app.state.data_manager.add_digest_candidate(
-            activity_id,
-            payload.digest_date if payload else None,
+        await scheduler.refresh_all()
+        return RefreshResponse(
+            success=True,
+            message="All sources refresh started"
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {"success": success}
+    except Exception as e:
+        logger.error(f"Error refreshing all sources: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/api/digests/candidates/{activity_id}")
-async def remove_digest_candidate(
-    request: Request,
-    activity_id: str,
-    digest_date: Optional[str] = Query(None),
-):
-    deleted = request.app.state.data_manager.remove_digest_candidate(activity_id, digest_date)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Digest candidate not found")
-    return {"success": True}
-
-
-@app.get("/api/digests/{digest_id}")
-async def get_digest(request: Request, digest_id: str):
-    digest = request.app.state.data_manager.get_digest_by_id(digest_id)
-    if digest is None:
-        raise HTTPException(status_code=404, detail="Digest not found")
-    return digest.model_dump()
-
-
-@app.post("/api/digests/generate")
-async def generate_digest(request: Request, payload: Optional[DigestGenerateRequest] = None):
-    digest_date = payload.digest_date if payload else None
-    digest = request.app.state.data_manager.generate_digest(digest_date)
-    return digest.model_dump()
-
-
-@app.post("/api/digests/{digest_id}/send")
-async def send_digest(request: Request, digest_id: str, payload: DigestSendRequest):
-    try:
-        digest = request.app.state.data_manager.mark_digest_sent(digest_id, payload.send_channel)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return digest.model_dump()
+@app.get("/api/stats", response_model=StatsResponse)
+async def get_stats(request: Request):
+    """获取统计信息"""
+    data_manager = request.app.state.data_manager
+    
+    stats = data_manager.get_stats()
+    
+    return StatsResponse(
+        total_activities=stats.get('total_activities', 0),
+        total_sources=stats.get('total_sources', 0),
+        activities_by_category=stats.get('activities_by_category', {}),
+        activities_by_source=stats.get('activities_by_source', {}),
+        last_update=stats.get('last_update')
+    )
 
 
 @app.get("/api/categories")
 async def list_categories():
-    from models import Category
-
-    return [{"value": category.value, "label": category.value.title()} for category in Category]
+    """获取所有活动类别"""
+    return [
+        {"value": c.value, "label": c.value.title()}
+        for c in Category
+    ]
 
 
 @app.get("/api/health")
 async def health_check():
+    """健康检查"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
+# 请求日志中间件
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    """记录API请求日志"""
     start_time = datetime.now()
+    
     response = await call_next(request)
+    
     duration = (datetime.now() - start_time).total_seconds()
     logger.info(
-        "%s %s status=%s duration=%.3fs",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration,
+        f"{request.method} {request.url.path} "
+        f"status={response.status_code} duration={duration:.3f}s"
     )
+    
     return response

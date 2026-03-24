@@ -8,18 +8,7 @@ import fc from 'fast-check'
  * Validates: Requirements 4.3, 4.5
  */
 describe('Property 4: Filter State Synchronization', () => {
-  const validCategories = [
-    '',
-    'hackathon',
-    'data_competition',
-    'coding_competition',
-    'other_competition',
-    'airdrop',
-    'bounty',
-    'grant',
-    'dev_event',
-    'news',
-  ]
+  const validCategories = ['', 'hackathon', 'competition', 'airdrop', 'bounty', 'grant', 'event']
   const validSources = ['', 'devpost', 'dorahacks', 'gitcoin', '36kr', 'huxiu']
 
   it('should generate valid URL params for any filter combination', () => {

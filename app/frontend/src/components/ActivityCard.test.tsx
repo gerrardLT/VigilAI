@@ -13,17 +13,7 @@ import type { Activity, Category } from '../types'
  * the title, source_name, and category; and SHALL conditionally render prize and deadline when available.
  */
 
-const VALID_CATEGORIES: Category[] = [
-  'hackathon',
-  'data_competition',
-  'coding_competition',
-  'other_competition',
-  'airdrop',
-  'bounty',
-  'grant',
-  'dev_event',
-  'news',
-]
+const VALID_CATEGORIES: Category[] = ['hackathon', 'competition', 'airdrop', 'bounty', 'grant', 'event']
 
 // 使用字母数字字符串避免特殊字符导致的测试问题
 const alphanumericString = (minLength: number, maxLength: number) =>

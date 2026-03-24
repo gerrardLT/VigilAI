@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { api } from '../services/api'
 import type { Source } from '../types'
 import { CATEGORY_OPTIONS } from '../utils/constants'
@@ -6,38 +6,21 @@ import { CATEGORY_OPTIONS } from '../utils/constants'
 interface FilterBarProps {
   category: string
   sourceId: string
-  deadlineLevel: string
-  trackingState: string
   onCategoryChange: (category: string) => void
   onSourceChange: (sourceId: string) => void
-  onDeadlineLevelChange: (deadlineLevel: string) => void
-  onTrackingStateChange: (trackingState: string) => void
   onClear: () => void
 }
 
-const DEADLINE_OPTIONS = [
-  { value: '', label: '全部时效' },
-  { value: 'urgent', label: '紧急截止' },
-  { value: 'soon', label: '即将截止' },
-  { value: 'upcoming', label: '近期开放' },
-]
-
-const TRACKING_OPTIONS = [
-  { value: '', label: '全部状态' },
-  { value: 'tracked', label: '已跟进' },
-  { value: 'favorited', label: '已收藏' },
-  { value: 'untracked', label: '待处理' },
-]
-
+/**
+ * 筛选栏组件
+ * 使用Tab形式展示类别和信息源筛选
+ * 选择类别后，来源列表会根据类别进行过滤
+ */
 export function FilterBar({
   category,
   sourceId,
-  deadlineLevel,
-  trackingState,
   onCategoryChange,
   onSourceChange,
-  onDeadlineLevelChange,
-  onTrackingStateChange,
   onClear,
 }: FilterBarProps) {
   const [sources, setSources] = useState<Source[]>([])
@@ -47,58 +30,57 @@ export function FilterBar({
     api.getSources().then(setSources).catch(console.error)
   }, [])
 
+  // 根据选中的类别过滤来源
   const filteredSources = useMemo(() => {
     if (!category) {
       return sources
     }
+    // 过滤出匹配类别的来源
     return sources.filter(source => source.category === category)
   }, [sources, category])
 
+  // 当类别变化时，如果当前选中的来源不在过滤后的列表中，清除来源选择
   useEffect(() => {
     if (sourceId && category) {
-      const sourceInCategory = filteredSources.some(source => source.id === sourceId)
+      const sourceInCategory = filteredSources.some(s => s.id === sourceId)
       if (!sourceInCategory) {
         onSourceChange('')
       }
     }
   }, [category, sourceId, filteredSources, onSourceChange])
 
-  const hasFilters = category || sourceId || deadlineLevel || trackingState
+  const hasFilters = category || sourceId
+
+  // 显示的来源数量限制
   const visibleSourceCount = showAllSources ? filteredSources.length : 8
   const visibleSources = filteredSources.slice(0, visibleSourceCount)
   const hasMoreSources = filteredSources.length > 8
 
-  const renderChipGroup = (
-    options: ReadonlyArray<{ value: string; label: string }>,
-    activeValue: string,
-    onChange: (value: string) => void
-  ) => (
-    <div className="flex flex-wrap gap-2">
-      {options.map(option => (
-        <button
-          key={option.value}
-          onClick={() => onChange(option.value)}
-          className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-            activeValue === option.value
-              ? 'bg-primary-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  )
-
   return (
     <div className="space-y-4 w-full">
+      {/* 类别Tab */}
       <div>
-        <div className="mb-2 text-sm text-gray-500">类别</div>
-        {renderChipGroup(CATEGORY_OPTIONS, category, onCategoryChange)}
+        <div className="text-sm text-gray-500 mb-2">类别</div>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORY_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => onCategoryChange(opt.value)}
+              className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                category === opt.value
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* 来源Tab */}
       <div>
-        <div className="mb-2 text-sm text-gray-500">
+        <div className="text-sm text-gray-500 mb-2">
           来源 {category && `(${filteredSources.length})`}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -127,8 +109,8 @@ export function FilterBar({
           ))}
           {hasMoreSources && (
             <button
-              onClick={() => setShowAllSources(current => !current)}
-              className="px-3 py-1.5 text-sm rounded-full bg-gray-50 text-gray-500 transition-colors hover:bg-gray-100"
+              onClick={() => setShowAllSources(!showAllSources)}
+              className="px-3 py-1.5 text-sm rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors"
             >
               {showAllSources ? '收起' : `+${filteredSources.length - 8} 更多`}
             </button>
@@ -136,20 +118,11 @@ export function FilterBar({
         </div>
       </div>
 
-      <div>
-        <div className="mb-2 text-sm text-gray-500">截止优先级</div>
-        {renderChipGroup(DEADLINE_OPTIONS, deadlineLevel, onDeadlineLevelChange)}
-      </div>
-
-      <div>
-        <div className="mb-2 text-sm text-gray-500">处理状态</div>
-        {renderChipGroup(TRACKING_OPTIONS, trackingState, onTrackingStateChange)}
-      </div>
-
+      {/* 清除筛选 */}
       {hasFilters && (
         <button
           onClick={onClear}
-          className="text-sm text-gray-500 underline hover:text-gray-700"
+          className="text-sm text-gray-500 hover:text-gray-700 underline"
         >
           清除筛选
         </button>

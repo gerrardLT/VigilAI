@@ -1,212 +1,173 @@
-import { describe, expect, expectTypeOf, it } from 'vitest'
-import type {
-  Activity,
-  ActivityDetail,
-  Category,
-  DigestDetail,
-  DigestStatus,
-  SourceType,
-  StatsResponse,
-  TrackingItem,
-  TrackingState,
-  TrackingStatus,
-  WorkspaceResponse,
-} from './index'
+import { describe, it, expect } from 'vitest'
+import fc from 'fast-check'
+import type { Activity, Source } from './index'
 
-const categories: Category[] = [
-  'hackathon',
-  'data_competition',
-  'coding_competition',
-  'other_competition',
-  'airdrop',
-  'bounty',
-  'grant',
-  'dev_event',
-  'news',
-]
+/**
+ * Property 1: TypeScript接口与后端模型字段匹配
+ * Validates: Requirements 1.4, 13.2, 13.3
+ * 
+ * For any Activity object returned from the backend API, 
+ * the frontend Activity interface SHALL contain all the same fields with compatible types.
+ */
 
-const sourceTypes: SourceType[] = [
-  'rss',
-  'web',
-  'api',
-  'firecrawl',
-  'kaggle',
-  'tech_media',
-  'airdrop',
-  'data_competition',
-  'hackathon_aggregator',
-  'bounty',
-  'enterprise',
-  'government',
-  'design_competition',
-  'coding_competition',
-  'universal',
-]
+// 后端Activity模型必需字段
+const ACTIVITY_REQUIRED_FIELDS = [
+  'id', 'title', 'source_id', 'source_name', 'url', 
+  'category', 'tags', 'status', 'created_at', 'updated_at'
+] as const
 
-const trackingState: TrackingState = {
-  activity_id: 'activity-1',
-  is_favorited: true,
-  status: 'tracking' satisfies TrackingStatus,
-  notes: 'Prepare submission draft',
-  next_action: 'Submit before Friday',
-  remind_at: '2026-03-24T09:00:00Z',
-  created_at: '2026-03-23T08:00:00Z',
-  updated_at: '2026-03-23T08:30:00Z',
-}
+// 后端Activity模型可选字段
+const ACTIVITY_OPTIONAL_FIELDS = [
+  'description', 'prize', 'dates', 'location', 'organizer'
+] as const
 
-const activity: Activity = {
-  id: 'activity-1',
-  title: 'Global AI Hackathon',
-  description: 'Build an AI prototype in 48 hours.',
-  full_content: 'Long-form content for the opportunity.',
-  source_id: 'devpost',
-  source_name: 'Devpost',
-  url: 'https://example.com/opportunity',
-  category: 'hackathon',
-  tags: ['ai', 'global'],
-  prize: {
-    amount: 5000,
-    currency: 'USD',
-    description: 'Grand prize',
-  },
-  dates: {
-    start_date: '2026-03-25T00:00:00Z',
-    end_date: '2026-03-27T00:00:00Z',
-    deadline: '2026-03-24T23:59:00Z',
-  },
-  location: 'Remote',
-  organizer: 'Open Source Labs',
-  image_url: 'https://example.com/cover.png',
-  summary: 'High-signal hackathon with cash prize and near deadline.',
-  score: 8.7,
-  score_reason: 'Recent opportunity with prize and urgent deadline.',
-  deadline_level: 'urgent',
-  trust_level: 'high',
-  updated_fields: ['summary', 'score'],
-  is_tracking: true,
-  is_favorited: true,
-  status: 'upcoming',
-  created_at: '2026-03-20T08:00:00Z',
-  updated_at: '2026-03-23T08:00:00Z',
-}
+// 后端Source模型必需字段
+const SOURCE_REQUIRED_FIELDS = [
+  'id', 'name', 'type', 'status', 'activity_count'
+] as const
 
-const activityDetail: ActivityDetail = {
-  ...activity,
-  timeline: [
-    {
-      key: 'created_at',
-      label: 'Created',
-      timestamp: '2026-03-20T08:00:00Z',
-    },
-  ],
-  related_items: [
-    {
-      ...activity,
-      id: 'activity-2',
-      title: 'Regional AI Hackathon',
-      is_tracking: false,
-      is_favorited: false,
-    },
-  ],
-  tracking: trackingState,
-}
+// 后端Source模型可选字段
+const SOURCE_OPTIONAL_FIELDS = [
+  'last_run', 'last_success', 'error_message'
+] as const
 
-const trackingItem: TrackingItem = {
-  ...trackingState,
-  activity,
-}
+// 有效的Category值
+const VALID_CATEGORIES = ['hackathon', 'competition', 'airdrop', 'bounty', 'grant', 'event'] as const
 
-const digest: DigestDetail = {
-  id: 'digest-1',
-  digest_date: '2026-03-23',
-  title: 'VigilAI Digest 2026-03-23',
-  summary: 'Top opportunities for the day',
-  content: '- Global AI Hackathon: High-signal hackathon with cash prize and near deadline.',
-  item_ids: ['activity-1'],
-  status: 'draft' satisfies DigestStatus,
-  created_at: '2026-03-23T08:00:00Z',
-  updated_at: '2026-03-23T08:05:00Z',
-  last_sent_at: null,
-  send_channel: null,
-}
+// 有效的SourceType值
+const VALID_SOURCE_TYPES = ['rss', 'web', 'api'] as const
 
-const stats: StatsResponse = {
-  total_activities: 42,
-  total_sources: 6,
-  activities_by_category: { hackathon: 10 },
-  activities_by_source: { devpost: 12 },
-  recent_activities: 7,
-  last_update: '2026-03-23T08:00:00Z',
-}
+// 有效的SourceStatus值
+const VALID_SOURCE_STATUSES = ['idle', 'running', 'success', 'error'] as const
 
-const workspace: WorkspaceResponse = {
-  overview: {
-    ...stats,
-    tracked_count: 4,
-    favorited_count: 2,
-  },
-  top_opportunities: [activity],
-  digest_preview: digest,
-  trends: [{ date: '2026-03-23', count: 7 }],
-  alert_sources: [
-    {
-      id: 'devpost',
-      name: 'Devpost',
-      type: 'web',
-      category: 'hackathon',
-      status: 'success',
-      last_run: '2026-03-23T07:00:00Z',
-      last_success: '2026-03-23T07:00:00Z',
-      activity_count: 12,
-      error_message: null,
-    },
-  ],
-  first_actions: [activity],
-}
+// 生成有效的Activity对象
+const activityArbitrary = fc.record({
+  id: fc.string({ minLength: 1 }),
+  title: fc.string({ minLength: 1 }),
+  description: fc.option(fc.string(), { nil: null }),
+  source_id: fc.string({ minLength: 1 }),
+  source_name: fc.string({ minLength: 1 }),
+  url: fc.webUrl(),
+  category: fc.constantFrom(...VALID_CATEGORIES),
+  tags: fc.array(fc.string()),
+  prize: fc.option(
+    fc.record({
+      amount: fc.option(fc.float({ min: 0 }), { nil: null }),
+      currency: fc.string({ minLength: 1 }),
+      description: fc.option(fc.string(), { nil: null }),
+    }),
+    { nil: null }
+  ),
+  dates: fc.option(
+    fc.record({
+      start_date: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
+      end_date: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
+      deadline: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
+    }),
+    { nil: null }
+  ),
+  location: fc.option(fc.string(), { nil: null }),
+  organizer: fc.option(fc.string(), { nil: null }),
+  status: fc.string({ minLength: 1 }),
+  created_at: fc.date().map(d => d.toISOString()),
+  updated_at: fc.date().map(d => d.toISOString()),
+})
 
-describe('frontend V2 contract types', () => {
-  it('covers the backend category taxonomy', () => {
-    expect(categories).toEqual([
-      'hackathon',
-      'data_competition',
-      'coding_competition',
-      'other_competition',
-      'airdrop',
-      'bounty',
-      'grant',
-      'dev_event',
-      'news',
-    ])
+// 生成有效的Source对象
+const sourceArbitrary = fc.record({
+  id: fc.string({ minLength: 1 }),
+  name: fc.string({ minLength: 1 }),
+  type: fc.constantFrom(...VALID_SOURCE_TYPES),
+  status: fc.constantFrom(...VALID_SOURCE_STATUSES),
+  last_run: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
+  last_success: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
+  activity_count: fc.nat(),
+  error_message: fc.option(fc.string(), { nil: null }),
+})
+
+describe('TypeScript接口与后端模型字段匹配', () => {
+  // Feature: vigilai-frontend, Property 1: TypeScript接口与后端模型字段匹配
+  it('Activity接口应包含所有后端必需字段', () => {
+    fc.assert(
+      fc.property(activityArbitrary, (activity: Activity) => {
+        // 验证所有必需字段存在
+        for (const field of ACTIVITY_REQUIRED_FIELDS) {
+          expect(activity).toHaveProperty(field)
+          expect(activity[field]).toBeDefined()
+        }
+        return true
+      }),
+      { numRuns: 100 }
+    )
   })
 
-  it('covers the backend source type taxonomy', () => {
-    expect(sourceTypes).toContain('firecrawl')
-    expect(sourceTypes).toContain('hackathon_aggregator')
-    expect(sourceTypes).toContain('universal')
+  it('Activity接口应支持所有后端可选字段', () => {
+    fc.assert(
+      fc.property(activityArbitrary, (activity: Activity) => {
+        // 验证所有可选字段存在（可以为null）
+        for (const field of ACTIVITY_OPTIONAL_FIELDS) {
+          expect(activity).toHaveProperty(field)
+        }
+        return true
+      }),
+      { numRuns: 100 }
+    )
   })
 
-  it('accepts enriched activity fields used by V2', () => {
-    expect(activity.summary).toContain('hackathon')
-    expect(activity.updated_fields).toEqual(['summary', 'score'])
-    expect(activity.is_tracking).toBe(true)
-    expectTypeOf(activity.score).toMatchTypeOf<number | null | undefined>()
+  it('Activity.category应为有效的Category枚举值', () => {
+    fc.assert(
+      fc.property(activityArbitrary, (activity: Activity) => {
+        expect(VALID_CATEGORIES).toContain(activity.category)
+        return true
+      }),
+      { numRuns: 100 }
+    )
   })
 
-  it('accepts activity detail payloads with timeline, related items, and tracking state', () => {
-    expect(activityDetail.timeline?.[0].label).toBe('Created')
-    expect(activityDetail.related_items?.[0].id).toBe('activity-2')
-    expect(activityDetail.tracking?.status).toBe('tracking')
+  it('Source接口应包含所有后端必需字段', () => {
+    fc.assert(
+      fc.property(sourceArbitrary, (source: Source) => {
+        // 验证所有必需字段存在
+        for (const field of SOURCE_REQUIRED_FIELDS) {
+          expect(source).toHaveProperty(field)
+          expect(source[field]).toBeDefined()
+        }
+        return true
+      }),
+      { numRuns: 100 }
+    )
   })
 
-  it('accepts tracking items joined with activity payloads', () => {
-    expect(trackingItem.activity.id).toBe('activity-1')
-    expect(trackingItem.status).toBe('tracking')
+  it('Source接口应支持所有后端可选字段', () => {
+    fc.assert(
+      fc.property(sourceArbitrary, (source: Source) => {
+        // 验证所有可选字段存在（可以为null）
+        for (const field of SOURCE_OPTIONAL_FIELDS) {
+          expect(source).toHaveProperty(field)
+        }
+        return true
+      }),
+      { numRuns: 100 }
+    )
   })
 
-  it('accepts digest payloads and workspace aggregates', () => {
-    expect(digest.item_ids).toEqual(['activity-1'])
-    expect(workspace.overview.recent_activities).toBe(7)
-    expect(workspace.digest_preview?.id).toBe('digest-1')
-    expect(workspace.first_actions[0].id).toBe('activity-1')
+  it('Source.type应为有效的SourceType枚举值', () => {
+    fc.assert(
+      fc.property(sourceArbitrary, (source: Source) => {
+        expect(VALID_SOURCE_TYPES).toContain(source.type)
+        return true
+      }),
+      { numRuns: 100 }
+    )
+  })
+
+  it('Source.status应为有效的SourceStatus枚举值', () => {
+    fc.assert(
+      fc.property(sourceArbitrary, (source: Source) => {
+        expect(VALID_SOURCE_STATUSES).toContain(source.status)
+        return true
+      }),
+      { numRuns: 100 }
+    )
   })
 })

@@ -40,7 +40,6 @@ ENV/
 htmlcov/
 .tox/
 .nox/
-tests/.tmp/
 
 # Data files
 data/*.db

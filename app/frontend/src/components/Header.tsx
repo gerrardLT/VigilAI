@@ -2,11 +2,9 @@ import { Link, useLocation } from 'react-router-dom'
 import { APP_NAME } from '../utils/constants'
 
 const navLinks = [
-  { path: '/', label: '工作台' },
-  { path: '/activities', label: '机会池' },
-  { path: '/tracking', label: '跟进' },
-  { path: '/digests', label: '日报' },
+  { path: '/', label: '活动列表' },
   { path: '/sources', label: '信息源管理' },
+  { path: '/dashboard', label: '仪表盘' },
 ]
 
 /**
@@ -17,7 +15,7 @@ export function Header() {
 
   const isActive = (path: string) => {
     if (path === '/') {
-      return location.pathname === '/' || location.pathname === '/workspace'
+      return location.pathname === '/' || location.pathname === '/activities'
     }
     return location.pathname.startsWith(path)
   }
@@ -67,7 +65,7 @@ function MobileMenu() {
 
   const isActive = (path: string) => {
     if (path === '/') {
-      return location.pathname === '/' || location.pathname === '/workspace'
+      return location.pathname === '/' || location.pathname === '/activities'
     }
     return location.pathname.startsWith(path)
   }

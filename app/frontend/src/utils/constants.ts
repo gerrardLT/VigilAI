@@ -14,10 +14,8 @@ export const SEARCH_DEBOUNCE_DELAY = 300
 
 // 排序选项
 export const SORT_OPTIONS = [
-  { value: 'score', label: '推荐优先级' },
-  { value: 'deadline', label: '截止日期' },
-  { value: 'trust_level', label: '来源可信度' },
   { value: 'created_at', label: '最新发布' },
+  { value: 'deadline', label: '截止日期' },
   { value: 'prize', label: '奖金金额' },
 ] as const
 
@@ -28,7 +26,7 @@ export const SORT_ORDERS = [
 ] as const
 
 // 默认排序
-export const DEFAULT_SORT_BY = 'score'
+export const DEFAULT_SORT_BY = 'created_at'
 export const DEFAULT_SORT_ORDER = 'desc'
 
 // 类别选项（中文标签）

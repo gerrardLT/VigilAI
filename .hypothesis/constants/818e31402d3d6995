@@ -1,4 +1,0 @@
-# file: D:\5个项目\VigilAI\app\backend\utils\error_handler.py
-# hypothesis_version: 6.148.7
-
-[1.0, 2.0, 30.0, 60.0, 401, 403, 429, 500, 600, 'auth', 'error_type', 'message', 'network', 'original_error', 'parsing', 'rate_limit', 'source_name', 'timeout', 'timestamp', 'unknown', 'url', 'validation']

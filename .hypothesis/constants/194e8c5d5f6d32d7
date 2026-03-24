@@ -1,4 +1,0 @@
-# file: D:\5个项目\VigilAI\app\backend\scrapers\__init__.py
-# hypothesis_version: 6.148.7
-
-['AirdropScraper', 'BaseScraper', 'BountyScraper', 'EnterpriseScraper', 'GovernmentScraper', 'HuxiuScraper', 'KaggleScraper', 'Kr36Scraper', 'RssScraper', 'TechMediaScraper', 'Web3Scraper', 'WebScraper']

@@ -1,0 +1,6 @@
+.hypothesis/
+.pytest_cache/
+.kiro/
+.vscode/
+.worktrees/
+app/backend/test_progress.json

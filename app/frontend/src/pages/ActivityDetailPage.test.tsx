@@ -9,17 +9,7 @@ import type { Activity, Prize, ActivityDates } from '../types'
  * Validates: Requirements 7.2
  */
 describe('Property 6: Activity Detail Field Display Completeness', () => {
-  const validCategories = [
-    'hackathon',
-    'data_competition',
-    'coding_competition',
-    'other_competition',
-    'airdrop',
-    'bounty',
-    'grant',
-    'dev_event',
-    'news',
-  ] as const
+  const validCategories = ['hackathon', 'competition', 'airdrop', 'bounty', 'grant', 'event'] as const
   const validCurrencies = ['USD', 'EUR', 'CNY', 'ETH', 'BTC', 'USDT']
 
   // Arbitraries for generating test data

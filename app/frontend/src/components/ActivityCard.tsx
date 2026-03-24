@@ -16,7 +16,6 @@ export function ActivityCard({ activity }: ActivityCardProps) {
   const deadline = activity.dates?.deadline
   const days = deadline ? daysUntil(deadline) : null
   const expired = deadline ? isExpired(deadline) : false
-  const previewText = activity.summary || activity.description
 
   return (
     <Link
@@ -55,28 +54,11 @@ export function ActivityCard({ activity }: ActivityCardProps) {
         {activity.title}
       </h3>
 
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        {activity.score !== undefined && activity.score !== null && (
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-            Score {activity.score.toFixed(1)}
-          </span>
-        )}
-        {activity.trust_level && (
-          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-            Trust {activity.trust_level}
-          </span>
-        )}
-      </div>
-
       {/* 描述 */}
-      {previewText && (
+      {activity.description && (
         <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-          {previewText}
+          {activity.description}
         </p>
-      )}
-
-      {activity.score_reason && (
-        <p className="text-xs text-primary-700 mb-3 line-clamp-2">{activity.score_reason}</p>
       )}
 
       {/* 底部信息 */}
