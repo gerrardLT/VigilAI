@@ -1710,6 +1710,13 @@ class DataManager:
 
             current = self._analysis_template_from_row(row)
             merged = {**current, **payload}
+            business_fields_changed = any(
+                field in payload for field in ("preference_profile", "risk_tolerance", "research_mode")
+            )
+            legacy_shape_overridden = "layers" in payload or "sort_fields" in payload
+            if business_fields_changed and not legacy_shape_overridden:
+                merged["layers"] = []
+                merged["sort_fields"] = []
             merged = apply_template_compat_defaults(merged)
             name = merged["name"]
             slug = payload.get("slug")

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -86,6 +86,9 @@ class AnalysisTemplateCreateRequest(BaseModel):
     slug: Optional[str] = None
     description: Optional[str] = None
     is_default: bool = False
+    preference_profile: Optional[Literal["money_first", "balanced", "safety_first"]] = None
+    risk_tolerance: Optional[Literal["conservative", "balanced", "aggressive"]] = None
+    research_mode: Optional[Literal["off", "shallow", "layered", "deep"]] = None
     tags: List[str] = []
     layers: List[dict] = []
     sort_fields: List[str] = []
@@ -99,6 +102,9 @@ class AnalysisTemplateUpdateRequest(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
     description: Optional[str] = None
+    preference_profile: Optional[Literal["money_first", "balanced", "safety_first"]] = None
+    risk_tolerance: Optional[Literal["conservative", "balanced", "aggressive"]] = None
+    research_mode: Optional[Literal["off", "shallow", "layered", "deep"]] = None
     tags: Optional[List[str]] = None
     layers: Optional[List[dict]] = None
     sort_fields: Optional[List[str]] = None
@@ -109,6 +115,9 @@ class AnalysisTemplatePreviewRequest(BaseModel):
     name: str
     slug: Optional[str] = None
     description: Optional[str] = None
+    preference_profile: Optional[Literal["money_first", "balanced", "safety_first"]] = None
+    risk_tolerance: Optional[Literal["conservative", "balanced", "aggressive"]] = None
+    research_mode: Optional[Literal["off", "shallow", "layered", "deep"]] = None
     tags: List[str] = []
     layers: List[dict] = []
     sort_fields: List[str] = []

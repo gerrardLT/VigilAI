@@ -14,7 +14,12 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from api import app  # noqa: E402
+from api import (  # noqa: E402
+    AnalysisTemplateCreateRequest,
+    AnalysisTemplatePreviewRequest,
+    AnalysisTemplateUpdateRequest,
+    app,
+)
 from data_manager import DataManager  # noqa: E402
 from models import Activity, ActivityDates, Category, Prize  # noqa: E402
 
@@ -97,6 +102,83 @@ def test_analysis_template_endpoints_list_duplicate_activate_update_and_delete(c
     assert updated.json()["name"] == "Quick money copy v2"
     assert deleted.status_code == 200
     assert deleted.json()["success"] is True
+
+
+def test_analysis_template_request_models_keep_business_fields():
+    create_request = AnalysisTemplateCreateRequest.model_validate(
+        {
+            "name": "Safe route",
+            "preference_profile": "safety_first",
+            "risk_tolerance": "conservative",
+            "research_mode": "deep",
+        }
+    )
+    update_request = AnalysisTemplateUpdateRequest.model_validate(
+        {
+            "preference_profile": "safety_first",
+            "risk_tolerance": "conservative",
+            "research_mode": "deep",
+        }
+    )
+    preview_request = AnalysisTemplatePreviewRequest.model_validate(
+        {
+            "name": "Safe route",
+            "preference_profile": "safety_first",
+            "risk_tolerance": "conservative",
+            "research_mode": "deep",
+        }
+    )
+
+    assert create_request.model_dump()["preference_profile"] == "safety_first"
+    assert create_request.model_dump()["risk_tolerance"] == "conservative"
+    assert create_request.model_dump()["research_mode"] == "deep"
+    assert update_request.model_dump(exclude_none=True)["preference_profile"] == "safety_first"
+    assert update_request.model_dump(exclude_none=True)["risk_tolerance"] == "conservative"
+    assert update_request.model_dump(exclude_none=True)["research_mode"] == "deep"
+    assert preview_request.model_dump()["preference_profile"] == "safety_first"
+    assert preview_request.model_dump()["risk_tolerance"] == "conservative"
+    assert preview_request.model_dump()["research_mode"] == "deep"
+
+
+def test_analysis_template_endpoints_preserve_business_fields_and_rebuild_legacy_shape(client):
+    created = client.post(
+        "/api/analysis/templates",
+        json={
+            "name": "Safe route",
+            "preference_profile": "safety_first",
+            "risk_tolerance": "conservative",
+            "research_mode": "deep",
+        },
+    )
+
+    created_body = created.json()
+    trust_layer = next(layer for layer in created_body["layers"] if layer["key"] == "trust")
+
+    assert created.status_code == 200
+    assert created_body["preference_profile"] == "safety_first"
+    assert created_body["risk_tolerance"] == "conservative"
+    assert created_body["research_mode"] == "deep"
+    assert created_body["sort_fields"] == ["trust", "clarity", "roi"]
+    assert trust_layer["conditions"][0]["value"] == "high"
+
+    updated = client.patch(
+        f"/api/analysis/templates/{created_body['id']}",
+        json={
+            "preference_profile": "money_first",
+            "risk_tolerance": "balanced",
+            "research_mode": "layered",
+        },
+    )
+
+    updated_body = updated.json()
+    updated_trust_layer = next(layer for layer in updated_body["layers"] if layer["key"] == "trust")
+
+    assert updated.status_code == 200
+    assert updated_body["preference_profile"] == "money_first"
+    assert updated_body["risk_tolerance"] == "balanced"
+    assert updated_body["research_mode"] == "layered"
+    assert updated_body["sort_fields"] == ["roi", "payout_speed", "trust"]
+    assert updated_trust_layer["conditions"][0]["value"] == "medium"
 
 
 def test_activity_detail_includes_analysis_payload(client, data_manager):
