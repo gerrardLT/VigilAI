@@ -239,10 +239,81 @@ COMPATIBILITY_TEMPLATE_PRESETS = {
 }
 
 
+LEGACY_TEMPLATE_BUSINESS_OVERRIDES = {
+    "quick-money": {
+        "preference_profile": "money_first",
+        "risk_tolerance": "balanced",
+        "research_mode": "layered",
+    },
+    "low-effort-high-roi": {
+        "preference_profile": "money_first",
+        "risk_tolerance": "balanced",
+        "research_mode": "layered",
+    },
+    "safe-trust": {
+        "preference_profile": "safety_first",
+        "risk_tolerance": "conservative",
+        "research_mode": "layered",
+    },
+}
+
+
+def infer_template_business_fields(raw_template: dict[str, Any]) -> dict[str, str]:
+    slug = str(raw_template.get("slug") or "").strip().lower()
+    if slug in LEGACY_TEMPLATE_BUSINESS_OVERRIDES:
+        return deepcopy(LEGACY_TEMPLATE_BUSINESS_OVERRIDES[slug])
+
+    name = str(raw_template.get("name") or "").strip().lower()
+    tags = {str(tag).strip().lower() for tag in raw_template.get("tags") or [] if str(tag).strip()}
+    sort_fields = {
+        str(field).strip().lower() for field in raw_template.get("sort_fields") or [] if str(field).strip()
+    }
+    conditions = [
+        condition
+        for layer in raw_template.get("layers") or []
+        for condition in layer.get("conditions") or []
+    ]
+
+    if (
+        "safe" in slug
+        or "trust" in slug
+        or "safe" in name
+        or "trusted" in name
+        or {"safe", "trusted"} & tags
+        or {"trust", "clarity"} <= sort_fields
+        or any(
+            condition.get("key") == "source_trust" and str(condition.get("value")).strip().lower() == "high"
+            for condition in conditions
+        )
+    ):
+        return {
+            "preference_profile": "safety_first",
+            "risk_tolerance": "conservative",
+            "research_mode": "layered",
+        }
+
+    if (
+        "money" in slug
+        or "roi" in slug
+        or {"money-first", "fast-return", "low-effort", "roi"} & tags
+        or {"roi", "payout_speed"} & sort_fields
+    ):
+        return {
+            "preference_profile": "money_first",
+            "risk_tolerance": "balanced",
+            "research_mode": "layered",
+        }
+
+    return deepcopy(DEFAULT_TEMPLATE_BUSINESS_FIELDS)
+
+
 def apply_template_compat_defaults(raw_template: dict[str, Any]) -> dict[str, Any]:
     merged = deepcopy(raw_template)
-    for key, value in DEFAULT_TEMPLATE_BUSINESS_FIELDS.items():
-        merged.setdefault(key, value)
+    inferred = infer_template_business_fields(merged)
+    for key, value in inferred.items():
+        current = merged.get(key)
+        if current is None or (isinstance(current, str) and not current.strip()):
+            merged[key] = value
     preset = COMPATIBILITY_TEMPLATE_PRESETS.get(
         merged["preference_profile"],
         COMPATIBILITY_TEMPLATE_PRESETS[DEFAULT_PREFERENCE_PROFILE],

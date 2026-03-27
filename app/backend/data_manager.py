@@ -445,9 +445,67 @@ class DataManager:
         with self._get_connection() as conn:
             existing = conn.execute("SELECT COUNT(*) AS count FROM analysis_templates").fetchone()["count"]
             if existing:
+                self._backfill_analysis_template_records(conn)
                 return
             for template in get_default_analysis_templates():
                 self._insert_analysis_template(conn, template)
+
+    def _backfill_analysis_template_records(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("SELECT * FROM analysis_templates").fetchall()
+        now = datetime.now().isoformat()
+        for row in rows:
+            template = {
+                "id": row["id"],
+                "name": row["name"],
+                "slug": row["slug"],
+                "description": row["description"],
+                "is_default": bool(row["is_default"]),
+                "tags": json.loads(row["tags"]) if row["tags"] else [],
+                "layers": json.loads(row["layers"]) if row["layers"] else [],
+                "sort_fields": json.loads(row["sort_fields"]) if row["sort_fields"] else [],
+                "preference_profile": row["preference_profile"] if "preference_profile" in row.keys() else None,
+                "risk_tolerance": row["risk_tolerance"] if "risk_tolerance" in row.keys() else None,
+                "research_mode": row["research_mode"] if "research_mode" in row.keys() else None,
+            }
+            normalized = apply_template_compat_defaults(template)
+            stored_compiled_policy = row["compiled_policy"] if "compiled_policy" in row.keys() else None
+            normalized_compiled_policy = json.dumps(normalized["compiled_policy"])
+
+            if (
+                template["preference_profile"] == normalized["preference_profile"]
+                and template["risk_tolerance"] == normalized["risk_tolerance"]
+                and template["research_mode"] == normalized["research_mode"]
+                and template["layers"] == normalized["layers"]
+                and template["sort_fields"] == normalized["sort_fields"]
+                and stored_compiled_policy == normalized_compiled_policy
+            ):
+                continue
+
+            conn.execute(
+                """
+                UPDATE analysis_templates
+                SET tags = ?,
+                    layers = ?,
+                    sort_fields = ?,
+                    preference_profile = ?,
+                    risk_tolerance = ?,
+                    research_mode = ?,
+                    compiled_policy = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    json.dumps(normalized["tags"]),
+                    json.dumps(normalized["layers"]),
+                    json.dumps(normalized["sort_fields"]),
+                    normalized["preference_profile"],
+                    normalized["risk_tolerance"],
+                    normalized["research_mode"],
+                    normalized_compiled_policy,
+                    now,
+                    row["id"],
+                ),
+            )
 
     @staticmethod
     def generate_activity_id(source_id: str, url: str) -> str:
