@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RouteTargetPolicy(BaseModel):
@@ -28,6 +28,10 @@ class BudgetPolicy(BaseModel):
 class ResearchPolicy(BaseModel):
     default_mode: Literal["off", "shallow", "layered", "deep"] = "layered"
     max_queries_per_item: int = 3
+    max_urls_per_item: int = 3
+    allowed_source_classes: list[str] = Field(default_factory=lambda: ["official", "search"])
+    max_domains: int = 3
+    timeout_seconds: int = 45
 
 
 class SafetyPolicy(BaseModel):

@@ -4,7 +4,7 @@ SQLite-backed data manager for VigilAI.
 
 from __future__ import annotations
 
-from analysis.schemas import AnalysisSnapshot
+from analysis.schemas import AnalysisSnapshot, ResearchEvidence
 from analysis.ai_enrichment import enrich_activity_for_analysis
 from analysis.rule_engine import run_analysis
 from analysis.template_defaults import apply_template_compat_defaults, get_default_analysis_templates
@@ -1372,6 +1372,57 @@ class DataManager:
             supports_claim=bool(row["supports_claim"]) if row["supports_claim"] is not None else None,
             created_at=datetime.fromisoformat(row["created_at"]),
         )
+
+    def replace_analysis_evidence(
+        self,
+        job_item_id: str,
+        evidence: list[ResearchEvidence],
+    ) -> List[AnalysisEvidence]:
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM analysis_evidence WHERE job_item_id = ?", (job_item_id,))
+            for item in evidence:
+                payload = item.model_dump() if hasattr(item, "model_dump") else dict(item)
+                conn.execute(
+                    """
+                    INSERT INTO analysis_evidence (
+                        id, job_item_id, source_type, url, title, snippet, relevance_score,
+                        trust_score, supports_claim, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        self._generate_record_id(),
+                        job_item_id,
+                        payload.get("source_type"),
+                        payload.get("url"),
+                        payload.get("title"),
+                        payload.get("snippet"),
+                        payload.get("relevance_score"),
+                        payload.get("trust_score"),
+                        payload.get("supports_claim"),
+                        datetime.now().isoformat(),
+                    ),
+                )
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_evidence
+                WHERE job_item_id = ?
+                ORDER BY rowid ASC
+                """,
+                (job_item_id,),
+            ).fetchall()
+            return [self._analysis_evidence_from_row(row) for row in rows]
+
+    def get_analysis_evidence(self, job_item_id: str) -> List[AnalysisEvidence]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_evidence
+                WHERE job_item_id = ?
+                ORDER BY rowid ASC
+                """,
+                (job_item_id,),
+            ).fetchall()
+            return [self._analysis_evidence_from_row(row) for row in rows]
 
     def _analysis_review_from_row(self, row: sqlite3.Row) -> AnalysisReview:
         return AnalysisReview(

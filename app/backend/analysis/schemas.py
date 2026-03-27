@@ -57,3 +57,22 @@ class ScreeningResult(BaseModel):
     research_state: Literal["not_requested", "requested", "completed", "failed"] = "not_requested"
     needs_manual_review: bool = False
     model_name: str | None = None
+
+
+class ResearchEvidence(BaseModel):
+    source_type: str
+    url: str | None = None
+    title: str | None = None
+    snippet: str | None = None
+    relevance_score: float | None = None
+    trust_score: float | None = None
+    supports_claim: bool | None = None
+
+
+class ResearchResult(BaseModel):
+    state: Literal["not_requested", "completed", "research_unavailable", "insufficient_evidence"]
+    summary: str | None = None
+    evidence: list[ResearchEvidence] = Field(default_factory=list)
+    domains_used: list[str] = Field(default_factory=list)
+    url_count: int = 0
+    query_count: int = 0
