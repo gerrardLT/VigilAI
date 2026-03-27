@@ -31,6 +31,7 @@ class MockAnalysisProvider:
         *,
         task_type: str,
         schema_name: str,
+        json_schema: dict[str, Any] | None = None,
         prompt: str,
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
@@ -42,5 +43,5 @@ class MockAnalysisProvider:
             model_name=model or f"mock-{task_type}",
             output=payload,
             raw_output={"prompt": prompt, "tools": tools or []},
-            tool_results=tools or [],
+            tool_results=[],
         )

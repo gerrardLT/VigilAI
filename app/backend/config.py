@@ -1501,17 +1501,25 @@ ANALYSIS_VERDICT_MODEL = os.getenv("ANALYSIS_VERDICT_MODEL", "gpt-4o")
 ANALYSIS_VERDICT_FALLBACK_MODEL = os.getenv("ANALYSIS_VERDICT_FALLBACK_MODEL", ANALYSIS_VERDICT_MODEL)
 
 ANALYSIS_MODEL_ROUTES = {
+    "deep_analysis": {
+        "default": ANALYSIS_VERDICT_MODEL,
+        "high": ANALYSIS_VERDICT_MODEL,
+        "fallback": ANALYSIS_VERDICT_FALLBACK_MODEL,
+    },
     "screening": {
         "low": ANALYSIS_SCREENING_MODEL_LOW,
         "default": ANALYSIS_SCREENING_MODEL,
+        "high": ANALYSIS_SCREENING_MODEL,
         "fallback": ANALYSIS_SCREENING_FALLBACK_MODEL,
     },
     "research": {
         "default": ANALYSIS_RESEARCH_MODEL,
+        "high": ANALYSIS_RESEARCH_MODEL,
         "fallback": ANALYSIS_RESEARCH_FALLBACK_MODEL,
     },
     "verdict": {
         "default": ANALYSIS_VERDICT_MODEL,
+        "high": ANALYSIS_VERDICT_MODEL,
         "fallback": ANALYSIS_VERDICT_FALLBACK_MODEL,
     },
 }

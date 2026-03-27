@@ -33,12 +33,15 @@ class OpenAIAnalysisProvider:
         *,
         task_type: str,
         schema_name: str,
+        json_schema: dict[str, Any] | None = None,
         prompt: str,
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
     ) -> ProviderResponse:
         if not model:
             raise ValueError("A concrete model name is required for OpenAI provider calls")
+        if not json_schema:
+            raise ValueError("OpenAI structured calls require a JSON schema")
 
         response = self.client.responses.create(
             model=model,
@@ -49,13 +52,23 @@ class OpenAIAnalysisProvider:
                 }
             ],
             tools=tools or [],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": schema_name,
+                    "schema": json_schema,
+                    "strict": True,
+                }
+            },
         )
 
         raw_text = getattr(response, "output_text", "") or ""
+        if not raw_text:
+            raise ValueError(f"OpenAI provider returned no structured output for schema {schema_name}")
         try:
-            output = json.loads(raw_text) if raw_text else {}
+            output = json.loads(raw_text)
         except json.JSONDecodeError:
-            output = {"raw_text": raw_text}
+            raise ValueError(f"OpenAI provider returned non-JSON output for schema {schema_name}") from None
 
         usage = getattr(response, "usage", None)
         return ProviderResponse(
@@ -68,5 +81,5 @@ class OpenAIAnalysisProvider:
                 input_tokens=getattr(usage, "input_tokens", 0) or 0,
                 output_tokens=getattr(usage, "output_tokens", 0) or 0,
             ),
-            tool_results=tools or [],
+            tool_results=[],
         )
