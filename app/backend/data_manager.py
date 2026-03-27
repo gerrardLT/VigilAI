@@ -7,7 +7,7 @@ from __future__ import annotations
 from analysis.schemas import AnalysisSnapshot
 from analysis.ai_enrichment import enrich_activity_for_analysis
 from analysis.rule_engine import run_analysis
-from analysis.template_defaults import get_default_analysis_templates
+from analysis.template_defaults import apply_template_compat_defaults, get_default_analysis_templates
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 import hashlib
@@ -224,6 +224,16 @@ class DataManager:
                     updated_at TEXT NOT NULL
                 )
                 """
+            )
+            self._ensure_columns(
+                conn,
+                "analysis_templates",
+                {
+                    "preference_profile": "TEXT",
+                    "risk_tolerance": "TEXT",
+                    "research_mode": "TEXT",
+                    "compiled_policy": "TEXT",
+                },
             )
             self._init_agent_analysis_tables(conn)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_source_id ON activities(source_id)")
@@ -467,6 +477,7 @@ class DataManager:
 
     def _insert_analysis_template(self, conn: sqlite3.Connection, payload: Dict[str, Any]) -> Dict[str, Any]:
         now = datetime.now().isoformat()
+        payload = apply_template_compat_defaults(payload)
         template_id = payload.get("id") or self._generate_record_id()
         slug = self._unique_template_slug(conn, payload.get("slug") or self._slugify(payload["name"]))
         if payload.get("is_default"):
@@ -474,8 +485,9 @@ class DataManager:
         conn.execute(
             """
             INSERT INTO analysis_templates (
-                id, name, slug, description, is_default, tags, layers, sort_fields, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id, name, slug, description, is_default, tags, layers, sort_fields, preference_profile,
+                risk_tolerance, research_mode, compiled_policy, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 template_id,
@@ -486,6 +498,10 @@ class DataManager:
                 json.dumps(payload.get("tags") or []),
                 json.dumps(payload.get("layers") or []),
                 json.dumps(payload.get("sort_fields") or []),
+                payload.get("preference_profile"),
+                payload.get("risk_tolerance"),
+                payload.get("research_mode"),
+                json.dumps(payload.get("compiled_policy") or {}),
                 now,
                 now,
             ),
@@ -494,7 +510,7 @@ class DataManager:
         return self._analysis_template_from_row(row)
 
     def _analysis_template_from_row(self, row: sqlite3.Row) -> Dict[str, Any]:
-        return {
+        template = {
             "id": row["id"],
             "name": row["name"],
             "slug": row["slug"],
@@ -503,9 +519,16 @@ class DataManager:
             "tags": json.loads(row["tags"]) if row["tags"] else [],
             "layers": json.loads(row["layers"]) if row["layers"] else [],
             "sort_fields": json.loads(row["sort_fields"]) if row["sort_fields"] else [],
+            "preference_profile": row["preference_profile"] if "preference_profile" in row.keys() else None,
+            "risk_tolerance": row["risk_tolerance"] if "risk_tolerance" in row.keys() else None,
+            "research_mode": row["research_mode"] if "research_mode" in row.keys() else None,
+            "compiled_policy": json.loads(row["compiled_policy"])
+            if "compiled_policy" in row.keys() and row["compiled_policy"]
+            else None,
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
+        return apply_template_compat_defaults(template)
 
     def _default_analysis_template_for_conn(self, conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
         row = conn.execute(
@@ -957,31 +980,41 @@ class DataManager:
     def preview_analysis_template_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         with self._get_connection() as conn:
             template_id = payload.get("id") or "draft"
-            template = {
-                "id": template_id,
-                "name": payload.get("name") or "Draft template",
-                "slug": payload.get("slug") or "draft-template",
-                "description": payload.get("description"),
-                "is_default": False,
-                "tags": payload.get("tags") or [],
-                "layers": payload.get("layers") or [],
-                "sort_fields": payload.get("sort_fields") or [],
-            }
+            template = apply_template_compat_defaults(
+                {
+                    "id": template_id,
+                    "name": payload.get("name") or "Draft template",
+                    "slug": payload.get("slug") or "draft-template",
+                    "description": payload.get("description"),
+                    "is_default": False,
+                    "tags": payload.get("tags") or [],
+                    "layers": payload.get("layers") or [],
+                    "sort_fields": payload.get("sort_fields") or [],
+                    "preference_profile": payload.get("preference_profile"),
+                    "risk_tolerance": payload.get("risk_tolerance"),
+                    "research_mode": payload.get("research_mode"),
+                }
+            )
             return self._preview_analysis_template_counts(conn, template=template, template_id=template_id)
 
     def preview_analysis_template_payload_results(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         with self._get_connection() as conn:
             template_id = payload.get("id") or "draft"
-            template = {
-                "id": template_id,
-                "name": payload.get("name") or "Draft template",
-                "slug": payload.get("slug") or "draft-template",
-                "description": payload.get("description"),
-                "is_default": False,
-                "tags": payload.get("tags") or [],
-                "layers": payload.get("layers") or [],
-                "sort_fields": payload.get("sort_fields") or [],
-            }
+            template = apply_template_compat_defaults(
+                {
+                    "id": template_id,
+                    "name": payload.get("name") or "Draft template",
+                    "slug": payload.get("slug") or "draft-template",
+                    "description": payload.get("description"),
+                    "is_default": False,
+                    "tags": payload.get("tags") or [],
+                    "layers": payload.get("layers") or [],
+                    "sort_fields": payload.get("sort_fields") or [],
+                    "preference_profile": payload.get("preference_profile"),
+                    "risk_tolerance": payload.get("risk_tolerance"),
+                    "research_mode": payload.get("research_mode"),
+                }
+            )
             requested_ids = [item for item in (payload.get("activity_ids") or []) if item]
             if requested_ids:
                 placeholders = ", ".join("?" for _ in requested_ids)
@@ -1618,7 +1651,9 @@ class DataManager:
                 raise ValueError(f"Analysis template {template_id} not found")
 
             current = self._analysis_template_from_row(row)
-            name = payload.get("name", current["name"])
+            merged = {**current, **payload}
+            merged = apply_template_compat_defaults(merged)
+            name = merged["name"]
             slug = payload.get("slug")
             if slug:
                 slug = self._unique_template_slug(conn, self._slugify(slug), exclude_id=template_id)
@@ -1636,16 +1671,24 @@ class DataManager:
                     tags = ?,
                     layers = ?,
                     sort_fields = ?,
+                    preference_profile = ?,
+                    risk_tolerance = ?,
+                    research_mode = ?,
+                    compiled_policy = ?,
                     updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     name,
                     slug,
-                    payload.get("description", current["description"]),
-                    json.dumps(payload.get("tags", current["tags"])),
-                    json.dumps(payload.get("layers", current["layers"])),
-                    json.dumps(payload.get("sort_fields", current["sort_fields"])),
+                    merged["description"],
+                    json.dumps(merged["tags"]),
+                    json.dumps(merged["layers"]),
+                    json.dumps(merged["sort_fields"]),
+                    merged["preference_profile"],
+                    merged["risk_tolerance"],
+                    merged["research_mode"],
+                    json.dumps(merged["compiled_policy"]),
                     datetime.now().isoformat(),
                     template_id,
                 ),
