@@ -165,6 +165,19 @@ def test_data_manager_template_roundtrip_keeps_business_fields_and_legacy_shape(
     assert created["sort_fields"]
 
 
+def test_low_effort_default_template_uses_balanced_business_profile(temp_db):
+    data_manager = DataManager(db_path=temp_db)
+
+    template = next(item for item in data_manager.get_analysis_templates() if item["slug"] == "low-effort-high-roi")
+
+    assert template["preference_profile"] == "balanced"
+    assert template["risk_tolerance"] == "balanced"
+    assert template["research_mode"] == "layered"
+    assert template["compiled_policy"]["route_policy"]["single_item"]["model_tier"] == "standard"
+    assert template["compiled_policy"]["route_policy"]["batch"]["model_tier"] == "standard"
+    assert template["sort_fields"] == ["effort", "roi", "deadline"]
+
+
 def test_data_manager_backfills_legacy_template_business_fields_on_migration(temp_db):
     _seed_legacy_template_row(temp_db)
 

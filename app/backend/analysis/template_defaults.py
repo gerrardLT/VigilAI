@@ -110,7 +110,7 @@ DEFAULT_ANALYSIS_TEMPLATES = [
         "description": "Favor personal opportunities with low setup costs and strong payout-to-effort ratio.",
         "is_default": False,
         "tags": ["low-effort", "roi"],
-        "preference_profile": "money_first",
+        "preference_profile": "balanced",
         "risk_tolerance": "balanced",
         "research_mode": "layered",
         "sort_fields": ["effort", "roi", "deadline"],
@@ -246,7 +246,7 @@ LEGACY_TEMPLATE_BUSINESS_OVERRIDES = {
         "research_mode": "layered",
     },
     "low-effort-high-roi": {
-        "preference_profile": "money_first",
+        "preference_profile": "balanced",
         "risk_tolerance": "balanced",
         "research_mode": "layered",
     },

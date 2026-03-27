@@ -180,6 +180,25 @@ def test_analysis_template_endpoints_preserve_business_fields_and_rebuild_legacy
     assert updated_body["sort_fields"] == ["roi", "payout_speed", "trust"]
     assert updated_trust_layer["conditions"][0]["value"] == "medium"
 
+    rebalanced = client.patch(
+        f"/api/analysis/templates/{created_body['id']}",
+        json={
+            "preference_profile": "balanced",
+            "risk_tolerance": "balanced",
+            "research_mode": "layered",
+        },
+    )
+
+    rebalanced_body = rebalanced.json()
+    rebalanced_hard_gate = next(layer for layer in rebalanced_body["layers"] if layer["key"] == "hard_gate")
+
+    assert rebalanced.status_code == 200
+    assert rebalanced_body["preference_profile"] == "balanced"
+    assert rebalanced_body["risk_tolerance"] == "balanced"
+    assert rebalanced_body["research_mode"] == "layered"
+    assert rebalanced_body["sort_fields"] == ["effort", "roi", "deadline"]
+    assert rebalanced_hard_gate["conditions"][0]["key"] == "solo_friendliness"
+
 
 def test_activity_detail_includes_analysis_payload(client, data_manager):
     activity = create_activity(data_manager, url="https://example.com/api-analysis-detail")
