@@ -47,6 +47,17 @@ from utils.content_cleaning import (
 logger = logging.getLogger(__name__)
 
 TRACKING_STATUS_VALUES = {status.value for status in TrackingStatus}
+ACTIVITY_SNAPSHOT_COLUMNS = (
+    "analysis_summary",
+    "analysis_reasons",
+    "analysis_risk_flags",
+    "analysis_recommended_action",
+    "analysis_confidence",
+    "analysis_structured",
+    "analysis_template_id",
+    "analysis_current_run_id",
+    "analysis_updated_at",
+)
 
 
 class DataManager:
@@ -715,37 +726,45 @@ class DataManager:
         )
         return analysis_fields, result
 
-    def _snapshot_status_from_legacy_status(self, status: str | None) -> str:
-        if status == "passed":
-            return "pass"
-        if status == "rejected":
-            return "reject"
-        if status == "watch":
-            return "watch"
-        return "insufficient_evidence"
+    def _pack_activity_snapshot_fields(self, snapshot: AnalysisSnapshot | None) -> Dict[str, Any]:
+        if snapshot is None:
+            return {column: None for column in ACTIVITY_SNAPSHOT_COLUMNS}
+        return {
+            "analysis_summary": snapshot.summary,
+            "analysis_reasons": json.dumps(snapshot.reasons),
+            "analysis_risk_flags": json.dumps(snapshot.risk_flags),
+            "analysis_recommended_action": snapshot.recommended_action,
+            "analysis_confidence": snapshot.confidence,
+            "analysis_structured": json.dumps(snapshot.structured),
+            "analysis_template_id": snapshot.template_id,
+            "analysis_current_run_id": snapshot.current_run_id,
+            "analysis_updated_at": snapshot.updated_at.isoformat() if snapshot.updated_at else None,
+        }
 
-    def _approved_snapshot_for_activity(
-        self,
-        *,
-        analysis_result: Any,
-        analysis_fields: Dict[str, Any],
-        summary: str,
-        template_id: str | None = None,
-        current_run_id: str | None = None,
-    ) -> AnalysisSnapshot:
-        reasons = analysis_result.folded_summary_reasons if analysis_result is not None else []
-        return AnalysisSnapshot(
-            status=self._snapshot_status_from_legacy_status(analysis_result.status if analysis_result else None),
-            summary=summary,
-            reasons=reasons,
-            risk_flags=[],
-            recommended_action=None,
-            confidence=None,
-            structured=analysis_fields or {},
-            template_id=template_id,
-            current_run_id=current_run_id,
-            updated_at=datetime.now(),
-        )
+    def _unpack_activity_snapshot_fields(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "analysis_summary": row["analysis_summary"] if "analysis_summary" in row.keys() else None,
+            "analysis_reasons": json.loads(row["analysis_reasons"])
+            if "analysis_reasons" in row.keys() and row["analysis_reasons"]
+            else [],
+            "analysis_risk_flags": json.loads(row["analysis_risk_flags"])
+            if "analysis_risk_flags" in row.keys() and row["analysis_risk_flags"]
+            else [],
+            "analysis_recommended_action": row["analysis_recommended_action"]
+            if "analysis_recommended_action" in row.keys()
+            else None,
+            "analysis_confidence": row["analysis_confidence"] if "analysis_confidence" in row.keys() else None,
+            "analysis_structured": json.loads(row["analysis_structured"])
+            if "analysis_structured" in row.keys() and row["analysis_structured"]
+            else {},
+            "analysis_template_id": row["analysis_template_id"] if "analysis_template_id" in row.keys() else None,
+            "analysis_current_run_id": row["analysis_current_run_id"]
+            if "analysis_current_run_id" in row.keys()
+            else None,
+            "analysis_updated_at": datetime.fromisoformat(row["analysis_updated_at"])
+            if "analysis_updated_at" in row.keys() and row["analysis_updated_at"]
+            else None,
+        }
 
     def _activity_enrichment(
         self,
@@ -762,18 +781,12 @@ class DataManager:
         str,
         Optional[str],
         List[str],
-        AnalysisSnapshot,
     ]:
         summary = self._build_summary(activity)
         deadline_level = self._deadline_level(activity)
         trust_level = self._trust_level(source_row)
         score, reasons = self._score_components(activity, trust_level, deadline_level)
         analysis_fields, analysis_result = self._analysis_result_for_activity(activity, source_row, conn)
-        snapshot = self._approved_snapshot_for_activity(
-            analysis_result=analysis_result,
-            analysis_fields=analysis_fields,
-            summary=summary,
-        )
         return (
             summary,
             score,
@@ -784,7 +797,6 @@ class DataManager:
             analysis_result.status,
             analysis_result.failed_layer,
             analysis_result.folded_summary_reasons,
-            snapshot,
         )
 
     def _refresh_source_activity_signals(self, conn: sqlite3.Connection, source_id: str) -> None:
@@ -813,7 +825,6 @@ class DataManager:
                 analysis_status,
                 analysis_failed_layer,
                 analysis_summary_reasons,
-                snapshot,
             ) = self._activity_enrichment(
                 activity,
                 source_row,
@@ -830,16 +841,7 @@ class DataManager:
                     analysis_fields = ?,
                     analysis_status = ?,
                     analysis_failed_layer = ?,
-                    analysis_summary_reasons = ?,
-                    analysis_summary = ?,
-                    analysis_reasons = ?,
-                    analysis_risk_flags = ?,
-                    analysis_recommended_action = ?,
-                    analysis_confidence = ?,
-                    analysis_structured = ?,
-                    analysis_template_id = ?,
-                    analysis_current_run_id = ?,
-                    analysis_updated_at = ?
+                    analysis_summary_reasons = ?
                 WHERE id = ?
                 """,
                 (
@@ -852,15 +854,6 @@ class DataManager:
                     analysis_status,
                     analysis_failed_layer,
                     json.dumps(analysis_summary_reasons),
-                    snapshot.summary,
-                    json.dumps(snapshot.reasons),
-                    json.dumps(snapshot.risk_flags),
-                    snapshot.recommended_action,
-                    snapshot.confidence,
-                    json.dumps(snapshot.structured),
-                    snapshot.template_id,
-                    snapshot.current_run_id,
-                    snapshot.updated_at.isoformat() if snapshot.updated_at else None,
                     activity.id,
                 ),
             )
@@ -881,11 +874,6 @@ class DataManager:
             activity = self._row_to_activity(row)
             source_row = self._source_snapshot(conn, activity.source_id)
             analysis_fields, analysis_result = self._analysis_result_for_activity(activity, source_row, conn)
-            snapshot = self._approved_snapshot_for_activity(
-                analysis_result=analysis_result,
-                analysis_fields=analysis_fields,
-                summary=activity.summary or self._build_summary(activity),
-            )
             conn.execute(
                 """
                 UPDATE activities
@@ -893,15 +881,6 @@ class DataManager:
                     analysis_status = ?,
                     analysis_failed_layer = ?,
                     analysis_summary_reasons = ?,
-                    analysis_summary = ?,
-                    analysis_reasons = ?,
-                    analysis_risk_flags = ?,
-                    analysis_recommended_action = ?,
-                    analysis_confidence = ?,
-                    analysis_structured = ?,
-                    analysis_template_id = ?,
-                    analysis_current_run_id = ?,
-                    analysis_updated_at = ?,
                     updated_at = ?
                 WHERE id = ?
                 """,
@@ -910,15 +889,6 @@ class DataManager:
                     analysis_result.status,
                     analysis_result.failed_layer,
                     json.dumps(analysis_result.folded_summary_reasons),
-                    snapshot.summary,
-                    json.dumps(snapshot.reasons),
-                    json.dumps(snapshot.risk_flags),
-                    snapshot.recommended_action,
-                    snapshot.confidence,
-                    json.dumps(snapshot.structured),
-                    snapshot.template_id,
-                    snapshot.current_run_id,
-                    snapshot.updated_at.isoformat() if snapshot.updated_at else None,
                     datetime.now().isoformat(),
                     activity.id,
                 ),
@@ -1101,7 +1071,6 @@ class DataManager:
                 analysis_status,
                 analysis_failed_layer,
                 analysis_summary_reasons,
-                snapshot,
             ) = self._activity_enrichment(
                 activity,
                 source_row,
@@ -1117,11 +1086,8 @@ class DataManager:
                     start_date, end_date, deadline, location, organizer, image_url,
                     summary, score, score_reason, deadline_level, trust_level, updated_fields,
                     analysis_fields, analysis_status, analysis_failed_layer, analysis_summary_reasons,
-                    analysis_summary, analysis_reasons, analysis_risk_flags, analysis_recommended_action,
-                    analysis_confidence, analysis_structured, analysis_template_id, analysis_current_run_id,
-                    analysis_updated_at,
                     status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     activity.id,
@@ -1152,15 +1118,6 @@ class DataManager:
                     analysis_status,
                     analysis_failed_layer,
                     json.dumps(analysis_summary_reasons),
-                    snapshot.summary,
-                    json.dumps(snapshot.reasons),
-                    json.dumps(snapshot.risk_flags),
-                    snapshot.recommended_action,
-                    snapshot.confidence,
-                    json.dumps(snapshot.structured),
-                    snapshot.template_id,
-                    snapshot.current_run_id,
-                    snapshot.updated_at.isoformat() if snapshot.updated_at else None,
                     activity.status,
                     activity.created_at.isoformat() if is_new else existing["created_at"],
                     now,
@@ -1190,6 +1147,7 @@ class DataManager:
             full_content=row["full_content"],
             summary=row["summary"],
         )
+        snapshot_fields = self._unpack_activity_snapshot_fields(row)
         return Activity(
             id=row["id"],
             title=row["title"],
@@ -1217,27 +1175,15 @@ class DataManager:
             analysis_summary_reasons=json.loads(row["analysis_summary_reasons"])
             if "analysis_summary_reasons" in row.keys() and row["analysis_summary_reasons"]
             else [],
-            analysis_summary=row["analysis_summary"] if "analysis_summary" in row.keys() else None,
-            analysis_reasons=json.loads(row["analysis_reasons"])
-            if "analysis_reasons" in row.keys() and row["analysis_reasons"]
-            else [],
-            analysis_risk_flags=json.loads(row["analysis_risk_flags"])
-            if "analysis_risk_flags" in row.keys() and row["analysis_risk_flags"]
-            else [],
-            analysis_recommended_action=row["analysis_recommended_action"]
-            if "analysis_recommended_action" in row.keys()
-            else None,
-            analysis_confidence=row["analysis_confidence"] if "analysis_confidence" in row.keys() else None,
-            analysis_structured=json.loads(row["analysis_structured"])
-            if "analysis_structured" in row.keys() and row["analysis_structured"]
-            else {},
-            analysis_template_id=row["analysis_template_id"] if "analysis_template_id" in row.keys() else None,
-            analysis_current_run_id=row["analysis_current_run_id"]
-            if "analysis_current_run_id" in row.keys()
-            else None,
-            analysis_updated_at=datetime.fromisoformat(row["analysis_updated_at"])
-            if "analysis_updated_at" in row.keys() and row["analysis_updated_at"]
-            else None,
+            analysis_summary=snapshot_fields["analysis_summary"],
+            analysis_reasons=snapshot_fields["analysis_reasons"],
+            analysis_risk_flags=snapshot_fields["analysis_risk_flags"],
+            analysis_recommended_action=snapshot_fields["analysis_recommended_action"],
+            analysis_confidence=snapshot_fields["analysis_confidence"],
+            analysis_structured=snapshot_fields["analysis_structured"],
+            analysis_template_id=snapshot_fields["analysis_template_id"],
+            analysis_current_run_id=snapshot_fields["analysis_current_run_id"],
+            analysis_updated_at=snapshot_fields["analysis_updated_at"],
             is_tracking=bool(row["is_tracking"]) if "is_tracking" in row.keys() else False,
             is_favorited=bool(row["is_favorited"]) if "is_favorited" in row.keys() else False,
             is_digest_candidate=bool(row["is_digest_candidate"]) if "is_digest_candidate" in row.keys() else False,
