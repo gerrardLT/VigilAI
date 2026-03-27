@@ -131,6 +131,10 @@ class Activity(BaseModel):
     deadline_level: Optional[str] = None
     trust_level: Optional[str] = None
     updated_fields: List[str] = Field(default_factory=list)
+    analysis_fields: dict = Field(default_factory=dict)
+    analysis_status: Optional[str] = None
+    analysis_failed_layer: Optional[str] = None
+    analysis_summary_reasons: List[str] = Field(default_factory=list)
     is_tracking: bool = False
     is_favorited: bool = False
     is_digest_candidate: bool = False

@@ -3,11 +3,17 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Loading } from '../components/Loading'
 import { Toast } from '../components/Toast'
+import { useAnalysisTemplates } from '../hooks/useAnalysisTemplates'
 import { api } from '../services/api'
 import type { ActivityDetail, TrackingState } from '../types'
 import { CATEGORY_COLOR_MAP, CATEGORY_ICON_MAP } from '../utils/constants'
 import { daysUntil, formatDateOnly, formatDateTime, isExpired } from '../utils/formatDate'
 import { CATEGORY_LABELS } from '../types'
+import {
+  getAnalysisStatusLabel,
+  getTrustLevelLabel,
+  localizeAnalysisTemplate,
+} from '../utils/analysisI18n'
 
 const TRUST_STYLES = {
   high: 'bg-emerald-100 text-emerald-700',
@@ -31,6 +37,18 @@ const DEADLINE_LABELS = {
   later: '后续关注',
   none: '无截止信息',
   expired: '已截止',
+} as const
+
+const ANALYSIS_STATUS_STYLES = {
+  passed: 'bg-emerald-100 text-emerald-700',
+  watch: 'bg-amber-100 text-amber-700',
+  rejected: 'bg-rose-100 text-rose-700',
+} as const
+
+const LAYER_DECISION_STYLES = {
+  passed: 'bg-emerald-100 text-emerald-700',
+  borderline: 'bg-amber-100 text-amber-700',
+  failed: 'bg-rose-100 text-rose-700',
 } as const
 
 const FIELD_LABELS: Record<string, string> = {
@@ -91,6 +109,8 @@ function normalizeTextField(value: string) {
 export function ActivityDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { defaultTemplate } = useAnalysisTemplates()
+  const localizedDefaultTemplate = defaultTemplate ? localizeAnalysisTemplate(defaultTemplate) : null
   const [activity, setActivity] = useState<ActivityDetail | null>(null)
   const [tracking, setTracking] = useState<TrackingState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -280,6 +300,11 @@ export function ActivityDetailPage() {
   const days = deadline ? daysUntil(deadline) : null
   const expired = deadline ? isExpired(deadline) : false
   const deadlineLevel = activity.deadline_level ?? 'none'
+  const analysisStatus = activity.analysis_status ?? null
+  const analysisReasons = activity.analysis_summary_reasons ?? []
+  const analysisLayerResults = activity.analysis_layer_results ?? []
+  const analysisFieldEntries = Object.entries(activity.analysis_fields ?? {}).filter(([key]) => !key.startsWith('_'))
+  const analysisAdjustHref = analysisStatus ? `/activities?analysis_status=${analysisStatus}` : '/activities'
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -325,13 +350,13 @@ export function ActivityDetailPage() {
 
             {activity.score !== undefined && activity.score !== null && (
               <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                Score {activity.score.toFixed(1)}
+                评分 {activity.score.toFixed(1)}
               </span>
             )}
 
             {activity.trust_level && (
               <span className={`rounded-full px-3 py-1 text-sm font-medium ${TRUST_STYLES[activity.trust_level]}`}>
-                Trust {activity.trust_level}
+                可信度 {getTrustLevelLabel(activity.trust_level)}
               </span>
             )}
 
@@ -392,9 +417,122 @@ export function ActivityDetailPage() {
           {(activity.summary || activity.full_content) && (
             <section className="rounded-2xl bg-slate-50 p-6">
               <h2 className="mb-3 text-lg font-semibold text-gray-900">机会摘要</h2>
-              <p className="whitespace-pre-wrap leading-7 text-gray-700">
+              <p data-testid="activity-summary" className="whitespace-pre-wrap break-words leading-7 text-gray-700">
                 {activity.summary || activity.full_content}
               </p>
+            </section>
+          )}
+
+          {(analysisStatus || analysisReasons.length > 0 || activity.analysis_fields) && (
+            <section
+              data-testid="activity-analysis-panel"
+              className="rounded-2xl border border-sky-100 bg-sky-50/60 p-6"
+            >
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">AI 分析</h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    用规则结果帮助你更快判断这条机会值不值得跟进。
+                  </p>
+                  {localizedDefaultTemplate && (
+                    <div
+                      data-testid="activity-analysis-template-context"
+                      className="mt-3 inline-flex rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-sky-800"
+                    >
+                      当前模板: {localizedDefaultTemplate.name}
+                    </div>
+                  )}
+                  <div className="mt-3">
+                    <Link
+                      to={analysisAdjustHref}
+                      data-testid="activity-analysis-adjust-link"
+                      className="inline-flex items-center rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-sky-800 transition hover:border-sky-300 hover:text-sky-900"
+                    >
+                      去机会池继续调规则
+                    </Link>
+                  </div>
+                </div>
+                {analysisStatus && (
+                  <span
+                    data-testid="activity-analysis-status"
+                    className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-medium ${ANALYSIS_STATUS_STYLES[analysisStatus]}`}
+                  >
+                    {getAnalysisStatusLabel(analysisStatus, { watch: '观察', rejected: '拦截' })}
+                  </span>
+                )}
+              </div>
+
+              {activity.analysis_failed_layer && (
+                <p className="mt-4 text-sm text-gray-600">
+                  拦截层级: {activity.analysis_failed_layer}
+                </p>
+              )}
+
+              {analysisReasons.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {analysisReasons.map(reason => (
+                    <span
+                      key={reason}
+                      className="rounded-full border border-sky-200 bg-white px-3 py-1 text-sm text-slate-700"
+                    >
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {analysisLayerResults.length > 0 && (
+                <div data-testid="activity-analysis-chain" className="mt-6 space-y-3">
+                  <div className="text-sm font-semibold text-slate-900">判断链路</div>
+                  {analysisLayerResults.map(layer => (
+                    <div key={layer.key} className="rounded-2xl border border-sky-100 bg-white/80 p-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">{layer.label}</div>
+                          <div className="text-xs text-slate-500">{layer.key}</div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${
+                              LAYER_DECISION_STYLES[layer.decision as keyof typeof LAYER_DECISION_STYLES] ||
+                              'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {getAnalysisStatusLabel(layer.decision, { watch: '观察', rejected: '拦截' })}
+                          </span>
+                          <span className="text-xs text-slate-500">得分 {layer.score.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      {layer.reasons.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {layer.reasons.map(reason => (
+                            <span
+                              key={`${layer.key}-${reason}`}
+                              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                            >
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {analysisFieldEntries.length > 0 && (
+                <div data-testid="activity-analysis-fields" className="mt-6">
+                  <div className="text-sm font-semibold text-slate-900">结构化分析字段</div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {analysisFieldEntries.map(([key, value]) => (
+                      <div key={key} className="rounded-2xl border border-sky-100 bg-white/80 p-4">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">{key}</div>
+                        <div className="mt-2 text-sm font-medium text-slate-900">{String(value)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -510,7 +648,9 @@ export function ActivityDetailPage() {
           {activity.description && (
             <section>
               <h2 className="mb-2 text-lg font-semibold text-gray-900">活动描述</h2>
-              <p className="whitespace-pre-wrap leading-7 text-gray-600">{activity.description}</p>
+              <p data-testid="activity-description" className="whitespace-pre-wrap break-words leading-7 text-gray-600">
+                {activity.description}
+              </p>
             </section>
           )}
 

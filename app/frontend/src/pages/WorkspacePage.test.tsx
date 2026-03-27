@@ -1,16 +1,37 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WorkspaceResponse } from '../types'
 import WorkspacePage from './WorkspacePage'
 
 const refetch = vi.fn()
+type WorkspaceHookState = {
+  workspace: WorkspaceResponse | null
+  loading: boolean
+  error: string | null
+  refetch: typeof refetch
+}
+const workspaceHookState = vi.hoisted(() => ({
+  current: null as WorkspaceHookState | null,
+}))
 const serviceMocks = vi.hoisted(() => ({
   createTracking: vi.fn(),
   updateTracking: vi.fn(),
 }))
+const analysisTemplateHookState = vi.hoisted(() => ({
+  current: {
+    templates: [{ id: 'tpl-1', slug: 'quick-money', name: 'Quick money' }],
+    defaultTemplate: { id: 'tpl-1', slug: 'quick-money', name: 'Quick money' },
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    duplicateTemplate: vi.fn(),
+    activateTemplate: vi.fn(),
+  },
+}))
 
-vi.mock('../hooks/useWorkspace', () => ({
-  useWorkspace: () => ({
+function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): WorkspaceHookState {
+  return {
     workspace: {
       overview: {
         total_activities: 24,
@@ -106,11 +127,55 @@ vi.mock('../hooks/useWorkspace', () => ({
           updated_at: '2026-03-23T08:00:00Z',
         },
       ],
+      analysis_overview: {
+        total: 4,
+        passed: 2,
+        watch: 1,
+        rejected: 1,
+      },
+      blocked_opportunities: [
+        {
+          id: 'activity-3',
+          title: 'Enterprise RFP',
+          description: 'Looks big but not solo-friendly.',
+          source_id: 'enterprise',
+          source_name: 'Enterprise Feed',
+          url: 'https://example.com/rfp',
+          category: 'bounty',
+          tags: [],
+          prize: null,
+          dates: null,
+          location: null,
+          organizer: null,
+          summary: 'Likely blocked by hard gate.',
+          score: 6.2,
+          score_reason: 'Low solo fit',
+          deadline_level: 'soon',
+          trust_level: 'medium',
+          updated_fields: [],
+          analysis_status: 'rejected',
+          analysis_summary_reasons: ['Solo only failed hard gate'],
+          is_tracking: false,
+          is_favorited: false,
+          status: 'upcoming',
+          created_at: '2026-03-22T08:00:00Z',
+          updated_at: '2026-03-23T08:00:00Z',
+        },
+      ],
     },
     loading: false,
     error: null,
     refetch,
-  }),
+    ...overrides,
+  }
+}
+
+vi.mock('../hooks/useWorkspace', () => ({
+  useWorkspace: () => workspaceHookState.current ?? buildWorkspaceHookState(),
+}))
+
+vi.mock('../hooks/useAnalysisTemplates', () => ({
+  useAnalysisTemplates: () => analysisTemplateHookState.current,
 }))
 
 vi.mock('../services/api', () => ({
@@ -122,6 +187,7 @@ vi.mock('../services/api', () => ({
 
 beforeEach(() => {
   refetch.mockClear()
+  workspaceHookState.current = buildWorkspaceHookState()
   serviceMocks.createTracking.mockReset()
   serviceMocks.updateTracking.mockReset()
   serviceMocks.createTracking.mockResolvedValue({
@@ -147,6 +213,33 @@ beforeEach(() => {
 })
 
 describe('WorkspacePage', () => {
+  it('keeps hook ordering stable when the workspace finishes loading', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    workspaceHookState.current = buildWorkspaceHookState({
+      workspace: null,
+      loading: true,
+    })
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    workspaceHookState.current = buildWorkspaceHookState()
+
+    expect(() => {
+      rerender(
+        <MemoryRouter>
+          <WorkspacePage />
+        </MemoryRouter>
+      )
+    }).not.toThrow()
+
+    expect(screen.getByTestId('workspace-page')).toBeInTheDocument()
+    consoleErrorSpy.mockRestore()
+  })
+
   it('renders workspace overview, digest preview, alerts, and first actions', () => {
     render(
       <MemoryRouter>
@@ -155,10 +248,16 @@ describe('WorkspacePage', () => {
     )
 
     expect(screen.getByTestId('workspace-page')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '机会工作台' })).toBeInTheDocument()
     expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
     expect(screen.getByText('Daily Digest')).toBeInTheDocument()
     expect(screen.getByText('Hackathon Feed')).toBeInTheDocument()
     expect(screen.getByText('Ship MVP Fast')).toBeInTheDocument()
+    expect(screen.getByText('Enterprise RFP')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-analysis-overview')).toHaveTextContent('2')
+    expect(screen.getByTestId('workspace-default-template')).toHaveTextContent('Quick money')
+    expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('50%')
+    expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('Solo only failed hard gate')
   })
 
   it('exposes quick actions and supports refreshing the workspace', () => {
@@ -172,7 +271,9 @@ describe('WorkspacePage', () => {
     expect(screen.getByTestId('workspace-quick-action-digest')).toBeInTheDocument()
     expect(screen.getByTestId('workspace-quick-action-tracking')).toBeInTheDocument()
     expect(screen.getByTestId('workspace-quick-action-opportunities')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-quick-action-analysis-results')).toBeInTheDocument()
     expect(screen.getByTestId('workspace-quick-action-sources')).toBeInTheDocument()
+    expect(screen.getByText('查看分析结果')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('workspace-refresh-button'))
 

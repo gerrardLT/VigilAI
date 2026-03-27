@@ -3,10 +3,17 @@ import type { Activity } from '../types'
 import { formatDateOnly, daysUntil, isExpired } from '../utils/formatDate'
 import { CATEGORY_COLOR_MAP, CATEGORY_ICON_MAP } from '../utils/constants'
 import { CATEGORY_LABELS } from '../types'
+import { getAnalysisStatusLabel, getTrustLevelLabel } from '../utils/analysisI18n'
 
 interface ActivityCardProps {
   activity: Activity
 }
+
+const ANALYSIS_STATUS_STYLES = {
+  passed: 'bg-emerald-50 text-emerald-700',
+  watch: 'bg-amber-50 text-amber-700',
+  rejected: 'bg-rose-50 text-rose-700',
+} as const
 
 /**
  * 活动卡片组件
@@ -17,6 +24,8 @@ export function ActivityCard({ activity }: ActivityCardProps) {
   const days = deadline ? daysUntil(deadline) : null
   const expired = deadline ? isExpired(deadline) : false
   const previewText = activity.summary || activity.description
+  const analysisStatus = activity.analysis_status ?? null
+  const analysisReasons = activity.analysis_summary_reasons ?? []
 
   return (
     <Link
@@ -58,12 +67,20 @@ export function ActivityCard({ activity }: ActivityCardProps) {
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {activity.score !== undefined && activity.score !== null && (
           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-            Score {activity.score.toFixed(1)}
+            评分 {activity.score.toFixed(1)}
           </span>
         )}
         {activity.trust_level && (
           <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-            Trust {activity.trust_level}
+            可信度 {getTrustLevelLabel(activity.trust_level)}
+          </span>
+        )}
+        {analysisStatus && (
+          <span
+            data-testid="activity-card-analysis-status"
+            className={`rounded-full px-2 py-1 text-xs font-medium ${ANALYSIS_STATUS_STYLES[analysisStatus]}`}
+          >
+            {getAnalysisStatusLabel(analysisStatus)}
           </span>
         )}
       </div>
@@ -80,6 +97,19 @@ export function ActivityCard({ activity }: ActivityCardProps) {
       )}
 
       {/* 底部信息 */}
+      {analysisReasons.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {analysisReasons.slice(0, 2).map(reason => (
+            <span
+              key={reason}
+              className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600"
+            >
+              {reason}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-gray-100">
         {/* 奖金 */}
         {activity.prize?.amount ? (

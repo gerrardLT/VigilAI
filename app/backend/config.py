@@ -1432,6 +1432,32 @@ SOURCES_CONFIG = {
     },
 }
 
+DETAIL_FIRST_FIRECRAWL_SOURCES = {
+    "cyzone",
+    "segmentfault",
+    "juejin_events",
+    "lanqiao",
+    "bugcrowd",
+    "polygon_grants",
+    "ethereum_grants",
+}
+
+for _source_id in DETAIL_FIRST_FIRECRAWL_SOURCES:
+    if _source_id in SOURCES_CONFIG:
+        SOURCES_CONFIG[_source_id]["fetch_details"] = True
+
+LOW_SIGNAL_FIRECRAWL_SOURCES = {
+    "v2ex",
+    "zcool",
+    "behance",
+    "zealy",
+    "defillama_airdrops",
+}
+
+for _source_id in LOW_SIGNAL_FIRECRAWL_SOURCES:
+    if _source_id in SOURCES_CONFIG:
+        SOURCES_CONFIG[_source_id]["enabled"] = False
+
 
 def get_source_config(source_id: str) -> dict:
     """获取指定信息源的配置"""

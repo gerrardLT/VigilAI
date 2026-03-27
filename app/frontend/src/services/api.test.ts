@@ -97,6 +97,204 @@ describe('ApiService', () => {
     )
   })
 
+  it('lists, duplicates, and activates analysis templates', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([{ id: 'tpl-1', slug: 'quick-money' }]))
+      .mockResolvedValueOnce(jsonResponse({ id: 'tpl-1', slug: 'quick-money' }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'tpl-2', name: 'Quick money copy' }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'tpl-2', is_default: true })) as typeof fetch
+
+    const templates = await api.getAnalysisTemplates()
+    const current = await api.getDefaultAnalysisTemplate()
+    const duplicated = await api.duplicateAnalysisTemplate('tpl-1', 'Quick money copy')
+    const activated = await api.activateAnalysisTemplate('tpl-2')
+
+    expect(templates[0].slug).toBe('quick-money')
+    expect(current.id).toBe('tpl-1')
+    expect(duplicated.name).toBe('Quick money copy')
+    expect(activated.id).toBe('tpl-2')
+
+    const duplicateCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[2]
+    const activateCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[3]
+    expect(duplicateCall[0]).toBe(
+      'http://localhost:8000/api/analysis/templates/tpl-1/duplicate'
+    )
+    expect(duplicateCall[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ name: 'Quick money copy' }),
+    })
+    expect(activateCall[0]).toBe(
+      'http://localhost:8000/api/analysis/templates/tpl-2/activate'
+    )
+    expect(activateCall[1]).toMatchObject({ method: 'POST' })
+  })
+
+  it('updates and deletes analysis templates', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ id: 'tpl-2', name: 'Safe trust v2', slug: 'safe-trust-v2' }))
+      .mockResolvedValueOnce(jsonResponse({ success: true })) as typeof fetch
+
+    const updated = await api.updateAnalysisTemplate('tpl-2', { name: 'Safe trust v2' })
+    const deleted = await api.deleteAnalysisTemplate('tpl-2')
+
+    const updateCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const deleteCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1]
+    expect(updated.name).toBe('Safe trust v2')
+    expect(updateCall[0]).toBe('http://localhost:8000/api/analysis/templates/tpl-2')
+    expect(updateCall[1]).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ name: 'Safe trust v2' }),
+    })
+    expect(deleteCall[0]).toBe('http://localhost:8000/api/analysis/templates/tpl-2')
+    expect(deleteCall[1]).toMatchObject({ method: 'DELETE' })
+    expect(deleted).toEqual({ success: true })
+  })
+
+  it('triggers a full analysis rerun', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({ success: true, processed: 12 })
+    ) as typeof fetch
+
+    const result = await api.runAnalysis()
+
+    const [requestUrl, requestInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(requestUrl).toBe('http://localhost:8000/api/analysis/run')
+    expect(requestInit).toMatchObject({ method: 'POST' })
+    expect(result).toEqual({ success: true, processed: 12 })
+  })
+
+  it('loads a template analysis preview', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({ template_id: 'tpl-1', total: 12, passed: 5, watch: 4, rejected: 3 })
+    ) as typeof fetch
+
+    const result = await api.previewAnalysisTemplate('tpl-1')
+
+    const [requestUrl, requestInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(requestUrl).toBe('http://localhost:8000/api/analysis/templates/tpl-1/preview')
+    expect(requestInit).toMatchObject({})
+    expect(result).toEqual({ template_id: 'tpl-1', total: 12, passed: 5, watch: 4, rejected: 3 })
+  })
+
+  it('loads a draft template preview from a payload', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({ template_id: 'draft-template', total: 12, passed: 6, watch: 3, rejected: 3 })
+    ) as typeof fetch
+
+    const result = await api.previewDraftAnalysisTemplate({
+      id: 'draft-template',
+      name: 'Draft template',
+      layers: [],
+      sort_fields: ['roi_score'],
+    })
+
+    const [requestUrl, requestInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(requestUrl).toBe('http://localhost:8000/api/analysis/templates/preview')
+    expect(requestInit).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        id: 'draft-template',
+        name: 'Draft template',
+        layers: [],
+        sort_fields: ['roi_score'],
+      }),
+    })
+    expect(result).toEqual({ template_id: 'draft-template', total: 12, passed: 6, watch: 3, rejected: 3 })
+  })
+
+  it('loads draft template preview results for specific activities', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        template_id: 'draft-template',
+        total: 2,
+        passed: 1,
+        watch: 0,
+        rejected: 1,
+        items: [
+          {
+            activity_id: 'activity-1',
+            status: 'passed',
+            failed_layer: null,
+            summary_reasons: ['Reward clarity passed'],
+            layer_results: [],
+          },
+          {
+            activity_id: 'activity-2',
+            status: 'rejected',
+            failed_layer: 'hard_gate',
+            summary_reasons: ['Solo only failed hard gate'],
+            layer_results: [],
+          },
+        ],
+      })
+    ) as typeof fetch
+
+    const result = await api.previewDraftAnalysisTemplateResults({
+      id: 'draft-template',
+      name: 'Draft template',
+      activity_ids: ['activity-1', 'activity-2'],
+      layers: [],
+    })
+
+    const [requestUrl, requestInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(requestUrl).toBe('http://localhost:8000/api/analysis/templates/preview/results')
+    expect(requestInit).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        id: 'draft-template',
+        name: 'Draft template',
+        activity_ids: ['activity-1', 'activity-2'],
+        layers: [],
+      }),
+    })
+    expect(result.items[1].status).toBe('rejected')
+    expect(result.items[1].failed_layer).toBe('hard_gate')
+  })
+
+  it('loads analysis results list and detail endpoints', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          total: 1,
+          page: 1,
+          page_size: 20,
+          items: [
+            {
+              id: 'activity-1',
+              title: 'AI Hackathon',
+              analysis_status: 'passed',
+              analysis_layer_results: [],
+              analysis_score_breakdown: {},
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'activity-1',
+          title: 'AI Hackathon',
+          analysis_status: 'passed',
+          analysis_layer_results: [],
+          analysis_score_breakdown: {},
+        })
+      ) as typeof fetch
+
+    const results = await api.getAnalysisResults({ analysis_status: 'passed', page: 1, page_size: 20 })
+    const detail = await api.getAnalysisResult('activity-1')
+
+    const firstCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const secondCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1]
+    expect(firstCall[0]).toBe(
+      'http://localhost:8000/api/analysis/results?analysis_status=passed&page=1&page_size=20'
+    )
+    expect(secondCall[0]).toBe('http://localhost:8000/api/analysis/results/activity-1')
+    expect(results.items[0].analysis_status).toBe('passed')
+    expect(detail.id).toBe('activity-1')
+  })
+
   it('creates tracking items with a JSON POST body', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
       jsonResponse({

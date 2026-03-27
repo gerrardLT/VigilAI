@@ -36,6 +36,31 @@ class RefreshResponse(BaseModel):
     message: str
 
 
+class AnalysisRunResponse(BaseModel):
+    success: bool
+    processed: int
+
+
+class AnalysisTemplatePreviewResponse(BaseModel):
+    template_id: str
+    total: int
+    passed: int
+    watch: int
+    rejected: int
+
+
+class AnalysisTemplatePreviewResultItemResponse(BaseModel):
+    activity_id: str
+    status: str
+    failed_layer: Optional[str] = None
+    summary_reasons: List[str] = []
+    layer_results: List[dict] = []
+
+
+class AnalysisTemplatePreviewResultsResponse(AnalysisTemplatePreviewResponse):
+    items: List[AnalysisTemplatePreviewResultItemResponse] = []
+
+
 class TrackingUpsertRequest(BaseModel):
     is_favorited: Optional[bool] = None
     status: Optional[str] = None
@@ -54,6 +79,40 @@ class DigestSendRequest(BaseModel):
 
 class DigestCandidateRequest(BaseModel):
     digest_date: Optional[str] = None
+
+
+class AnalysisTemplateCreateRequest(BaseModel):
+    name: str
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    is_default: bool = False
+    tags: List[str] = []
+    layers: List[dict] = []
+    sort_fields: List[str] = []
+
+
+class AnalysisTemplateDuplicateRequest(BaseModel):
+    name: str
+
+
+class AnalysisTemplateUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    layers: Optional[List[dict]] = None
+    sort_fields: Optional[List[str]] = None
+
+
+class AnalysisTemplatePreviewRequest(BaseModel):
+    id: Optional[str] = None
+    name: str
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    tags: List[str] = []
+    layers: List[dict] = []
+    sort_fields: List[str] = []
+    activity_ids: List[str] = []
 
 
 def _serialize_model(value):
@@ -106,6 +165,7 @@ async def list_activities(
     source_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    analysis_status: Optional[str] = Query(None),
     deadline_level: Optional[str] = Query(None),
     trust_level: Optional[str] = Query(None),
     is_tracking: Optional[bool] = Query(None),
@@ -124,6 +184,8 @@ async def list_activities(
         filters["status"] = status
     if search:
         filters["search"] = search
+    if analysis_status:
+        filters["analysis_status"] = analysis_status
     if deadline_level:
         filters["deadline_level"] = deadline_level
     if trust_level:
@@ -192,6 +254,124 @@ async def refresh_all_sources(request: Request):
 @app.get("/api/stats")
 async def get_stats(request: Request):
     return request.app.state.data_manager.get_stats().model_dump(mode="json")
+
+
+@app.get("/api/analysis/templates")
+async def list_analysis_templates(request: Request):
+    return request.app.state.data_manager.get_analysis_templates()
+
+
+@app.get("/api/analysis/templates/default")
+async def get_default_analysis_template(request: Request):
+    template = request.app.state.data_manager.get_default_analysis_template()
+    if template is None:
+        raise HTTPException(status_code=404, detail="Default analysis template not found")
+    return template
+
+
+@app.post("/api/analysis/templates")
+async def create_analysis_template(request: Request, payload: AnalysisTemplateCreateRequest):
+    return request.app.state.data_manager.create_analysis_template(payload.model_dump(exclude_none=True))
+
+
+@app.post("/api/analysis/templates/{template_id}/duplicate")
+async def duplicate_analysis_template(
+    request: Request,
+    template_id: str,
+    payload: AnalysisTemplateDuplicateRequest,
+):
+    try:
+        return request.app.state.data_manager.duplicate_analysis_template(template_id, payload.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/analysis/templates/{template_id}/activate")
+async def activate_analysis_template(request: Request, template_id: str):
+    try:
+        return request.app.state.data_manager.set_default_analysis_template(template_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.patch("/api/analysis/templates/{template_id}")
+async def update_analysis_template(
+    request: Request,
+    template_id: str,
+    payload: AnalysisTemplateUpdateRequest,
+):
+    try:
+        return request.app.state.data_manager.update_analysis_template(
+            template_id,
+            payload.model_dump(exclude_none=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/analysis/templates/{template_id}")
+async def delete_analysis_template(request: Request, template_id: str):
+    try:
+        request.app.state.data_manager.delete_analysis_template(template_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"success": True}
+
+
+@app.post("/api/analysis/templates/preview", response_model=AnalysisTemplatePreviewResponse)
+async def preview_analysis_template_payload(
+    request: Request,
+    payload: AnalysisTemplatePreviewRequest,
+):
+    return request.app.state.data_manager.preview_analysis_template_payload(
+        payload.model_dump(exclude_none=True)
+    )
+
+
+@app.post("/api/analysis/templates/preview/results", response_model=AnalysisTemplatePreviewResultsResponse)
+async def preview_analysis_template_payload_results(
+    request: Request,
+    payload: AnalysisTemplatePreviewRequest,
+):
+    return request.app.state.data_manager.preview_analysis_template_payload_results(
+        payload.model_dump(exclude_none=True)
+    )
+
+
+@app.get("/api/analysis/templates/{template_id}/preview", response_model=AnalysisTemplatePreviewResponse)
+async def preview_analysis_template(request: Request, template_id: str):
+    try:
+        return request.app.state.data_manager.preview_analysis_template(template_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/analysis/run", response_model=AnalysisRunResponse)
+async def run_analysis_for_all_activities(request: Request):
+    processed = request.app.state.data_manager.rerun_analysis_for_all_activities()
+    return AnalysisRunResponse(success=True, processed=processed)
+
+
+@app.get("/api/analysis/results")
+async def list_analysis_results(
+    request: Request,
+    analysis_status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    return request.app.state.data_manager.get_analysis_results(
+        analysis_status=analysis_status,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@app.get("/api/analysis/results/{activity_id}")
+async def get_analysis_result_detail(request: Request, activity_id: str):
+    detail = request.app.state.data_manager.get_activity_detail(activity_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Analysis result not found")
+    return detail
 
 
 @app.get("/api/workspace")

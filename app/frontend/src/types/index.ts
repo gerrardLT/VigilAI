@@ -1,3 +1,20 @@
+import type { AnalysisFieldPayload } from './analysis'
+
+export type {
+  AnalysisCondition,
+  AnalysisFieldPayload,
+  AnalysisLayerResult,
+  AnalysisLayer,
+  AnalysisResultsFilters,
+  AnalysisTemplate,
+  AnalysisTemplateDraftPreviewRequest,
+  AnalysisTemplatePreview,
+  AnalysisTemplatePreviewResultItem,
+  AnalysisTemplatePreviewResults,
+  AnalysisTemplateCreateRequest,
+  AnalysisTemplateUpdateRequest,
+} from './analysis'
+
 export type Category =
   | 'hackathon'
   | 'data_competition'
@@ -74,6 +91,10 @@ export interface ActivityListItem {
   deadline_level?: DeadlineLevel | null
   trust_level?: TrustLevel | null
   updated_fields?: string[]
+  analysis_fields?: AnalysisFieldPayload
+  analysis_status?: 'passed' | 'watch' | 'rejected' | null
+  analysis_failed_layer?: string | null
+  analysis_summary_reasons?: string[]
   is_tracking?: boolean
   is_favorited?: boolean
   is_digest_candidate?: boolean
@@ -100,9 +121,23 @@ export interface TrackingItem extends TrackingState {
 }
 
 export interface ActivityDetail extends ActivityListItem {
+  analysis_layer_results?: AnalysisLayerResult[]
+  analysis_score_breakdown?: Record<string, number>
   timeline?: TimelineEvent[]
   related_items?: ActivityListItem[]
   tracking?: TrackingState | null
+}
+
+export interface AnalysisResultItem extends ActivityListItem {
+  analysis_layer_results?: AnalysisLayerResult[]
+  analysis_score_breakdown?: Record<string, number>
+}
+
+export interface AnalysisResultsResponse {
+  total: number
+  page: number
+  page_size: number
+  items: AnalysisResultItem[]
 }
 
 export interface Source {
@@ -148,6 +183,13 @@ export interface WorkspaceTrend {
   count: number
 }
 
+export interface WorkspaceAnalysisOverview {
+  total: number
+  passed: number
+  watch: number
+  rejected: number
+}
+
 export interface DigestSummary {
   id: string
   digest_date: string
@@ -171,6 +213,8 @@ export interface WorkspaceResponse {
   trends: WorkspaceTrend[]
   alert_sources: Source[]
   first_actions: ActivityListItem[]
+  analysis_overview?: WorkspaceAnalysisOverview
+  blocked_opportunities?: ActivityListItem[]
 }
 
 export interface RefreshResponse {
@@ -192,6 +236,7 @@ export interface ActivityFilters {
   source_id?: string
   status?: string
   search?: string
+  analysis_status?: string
   deadline_level?: string
   trust_level?: string
   tracking_state?: string
