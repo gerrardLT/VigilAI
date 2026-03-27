@@ -1478,3 +1478,53 @@ def get_sources_by_priority(priority: str) -> dict:
 def get_update_interval(priority: str) -> int:
     """获取指定优先级的更新间隔"""
     return PRIORITY_INTERVALS.get(priority, PRIORITY_INTERVALS["medium"])
+def _env_flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() == "true"
+
+
+def _env_int(name: str, default: int) -> int:
+    return int(os.getenv(name, str(default)))
+
+
+# Agent analysis provider configuration
+ANALYSIS_PROVIDER = os.getenv("ANALYSIS_PROVIDER", "mock").strip().lower()
+ANALYSIS_OPENAI_API_KEY = os.getenv("ANALYSIS_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY", "")
+
+ANALYSIS_SCREENING_MODEL = os.getenv("ANALYSIS_SCREENING_MODEL", "gpt-4o-mini")
+ANALYSIS_SCREENING_MODEL_LOW = os.getenv("ANALYSIS_SCREENING_MODEL_LOW", ANALYSIS_SCREENING_MODEL)
+ANALYSIS_SCREENING_FALLBACK_MODEL = os.getenv("ANALYSIS_SCREENING_FALLBACK_MODEL", ANALYSIS_SCREENING_MODEL)
+
+ANALYSIS_RESEARCH_MODEL = os.getenv("ANALYSIS_RESEARCH_MODEL", "gpt-4o")
+ANALYSIS_RESEARCH_FALLBACK_MODEL = os.getenv("ANALYSIS_RESEARCH_FALLBACK_MODEL", ANALYSIS_RESEARCH_MODEL)
+
+ANALYSIS_VERDICT_MODEL = os.getenv("ANALYSIS_VERDICT_MODEL", "gpt-4o")
+ANALYSIS_VERDICT_FALLBACK_MODEL = os.getenv("ANALYSIS_VERDICT_FALLBACK_MODEL", ANALYSIS_VERDICT_MODEL)
+
+ANALYSIS_MODEL_ROUTES = {
+    "screening": {
+        "low": ANALYSIS_SCREENING_MODEL_LOW,
+        "default": ANALYSIS_SCREENING_MODEL,
+        "fallback": ANALYSIS_SCREENING_FALLBACK_MODEL,
+    },
+    "research": {
+        "default": ANALYSIS_RESEARCH_MODEL,
+        "fallback": ANALYSIS_RESEARCH_FALLBACK_MODEL,
+    },
+    "verdict": {
+        "default": ANALYSIS_VERDICT_MODEL,
+        "fallback": ANALYSIS_VERDICT_FALLBACK_MODEL,
+    },
+}
+
+ANALYSIS_BUDGET_TOKEN_CAPS = {
+    "low": _env_int("ANALYSIS_BUDGET_LOW_TOKEN_LIMIT", 4000),
+    "default": _env_int("ANALYSIS_BUDGET_DEFAULT_TOKEN_LIMIT", 12000),
+    "high": _env_int("ANALYSIS_BUDGET_HIGH_TOKEN_LIMIT", 24000),
+}
+
+ANALYSIS_RESEARCH_MAX_URLS = _env_int("ANALYSIS_RESEARCH_MAX_URLS", 5)
+ANALYSIS_RESEARCH_MAX_DOMAINS = _env_int("ANALYSIS_RESEARCH_MAX_DOMAINS", 3)
+ANALYSIS_RESEARCH_TIMEOUT_SECONDS = _env_int("ANALYSIS_RESEARCH_TIMEOUT_SECONDS", 45)
+
+ANALYSIS_SCHEDULER_ENABLED = _env_flag("ANALYSIS_SCHEDULER_ENABLED", "false")
+ANALYSIS_SCHEDULE_MAX_ITEMS = _env_int("ANALYSIS_SCHEDULE_MAX_ITEMS", 25)
