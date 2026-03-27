@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 TRACKING_STATUS_VALUES = {status.value for status in TrackingStatus}
 ACTIVITY_SNAPSHOT_COLUMNS = (
+    "analysis_status",
     "analysis_summary",
     "analysis_reasons",
     "analysis_risk_flags",
@@ -730,6 +731,7 @@ class DataManager:
         if snapshot is None:
             return {column: None for column in ACTIVITY_SNAPSHOT_COLUMNS}
         return {
+            "analysis_status": snapshot.status,
             "analysis_summary": snapshot.summary,
             "analysis_reasons": json.dumps(snapshot.reasons),
             "analysis_risk_flags": json.dumps(snapshot.risk_flags),
@@ -743,6 +745,7 @@ class DataManager:
 
     def _unpack_activity_snapshot_fields(self, row: sqlite3.Row) -> Dict[str, Any]:
         return {
+            "analysis_status": row["analysis_status"] if "analysis_status" in row.keys() else None,
             "analysis_summary": row["analysis_summary"] if "analysis_summary" in row.keys() else None,
             "analysis_reasons": json.loads(row["analysis_reasons"])
             if "analysis_reasons" in row.keys() and row["analysis_reasons"]
@@ -1170,7 +1173,7 @@ class DataManager:
             trust_level=row["trust_level"],
             updated_fields=json.loads(row["updated_fields"]) if row["updated_fields"] else [],
             analysis_fields=json.loads(row["analysis_fields"]) if "analysis_fields" in row.keys() and row["analysis_fields"] else {},
-            analysis_status=row["analysis_status"] if "analysis_status" in row.keys() else None,
+            analysis_status=snapshot_fields["analysis_status"],
             analysis_failed_layer=row["analysis_failed_layer"] if "analysis_failed_layer" in row.keys() else None,
             analysis_summary_reasons=json.loads(row["analysis_summary_reasons"])
             if "analysis_summary_reasons" in row.keys() and row["analysis_summary_reasons"]

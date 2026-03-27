@@ -216,6 +216,9 @@ def test_activity_snapshot_fields_round_trip_through_sqlite_and_data_manager(tem
 
     loaded = data_manager.get_activity_by_id(activity.id)
     assert loaded is not None
+    assert "analysis_status" in packed
+    assert packed["analysis_status"] == snapshot.status
+    assert loaded.analysis_status == snapshot.status
     assert loaded.analysis_summary == snapshot.summary
     assert loaded.analysis_reasons == snapshot.reasons
     assert loaded.analysis_risk_flags == snapshot.risk_flags
@@ -225,3 +228,36 @@ def test_activity_snapshot_fields_round_trip_through_sqlite_and_data_manager(tem
     assert loaded.analysis_template_id == snapshot.template_id
     assert loaded.analysis_current_run_id == snapshot.current_run_id
     assert loaded.analysis_updated_at == snapshot.updated_at
+
+
+def test_rerun_analysis_does_not_populate_approved_snapshot_fields_without_writeback(temp_db):
+    data_manager = DataManager(db_path=temp_db)
+    source = data_manager.get_sources_status()[0]
+    now = datetime(2026, 3, 27, 12, 40, 0)
+    activity = Activity(
+        id=Activity.generate_id(source.id, "https://example.com/rerun-no-approved-snapshot"),
+        title="Rerun should not write approved snapshot",
+        description="Used to ensure rerun path does not auto-write approved snapshot fields.",
+        source_id=source.id,
+        source_name=source.name,
+        url="https://example.com/rerun-no-approved-snapshot",
+        category=Category.BOUNTY,
+        created_at=now,
+        updated_at=now,
+    )
+    data_manager.add_activity(activity)
+
+    rerun_count = data_manager.rerun_analysis_for_all_activities()
+    assert rerun_count >= 1
+
+    loaded = data_manager.get_activity_by_id(activity.id)
+    assert loaded is not None
+    assert loaded.analysis_summary is None
+    assert loaded.analysis_reasons == []
+    assert loaded.analysis_risk_flags == []
+    assert loaded.analysis_recommended_action is None
+    assert loaded.analysis_confidence is None
+    assert loaded.analysis_structured == {}
+    assert loaded.analysis_template_id is None
+    assert loaded.analysis_current_run_id is None
+    assert loaded.analysis_updated_at is None
