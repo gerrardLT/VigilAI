@@ -88,6 +88,14 @@ def test_mock_provider_returns_structured_payload_for_contract_tests():
     response = provider.generate_structured(
         task_type="screening",
         schema_name="screening_result",
+        json_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "confidence": {"type": "number"},
+            },
+            "required": ["status", "confidence"],
+        },
         prompt="...",
     )
 
@@ -171,3 +179,23 @@ def test_openai_provider_passes_json_schema_and_returns_structured_output():
         "status",
         "confidence",
     ]
+
+
+def test_openai_provider_fails_closed_on_empty_output():
+    provider = OpenAIAnalysisProvider(
+        api_key="test-key",
+        client=_FakeOpenAIClient(_FakeResponse("")),
+    )
+
+    with pytest.raises(ValueError):
+        provider.generate_structured(
+            task_type="screening",
+            schema_name="screening_result",
+            json_schema={
+                "type": "object",
+                "properties": {"status": {"type": "string"}},
+                "required": ["status"],
+            },
+            prompt="...",
+            model="gpt-4o-mini",
+        )

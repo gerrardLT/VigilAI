@@ -31,7 +31,7 @@ class MockAnalysisProvider:
         *,
         task_type: str,
         schema_name: str,
-        json_schema: dict[str, Any] | None = None,
+        json_schema: dict[str, Any],
         prompt: str,
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
