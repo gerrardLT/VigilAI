@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 import hashlib
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -135,6 +135,15 @@ class Activity(BaseModel):
     analysis_status: Optional[str] = None
     analysis_failed_layer: Optional[str] = None
     analysis_summary_reasons: List[str] = Field(default_factory=list)
+    analysis_summary: Optional[str] = None
+    analysis_reasons: List[str] = Field(default_factory=list)
+    analysis_risk_flags: List[str] = Field(default_factory=list)
+    analysis_recommended_action: Optional[str] = None
+    analysis_confidence: Optional[float] = None
+    analysis_structured: dict[str, Any] = Field(default_factory=dict)
+    analysis_template_id: Optional[str] = None
+    analysis_current_run_id: Optional[str] = None
+    analysis_updated_at: Optional[datetime] = None
     is_tracking: bool = False
     is_favorited: bool = False
     is_digest_candidate: bool = False
@@ -160,6 +169,72 @@ class Source(BaseModel):
     status: SourceStatus = SourceStatus.IDLE
     error_message: Optional[str] = None
     activity_count: int = 0
+
+
+class AnalysisJob(BaseModel):
+    id: str
+    trigger_type: str
+    scope_type: str
+    template_id: Optional[str] = None
+    route_policy: dict[str, Any] = Field(default_factory=dict)
+    budget_policy: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    requested_by: Optional[str] = None
+    created_at: datetime
+    finished_at: Optional[datetime] = None
+
+
+class AnalysisJobItem(BaseModel):
+    id: str
+    job_id: str
+    activity_id: str
+    status: str
+    needs_research: bool = False
+    final_draft_status: Optional[str] = None
+    screening_model: Optional[str] = None
+    research_model: Optional[str] = None
+    verdict_model: Optional[str] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalysisStep(BaseModel):
+    id: str
+    job_item_id: str
+    step_type: str
+    step_status: str
+    input_digest: Optional[str] = None
+    output_payload: dict[str, Any] = Field(default_factory=dict)
+    latency_ms: Optional[int] = None
+    cost_tokens_in: Optional[int] = None
+    cost_tokens_out: Optional[int] = None
+    model_name: Optional[str] = None
+    created_at: datetime
+
+
+class AnalysisEvidence(BaseModel):
+    id: str
+    job_item_id: str
+    source_type: str
+    url: Optional[str] = None
+    title: Optional[str] = None
+    snippet: Optional[str] = None
+    relevance_score: Optional[float] = None
+    trust_score: Optional[float] = None
+    supports_claim: Optional[bool] = None
+    created_at: datetime
+
+
+class AnalysisReview(BaseModel):
+    id: str
+    job_item_id: str
+    activity_id: str
+    review_action: str
+    review_note: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    created_at: datetime
 
 
 class ActivityListResponse(BaseModel):
