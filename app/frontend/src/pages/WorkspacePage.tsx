@@ -3,12 +3,19 @@ import { Link } from 'react-router-dom'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Loading } from '../components/Loading'
 import { Toast } from '../components/Toast'
+import { useAgentAnalysisJobs } from '../hooks/useAgentAnalysisJobs'
 import { useAnalysisTemplates } from '../hooks/useAnalysisTemplates'
 import { useWorkspace } from '../hooks/useWorkspace'
 import { api } from '../services/api'
 import { CATEGORY_COLOR_MAP } from '../utils/constants'
 import { formatDateOnly, formatDateTime } from '../utils/formatDate'
-import type { ActivityListItem, Category, TrackingState } from '../types'
+import type {
+  ActivityListItem,
+  AgentAnalysisJobDetail,
+  AgentAnalysisJobSummary,
+  Category,
+  TrackingState,
+} from '../types'
 
 const CATEGORY_LABELS: Record<Category, string> = {
   hackathon: '黑客松',
@@ -111,6 +118,21 @@ function summarizeBlockedReasons(activities: ActivityListItem[]) {
     .slice(0, 3)
 }
 
+function pickLatestBatchJob(jobs: AgentAnalysisJobSummary[]) {
+  return jobs.find(job => job.scope_type === 'batch') ?? null
+}
+
+function countDraftReviewItems(job: AgentAnalysisJobDetail | null) {
+  return (job?.items ?? []).filter(item => item.draft && item.reviews.length === 0).length
+}
+
+function countLowConfidenceItems(job: AgentAnalysisJobDetail | null) {
+  return (job?.items ?? []).filter(item => {
+    const confidenceBand = item.draft?.structured?.confidence_band
+    return item.draft?.risk_flags?.includes('low_confidence') || confidenceBand === 'low'
+  }).length
+}
+
 const quickActions = [
   {
     testId: 'workspace-quick-action-opportunities',
@@ -146,6 +168,7 @@ const quickActions = [
 
 export function WorkspacePage() {
   const { defaultTemplate } = useAnalysisTemplates()
+  const { jobs: agentJobs, activeJob: activeAgentJob } = useAgentAnalysisJobs()
   const { workspace, loading, error, refetch } = useWorkspace()
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -206,6 +229,13 @@ export function WorkspacePage() {
   const passRate = formatShare(analysis_overview.passed, analysis_overview.total)
   const watchRate = formatShare(analysis_overview.watch, analysis_overview.total)
   const rejectedRate = formatShare(analysis_overview.rejected, analysis_overview.total)
+  const latestBatchJob = pickLatestBatchJob(agentJobs)
+  const activeBatchJob = activeAgentJob?.scope_type === 'batch' ? activeAgentJob : null
+  const draftReviewCount = countDraftReviewItems(activeBatchJob)
+  const lowConfidenceCount = countLowConfidenceItems(activeBatchJob)
+  const failedDraftCount = activeBatchJob
+    ? activeBatchJob.items.filter(item => item.status === 'failed').length
+    : latestBatchJob?.failed_items ?? 0
 
   function applyTrackingState(activityId: string, tracking: TrackingState) {
     setOpportunityOverrides(prev => ({
@@ -339,6 +369,85 @@ export function WorkspacePage() {
             <div className="mt-2 text-sm text-gray-500">{action.description}</div>
           </Link>
         ))}
+      </section>
+
+      <section
+        data-testid="workspace-agent-analysis-summary"
+        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">Agent analysis summary</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              聚焦当前默认模板、最新批次作业，以及待人工复核的 draft 工作量。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/analysis/results" className="btn btn-secondary">
+              打开批次结果
+            </Link>
+            <Link to="/analysis/templates" className="btn btn-secondary">
+              调整模板
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Active template</div>
+            <div className="mt-2 text-lg font-semibold text-slate-900">
+              {defaultTemplate?.name ?? 'No active template'}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Latest batch</div>
+            <div className="mt-2 text-lg font-semibold text-slate-900">
+              {latestBatchJob?.id ?? 'No batch job yet'}
+            </div>
+            {latestBatchJob?.created_at && (
+              <div className="mt-1 text-xs text-slate-500">{formatDateTime(latestBatchJob.created_at)}</div>
+            )}
+          </div>
+          <div className="rounded-2xl bg-amber-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-amber-700">Draft reviews</div>
+            <div className="mt-2 text-3xl font-semibold text-amber-800">{draftReviewCount}</div>
+          </div>
+          <div className="rounded-2xl bg-rose-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-rose-700">Low confidence</div>
+            <div className="mt-2 text-3xl font-semibold text-rose-800">{lowConfidenceCount}</div>
+          </div>
+          <div className="rounded-2xl bg-sky-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-sky-700">Failed or blocked</div>
+            <div className="mt-2 text-3xl font-semibold text-sky-800">
+              {failedDraftCount + blocked_opportunities.length}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Recent batch health</div>
+            <div className="mt-2 text-sm text-slate-600">
+              {latestBatchJob
+                ? `状态 ${latestBatchJob.status}，共 ${latestBatchJob.item_count} 条，失败 ${latestBatchJob.failed_items} 条。`
+                : '还没有批次分析作业，建议先启动一次批量 screening。'}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Needs research</div>
+            <div className="mt-2 text-sm text-slate-600">
+              {latestBatchJob
+                ? `${latestBatchJob.needs_research_count} 条机会需要补充 research。`
+                : '暂无需要 research 的批次项。'}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Blocked opportunities</div>
+            <div className="mt-2 text-sm text-slate-600">
+              当前有 {blocked_opportunities.length} 条被模板拦截，优先复核低信心和高价值机会。
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">

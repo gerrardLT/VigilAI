@@ -506,4 +506,18 @@ describe('AnalysisTemplatesPage', () => {
       'Prefer trusted sources with solo bias'
     )
   })
+
+  it('edits business template preferences instead of raw model routing', async () => {
+    render(
+      <MemoryRouter>
+        <AnalysisTemplatesPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByTestId('edit-analysis-template-tpl-2'))
+
+    expect(await screen.findByLabelText(/risk tolerance/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/research mode/i)).toBeInTheDocument()
+    expect(screen.queryByText(/screening_model/i)).not.toBeInTheDocument()
+  })
 })

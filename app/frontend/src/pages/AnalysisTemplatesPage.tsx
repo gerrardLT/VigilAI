@@ -21,7 +21,19 @@ interface TemplateEditorState {
   description: string
   tags: string
   sortFields: string
+  preferenceProfile: 'money_first' | 'trusted_sources' | 'solo_friendly'
+  riskTolerance: 'assertive' | 'balanced' | 'cautious'
+  researchMode: 'minimal' | 'layered' | 'deep_dive'
   layers: AnalysisLayer[]
+}
+
+type TemplatePreferenceProfile = TemplateEditorState['preferenceProfile']
+type TemplateRiskTolerance = TemplateEditorState['riskTolerance']
+type TemplateResearchMode = TemplateEditorState['researchMode']
+type AnalysisTemplateWithPreferences = AnalysisTemplate & {
+  preference_profile?: TemplatePreferenceProfile | null
+  risk_tolerance?: TemplateRiskTolerance | null
+  research_mode?: TemplateResearchMode | null
 }
 
 interface DeleteImpactState {
@@ -73,12 +85,69 @@ function parseConditionValue(value: string): string | number | boolean | null {
   return normalized
 }
 
+const PREFERENCE_PROFILE_LABELS: Record<TemplatePreferenceProfile, string> = {
+  money_first: 'Money first',
+  trusted_sources: 'Trusted sources',
+  solo_friendly: 'Solo friendly',
+}
+
+const RISK_TOLERANCE_LABELS: Record<TemplateRiskTolerance, string> = {
+  assertive: 'Assertive',
+  balanced: 'Balanced',
+  cautious: 'Cautious',
+}
+
+const RESEARCH_MODE_LABELS: Record<TemplateResearchMode, string> = {
+  minimal: 'Minimal',
+  layered: 'Layered',
+  deep_dive: 'Deep dive',
+}
+
+function deriveTemplatePreferences(template: AnalysisTemplate): Pick<
+  TemplateEditorState,
+  'preferenceProfile' | 'riskTolerance' | 'researchMode'
+> {
+  const typedTemplate = template as AnalysisTemplateWithPreferences
+  const slug = template.slug.toLowerCase()
+  const tags = new Set(template.tags)
+
+  const preferenceProfile =
+    typedTemplate.preference_profile ??
+    (slug.includes('safe') || slug.includes('trust') || tags.has('trust')
+      ? 'trusted_sources'
+      : tags.has('solo')
+        ? 'solo_friendly'
+        : 'money_first')
+
+  const riskTolerance =
+    typedTemplate.risk_tolerance ??
+    (slug.includes('safe') || tags.has('safe') || tags.has('trusted')
+      ? 'cautious'
+      : slug.includes('quick') || tags.has('roi')
+        ? 'assertive'
+        : 'balanced')
+
+  const researchMode =
+    typedTemplate.research_mode ??
+    (slug.includes('safe') || slug.includes('trust') || tags.has('trust') ? 'layered' : 'minimal')
+
+  return {
+    preferenceProfile,
+    riskTolerance,
+    researchMode,
+  }
+}
+
 function buildEditorState(template: AnalysisTemplate): TemplateEditorState {
   const localizedTemplate = localizeAnalysisTemplate(template)
+  const preferences = deriveTemplatePreferences(localizedTemplate)
   return {
     description: localizedTemplate.description ?? '',
     tags: toCsv(localizedTemplate.tags),
     sortFields: toCsv(localizedTemplate.sort_fields),
+    preferenceProfile: preferences.preferenceProfile,
+    riskTolerance: preferences.riskTolerance,
+    researchMode: preferences.researchMode,
     layers: cloneLayers(localizedTemplate.layers),
   }
 }
@@ -524,6 +593,7 @@ export function AnalysisTemplatesPage() {
         {localizedTemplates.map(template => {
           const preview = previewByTemplate[template.id]
           const isEditing = editingTemplateId === template.id && editorState
+          const preferences = deriveTemplatePreferences(template)
 
           return (
             <section key={template.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -676,6 +746,24 @@ export function AnalysisTemplatesPage() {
 
               <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div className="rounded-xl bg-slate-50 p-4">
+                  <div className="text-xs text-slate-500">Profile</div>
+                  <div className="mt-2 text-sm font-semibold text-slate-900">
+                    {PREFERENCE_PROFILE_LABELS[preferences.preferenceProfile]}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <div className="text-xs text-slate-500">Risk tolerance</div>
+                  <div className="mt-2 text-sm font-semibold text-slate-900">
+                    {RISK_TOLERANCE_LABELS[preferences.riskTolerance]}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <div className="text-xs text-slate-500">Research mode</div>
+                  <div className="mt-2 text-sm font-semibold text-slate-900">
+                    {RESEARCH_MODE_LABELS[preferences.researchMode]}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4">
                   <div className="text-xs text-slate-500">层数</div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900">{template.layers.length}</div>
                 </div>
@@ -736,6 +824,77 @@ export function AnalysisTemplatesPage() {
                         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-300"
                       />
                     </label>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="flex flex-col gap-1">
+                        <div className="text-sm font-medium text-slate-900">Business preferences</div>
+                        <p className="text-xs text-slate-500">
+                          用业务偏好定义 agent 策略，而不是继续暴露底层模型路由。
+                        </p>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <label className="grid gap-1 text-xs text-slate-600">
+                          <span>Preference profile</span>
+                          <select
+                            aria-label="Preference profile"
+                            data-testid={`analysis-template-preference-profile-input-${template.id}`}
+                            value={editorState.preferenceProfile}
+                            onChange={event =>
+                              updateEditorState(current => ({
+                                ...current,
+                                preferenceProfile: event.target.value as TemplatePreferenceProfile,
+                              }))
+                            }
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-300"
+                          >
+                            <option value="money_first">Money first</option>
+                            <option value="trusted_sources">Trusted sources</option>
+                            <option value="solo_friendly">Solo friendly</option>
+                          </select>
+                        </label>
+
+                        <label className="grid gap-1 text-xs text-slate-600">
+                          <span>Risk tolerance</span>
+                          <select
+                            aria-label="Risk tolerance"
+                            data-testid={`analysis-template-risk-tolerance-input-${template.id}`}
+                            value={editorState.riskTolerance}
+                            onChange={event =>
+                              updateEditorState(current => ({
+                                ...current,
+                                riskTolerance: event.target.value as TemplateRiskTolerance,
+                              }))
+                            }
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-300"
+                          >
+                            <option value="assertive">Assertive</option>
+                            <option value="balanced">Balanced</option>
+                            <option value="cautious">Cautious</option>
+                          </select>
+                        </label>
+
+                        <label className="grid gap-1 text-xs text-slate-600">
+                          <span>Research mode</span>
+                          <select
+                            aria-label="Research mode"
+                            data-testid={`analysis-template-research-mode-input-${template.id}`}
+                            value={editorState.researchMode}
+                            onChange={event =>
+                              updateEditorState(current => ({
+                                ...current,
+                                researchMode: event.target.value as TemplateResearchMode,
+                              }))
+                            }
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-300"
+                          >
+                            <option value="minimal">Minimal</option>
+                            <option value="layered">Layered</option>
+                            <option value="deep_dive">Deep dive</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
 
                     <div className="grid gap-3">
                       <div className="flex items-center justify-between">

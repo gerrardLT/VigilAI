@@ -29,6 +29,107 @@ const analysisTemplateHookState = vi.hoisted(() => ({
     activateTemplate: vi.fn(),
   },
 }))
+const agentAnalysisJobsHookState = vi.hoisted(() => ({
+  current: {
+    jobs: [
+      {
+        id: 'job-batch-1',
+        trigger_type: 'scheduled',
+        scope_type: 'batch',
+        template_id: 'tpl-1',
+        route_policy: {},
+        budget_policy: {},
+        status: 'completed',
+        requested_by: null,
+        created_at: '2026-03-23T08:00:00Z',
+        finished_at: '2026-03-23T08:05:00Z',
+        item_count: 3,
+        completed_items: 2,
+        failed_items: 1,
+        needs_research_count: 1,
+      },
+    ],
+    total: 1,
+    activeJob: {
+      id: 'job-batch-1',
+      trigger_type: 'scheduled',
+      scope_type: 'batch',
+      template_id: 'tpl-1',
+      route_policy: {},
+      budget_policy: {},
+      status: 'completed',
+      requested_by: null,
+      created_at: '2026-03-23T08:00:00Z',
+      finished_at: '2026-03-23T08:05:00Z',
+      item_count: 3,
+      items: [
+        {
+          id: 'job-item-1',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-1',
+          status: 'completed',
+          needs_research: false,
+          final_draft_status: 'pass',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: { id: 'activity-1', title: 'AI Hackathon' },
+          draft: { status: 'pass', summary: 'Good fit', reasons: [], risk_flags: [], structured: {} },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+        {
+          id: 'job-item-2',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-3',
+          status: 'completed',
+          needs_research: true,
+          final_draft_status: 'watch',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: { id: 'activity-3', title: 'Enterprise RFP' },
+          draft: {
+            status: 'watch',
+            summary: 'Needs manual review',
+            reasons: ['Solo only failed hard gate'],
+            risk_flags: ['team_required'],
+            structured: { confidence_band: 'medium' },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+        {
+          id: 'job-item-3',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-4',
+          status: 'failed',
+          needs_research: false,
+          final_draft_status: 'reject',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: { id: 'activity-4', title: 'Slow grant' },
+          draft: {
+            status: 'reject',
+            summary: 'Low confidence',
+            reasons: ['Insufficient evidence'],
+            risk_flags: ['low_confidence'],
+            structured: { confidence_band: 'low' },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+      ],
+    },
+    loading: false,
+    refreshing: false,
+    error: null,
+    refetch: vi.fn(),
+    loadJob: vi.fn(),
+    createJob: vi.fn(),
+  },
+}))
 
 function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): WorkspaceHookState {
   return {
@@ -178,6 +279,10 @@ vi.mock('../hooks/useAnalysisTemplates', () => ({
   useAnalysisTemplates: () => analysisTemplateHookState.current,
 }))
 
+vi.mock('../hooks/useAgentAnalysisJobs', () => ({
+  useAgentAnalysisJobs: () => agentAnalysisJobsHookState.current,
+}))
+
 vi.mock('../services/api', () => ({
   api: {
     createTracking: serviceMocks.createTracking,
@@ -298,5 +403,17 @@ describe('WorkspacePage', () => {
     await waitFor(() => {
       expect(serviceMocks.updateTracking).toHaveBeenCalledWith('activity-1', { is_favorited: true })
     })
+  })
+
+  it('shows active template and draft-review workload on the workspace', async () => {
+    render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByTestId('workspace-agent-analysis-summary')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-agent-analysis-summary')).toHaveTextContent('Quick money')
+    expect(screen.getByTestId('workspace-agent-analysis-summary')).toHaveTextContent('job-batch-1')
   })
 })
