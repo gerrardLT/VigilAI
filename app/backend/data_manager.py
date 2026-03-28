@@ -1680,6 +1680,7 @@ class DataManager:
             "draft": draft.model_dump(mode="json") if draft else None,
             "steps": [step.model_dump(mode="json") for step in self.get_analysis_steps(item.id)],
             "evidence": [evidence.model_dump(mode="json") for evidence in self.get_analysis_evidence(item.id)],
+            "reviews": [review.model_dump(mode="json") for review in self.get_analysis_reviews(item.id)],
         }
 
     def get_analysis_job_detail(self, job_id: str) -> Dict[str, Any] | None:
@@ -1693,6 +1694,62 @@ class DataManager:
             "item_count": len(materialized_items),
             "items": materialized_items,
         }
+
+    def insert_analysis_review(
+        self,
+        *,
+        job_item_id: str,
+        activity_id: str,
+        review_action: str,
+        review_note: str | None = None,
+        reviewed_by: str | None = None,
+    ) -> AnalysisReview:
+        with self._get_connection() as conn:
+            review_id = self._generate_record_id()
+            now = datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO analysis_reviews (
+                    id, job_item_id, activity_id, review_action, review_note, reviewed_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    review_id,
+                    job_item_id,
+                    activity_id,
+                    review_action,
+                    review_note,
+                    reviewed_by,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM analysis_reviews WHERE id = ?", (review_id,)).fetchone()
+            return self._analysis_review_from_row(row)
+
+    def get_analysis_reviews(self, job_item_id: str) -> List[AnalysisReview]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_reviews
+                WHERE job_item_id = ?
+                ORDER BY created_at ASC
+                """,
+                (job_item_id,),
+            ).fetchall()
+            return [self._analysis_review_from_row(row) for row in rows]
+
+    def write_activity_snapshot(self, activity_id: str, snapshot: AnalysisSnapshot) -> Activity:
+        packed = self._pack_activity_snapshot_fields(snapshot)
+        assignment_clause = ", ".join(f"{column} = ?" for column in packed.keys())
+        with self._get_connection() as conn:
+            conn.execute(
+                f"UPDATE activities SET {assignment_clause} WHERE id = ?",
+                [*packed.values(), activity_id],
+            )
+        activity = self.get_activity_by_id(activity_id)
+        if activity is None:
+            raise ValueError(f"Activity {activity_id} not found")
+        return activity
 
     def _analysis_review_from_row(self, row: sqlite3.Row) -> AnalysisReview:
         return AnalysisReview(

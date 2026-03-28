@@ -9,6 +9,7 @@ from enum import Enum
 import hashlib
 from typing import Any, List, Optional
 
+from analysis.schemas import AnalysisSnapshot
 from pydantic import BaseModel, Field
 
 
@@ -235,6 +236,14 @@ class AnalysisReview(BaseModel):
     review_note: Optional[str] = None
     reviewed_by: Optional[str] = None
     created_at: datetime
+
+
+class AnalysisReviewResult(BaseModel):
+    review_action: str
+    item_id: str
+    activity_id: str
+    review_note: Optional[str] = None
+    snapshot: AnalysisSnapshot | None = None
 
 
 class ActivityListResponse(BaseModel):

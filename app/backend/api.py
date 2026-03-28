@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from analysis.run_manager import AnalysisRunManager
+from analysis.review_service import ReviewService
 from config import SOURCES_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,12 @@ class AgentAnalysisJobCreateRequest(BaseModel):
     activity_ids: List[str] = []
     template_id: Optional[str] = None
     requested_by: Optional[str] = None
+
+
+class AgentAnalysisReviewRequest(BaseModel):
+    review_note: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    edited_snapshot: Optional[dict] = None
 
 
 def _serialize_model(value):
@@ -400,7 +407,7 @@ async def create_agent_analysis_job(request: Request, payload: AgentAnalysisJobC
         raise HTTPException(status_code=400, detail="Manual single-item jobs require exactly one activity id")
 
     run_manager = getattr(request.app.state, "analysis_run_manager", None)
-    if run_manager is None:
+    if run_manager is None or getattr(run_manager, "data_manager", None) is not request.app.state.data_manager:
         run_manager = AnalysisRunManager(data_manager=request.app.state.data_manager)
         request.app.state.analysis_run_manager = run_manager
 
@@ -429,6 +436,51 @@ async def get_agent_analysis_item(request: Request, item_id: str):
     if detail is None:
         raise HTTPException(status_code=404, detail="Agent analysis item not found")
     return detail
+
+
+@app.post("/api/agent-analysis/items/{item_id}/approve")
+async def approve_agent_analysis_item(
+    request: Request,
+    item_id: str,
+    payload: AgentAnalysisReviewRequest,
+):
+    review_service = getattr(request.app.state, "review_service", None)
+    if review_service is None or getattr(review_service, "data_manager", None) is not request.app.state.data_manager:
+        review_service = ReviewService(data_manager=request.app.state.data_manager)
+        request.app.state.review_service = review_service
+
+    try:
+        result = review_service.approve_item(
+            item_id,
+            review_note=payload.review_note,
+            reviewed_by=payload.reviewed_by,
+            edited_snapshot=payload.edited_snapshot,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return result.model_dump(mode="json")
+
+
+@app.post("/api/agent-analysis/items/{item_id}/reject")
+async def reject_agent_analysis_item(
+    request: Request,
+    item_id: str,
+    payload: AgentAnalysisReviewRequest,
+):
+    review_service = getattr(request.app.state, "review_service", None)
+    if review_service is None or getattr(review_service, "data_manager", None) is not request.app.state.data_manager:
+        review_service = ReviewService(data_manager=request.app.state.data_manager)
+        request.app.state.review_service = review_service
+
+    try:
+        result = review_service.reject_item(
+            item_id,
+            review_note=payload.review_note,
+            reviewed_by=payload.reviewed_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return result.model_dump(mode="json")
 
 
 @app.get("/api/workspace")
