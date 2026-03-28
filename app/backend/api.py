@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from analysis.run_manager import AnalysisRunManager
 from config import SOURCES_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,14 @@ class AnalysisTemplatePreviewRequest(BaseModel):
     layers: List[dict] = []
     sort_fields: List[str] = []
     activity_ids: List[str] = []
+
+
+class AgentAnalysisJobCreateRequest(BaseModel):
+    scope_type: Literal["single", "batch"]
+    trigger_type: Literal["manual", "scheduled"]
+    activity_ids: List[str] = []
+    template_id: Optional[str] = None
+    requested_by: Optional[str] = None
 
 
 def _serialize_model(value):
@@ -380,6 +389,45 @@ async def get_analysis_result_detail(request: Request, activity_id: str):
     detail = request.app.state.data_manager.get_activity_detail(activity_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Analysis result not found")
+    return detail
+
+
+@app.post("/api/agent-analysis/jobs")
+async def create_agent_analysis_job(request: Request, payload: AgentAnalysisJobCreateRequest):
+    if payload.scope_type != "single" or payload.trigger_type != "manual":
+        raise HTTPException(status_code=400, detail="Only manual single-item jobs are supported in this stage")
+    if len(payload.activity_ids) != 1:
+        raise HTTPException(status_code=400, detail="Manual single-item jobs require exactly one activity id")
+
+    run_manager = getattr(request.app.state, "analysis_run_manager", None)
+    if run_manager is None:
+        run_manager = AnalysisRunManager(data_manager=request.app.state.data_manager)
+        request.app.state.analysis_run_manager = run_manager
+
+    try:
+        return run_manager.run_single_job(
+            activity_id=payload.activity_ids[0],
+            template_id=payload.template_id,
+            requested_by=payload.requested_by,
+            trigger_type=payload.trigger_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/agent-analysis/jobs/{job_id}")
+async def get_agent_analysis_job(request: Request, job_id: str):
+    detail = request.app.state.data_manager.get_analysis_job_detail(job_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Agent analysis job not found")
+    return detail
+
+
+@app.get("/api/agent-analysis/items/{item_id}")
+async def get_agent_analysis_item(request: Request, item_id: str):
+    detail = request.app.state.data_manager.get_analysis_item_detail(item_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Agent analysis item not found")
     return detail
 
 

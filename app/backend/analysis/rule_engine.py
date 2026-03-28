@@ -38,6 +38,13 @@ class AnalysisRunResult(BaseModel):
     folded_summary_reasons: List[str] = Field(default_factory=list)
 
 
+class SafetyGateDecision(BaseModel):
+    force_status: str | None = None
+    risk_flags: List[str] = Field(default_factory=list)
+    reasons: List[str] = Field(default_factory=list)
+    manual_review_required: bool = False
+
+
 def _coerce_value(value: Any) -> Any:
     if isinstance(value, str):
         lowered = value.lower()
@@ -172,4 +179,47 @@ def run_analysis(
         layer_results=layer_results,
         score_breakdown={layer.key: layer.score for layer in layer_results},
         folded_summary_reasons=summary_reasons[:3] or [activity.get("title", "Opportunity analyzed")],
+    )
+
+
+def derive_safety_gate_decision(
+    *,
+    structured: Dict[str, Any],
+    source_health: Dict[str, Any] | None = None,
+) -> SafetyGateDecision:
+    source_health = source_health or {}
+    reward_clarity = str(structured.get("reward_clarity") or "low")
+    solo_fit = str(structured.get("solo_fit") or structured.get("solo_friendliness") or "unclear")
+    source_credibility = str(structured.get("source_credibility") or structured.get("source_trust") or "low")
+    reward_estimate_present = bool(structured.get("reward_estimate_present"))
+    freshness_level = str(source_health.get("freshness_level") or "never")
+
+    risk_flags: List[str] = []
+    reasons: List[str] = []
+    force_status: str | None = None
+    manual_review_required = False
+
+    if solo_fit == "team_required":
+        force_status = "reject"
+        risk_flags.append("team_required")
+        reasons.append("Team-only restrictions violate solo-fit requirements.")
+
+    if source_credibility == "low" and freshness_level in {"critical", "never"}:
+        force_status = "reject"
+        risk_flags.append("obvious_trust_failure")
+        reasons.append("Source credibility and freshness indicate obvious trust failure.")
+
+    if reward_clarity == "low" and not reward_estimate_present and force_status is None:
+        force_status = "watch"
+        risk_flags.append("explicit_no_reward_signal")
+        reasons.append("Reward evidence is too weak for autonomous approval.")
+
+    if source_credibility != "high" or freshness_level in {"stale", "critical", "never"}:
+        manual_review_required = True
+
+    return SafetyGateDecision(
+        force_status=force_status,
+        risk_flags=risk_flags,
+        reasons=reasons,
+        manual_review_required=manual_review_required,
     )

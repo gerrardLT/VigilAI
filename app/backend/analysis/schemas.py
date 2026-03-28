@@ -18,6 +18,9 @@ class AnalysisSnapshot(BaseModel):
     recommended_action: str | None = None
     confidence: float | None = None
     structured: dict[str, Any] = Field(default_factory=dict)
+    evidence_summary: str | None = None
+    research_state: str | None = None
+    needs_manual_review: bool = False
     template_id: str | None = None
     current_run_id: str | None = None
     updated_at: datetime | None = None
