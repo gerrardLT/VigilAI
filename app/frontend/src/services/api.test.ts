@@ -295,6 +295,212 @@ describe('ApiService', () => {
     expect(detail.id).toBe('activity-1')
   })
 
+  it('creates and loads agent-analysis jobs and item detail', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'job-1',
+          trigger_type: 'manual',
+          scope_type: 'single',
+          template_id: 'tpl-1',
+          route_policy: {},
+          budget_policy: {},
+          status: 'completed',
+          requested_by: 'tester',
+          created_at: '2026-03-28T08:00:00Z',
+          finished_at: '2026-03-28T08:00:02Z',
+          item_count: 1,
+          items: [
+            {
+              id: 'item-1',
+              job_id: 'job-1',
+              activity_id: 'activity-1',
+              status: 'completed',
+              needs_research: true,
+              final_draft_status: 'watch',
+              created_at: '2026-03-28T08:00:00Z',
+              updated_at: '2026-03-28T08:00:02Z',
+              draft: {
+                status: 'watch',
+                summary: 'Need manual review',
+                reasons: ['Reward cap is unclear'],
+                risk_flags: [],
+                structured: { should_deep_research: true },
+              },
+              steps: [],
+              evidence: [],
+              reviews: [],
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          total: 1,
+          items: [
+            {
+              id: 'job-1',
+              trigger_type: 'manual',
+              scope_type: 'single',
+              template_id: 'tpl-1',
+              route_policy: {},
+              budget_policy: {},
+              status: 'completed',
+              requested_by: 'tester',
+              created_at: '2026-03-28T08:00:00Z',
+              finished_at: '2026-03-28T08:00:02Z',
+              item_count: 1,
+              completed_items: 1,
+              failed_items: 0,
+              needs_research_count: 1,
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'job-1',
+          trigger_type: 'manual',
+          scope_type: 'single',
+          template_id: 'tpl-1',
+          route_policy: {},
+          budget_policy: {},
+          status: 'completed',
+          requested_by: 'tester',
+          created_at: '2026-03-28T08:00:00Z',
+          finished_at: '2026-03-28T08:00:02Z',
+          item_count: 1,
+          items: [],
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'item-1',
+          job_id: 'job-1',
+          activity_id: 'activity-1',
+          status: 'completed',
+          needs_research: true,
+          final_draft_status: 'watch',
+          created_at: '2026-03-28T08:00:00Z',
+          updated_at: '2026-03-28T08:00:02Z',
+          activity: null,
+          draft: {
+            status: 'watch',
+            summary: 'Need manual review',
+            reasons: ['Reward cap is unclear'],
+            risk_flags: [],
+            structured: { should_deep_research: true },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        })
+      ) as typeof fetch
+
+    const created = await api.createAgentAnalysisJob({
+      scope_type: 'single',
+      trigger_type: 'manual',
+      activity_ids: ['activity-1'],
+      template_id: 'tpl-1',
+      requested_by: 'tester',
+    })
+    const list = await api.getAgentAnalysisJobs()
+    const detail = await api.getAgentAnalysisJob('job-1')
+    const item = await api.getAgentAnalysisItem('item-1')
+
+    expect(created.items[0].draft?.status).toBe('watch')
+    expect(list.items[0].needs_research_count).toBe(1)
+    expect(detail.id).toBe('job-1')
+    expect(item.id).toBe('item-1')
+
+    const createCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const listCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1]
+    const detailCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[2]
+    const itemCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[3]
+    expect(createCall[0]).toBe('http://localhost:8000/api/agent-analysis/jobs')
+    expect(createCall[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        scope_type: 'single',
+        trigger_type: 'manual',
+        activity_ids: ['activity-1'],
+        template_id: 'tpl-1',
+        requested_by: 'tester',
+      }),
+    })
+    expect(listCall[0]).toBe('http://localhost:8000/api/agent-analysis/jobs')
+    expect(detailCall[0]).toBe('http://localhost:8000/api/agent-analysis/jobs/job-1')
+    expect(itemCall[0]).toBe('http://localhost:8000/api/agent-analysis/items/item-1')
+  })
+
+  it('approves and rejects agent-analysis items with review payloads', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          review_action: 'approved',
+          item_id: 'item-1',
+          activity_id: 'activity-1',
+          review_note: 'Looks good',
+          snapshot: {
+            status: 'pass',
+            summary: 'Safe to pursue',
+            reasons: ['Reward and deadline are clear'],
+            risk_flags: [],
+            structured: { should_deep_research: false },
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          review_action: 'rejected',
+          item_id: 'item-1',
+          activity_id: 'activity-1',
+          review_note: 'Need a human rewrite first',
+          snapshot: null,
+        })
+      ) as typeof fetch
+
+    const approved = await api.approveAgentAnalysisItem('item-1', {
+      review_note: 'Looks good',
+      edited_snapshot: {
+        status: 'pass',
+        summary: 'Safe to pursue',
+        reasons: ['Reward and deadline are clear'],
+      },
+    })
+    const rejected = await api.rejectAgentAnalysisItem('item-1', {
+      review_note: 'Need a human rewrite first',
+    })
+
+    expect(approved.review_action).toBe('approved')
+    expect(approved.snapshot?.status).toBe('pass')
+    expect(rejected.review_action).toBe('rejected')
+
+    const approveCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const rejectCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1]
+    expect(approveCall[0]).toBe('http://localhost:8000/api/agent-analysis/items/item-1/approve')
+    expect(approveCall[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        review_note: 'Looks good',
+        edited_snapshot: {
+          status: 'pass',
+          summary: 'Safe to pursue',
+          reasons: ['Reward and deadline are clear'],
+        },
+      }),
+    })
+    expect(rejectCall[0]).toBe('http://localhost:8000/api/agent-analysis/items/item-1/reject')
+    expect(rejectCall[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        review_note: 'Need a human rewrite first',
+      }),
+    })
+  })
+
   it('creates tracking items with a JSON POST body', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
       jsonResponse({

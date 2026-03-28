@@ -470,7 +470,7 @@ export function ActivityDetailPage() {
 
               {analysisReasons.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {analysisReasons.map(reason => (
+                  {analysisReasons.map((reason: string) => (
                     <span
                       key={reason}
                       className="rounded-full border border-sky-200 bg-white px-3 py-1 text-sm text-slate-700"
@@ -505,7 +505,7 @@ export function ActivityDetailPage() {
                       </div>
                       {layer.reasons.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {layer.reasons.map(reason => (
+                          {layer.reasons.map((reason: string) => (
                             <span
                               key={`${layer.key}-${reason}`}
                               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"

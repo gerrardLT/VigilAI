@@ -113,7 +113,9 @@ describe('AnalysisTemplatesPage', () => {
 
   it('opens a duplicated template directly in the editor', async () => {
     analysisTemplateHookState.current.duplicateTemplate.mockImplementation(async (templateId: string, name: string) => {
-      const source = analysisTemplateHookState.current.templates.find(template => template.id === templateId)!
+      const source = analysisTemplateHookState.current.templates.find(
+        (template: { id: string }) => template.id === templateId
+      )!
       const created = {
         ...source,
         id: 'tpl-3',

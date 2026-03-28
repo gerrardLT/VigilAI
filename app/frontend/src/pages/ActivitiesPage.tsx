@@ -86,7 +86,7 @@ function parseDraftConditionValue(value: string) {
   return normalized
 }
 
-function stringifyDraftConditionValue(value: Activity['analysis_fields'][string] | unknown) {
+function stringifyDraftConditionValue(value: NonNullable<Activity['analysis_fields']>[string] | unknown) {
   if (value === null || value === undefined) {
     return ''
   }

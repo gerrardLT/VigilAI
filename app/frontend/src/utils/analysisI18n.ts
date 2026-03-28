@@ -127,7 +127,7 @@ function localizeTemplateDescription(description: string | null | undefined) {
 
 export function getAnalysisStatusLabel(
   status: string | null | undefined,
-  overrides?: Partial<typeof ANALYSIS_STATUS_LABELS>
+  overrides?: Partial<Record<keyof typeof ANALYSIS_STATUS_LABELS, string>>
 ) {
   if (!status) {
     return ''

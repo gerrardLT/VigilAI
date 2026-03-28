@@ -1,6 +1,12 @@
 import type {
   ActivityListItem,
   ActivityDetail,
+  AgentAnalysisJobCreateRequest,
+  AgentAnalysisJobDetail,
+  AgentAnalysisJobItemDetail,
+  AgentAnalysisJobListResponse,
+  AgentAnalysisReviewRequest,
+  AgentAnalysisReviewResult,
   AnalysisResultsFilters,
   AnalysisResultsResponse,
   AnalysisTemplate,
@@ -261,6 +267,64 @@ class ApiService {
 
   async getAnalysisResult(activityId: string, signal?: AbortSignal): Promise<ActivityDetail> {
     return this.request<ActivityDetail>(`/api/analysis/results/${activityId}`, {}, signal)
+  }
+
+  async createAgentAnalysisJob(
+    payload: AgentAnalysisJobCreateRequest,
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisJobDetail> {
+    return this.request<AgentAnalysisJobDetail>(
+      '/api/agent-analysis/jobs',
+      this.withJsonBody('POST', payload),
+      signal
+    )
+  }
+
+  async getAgentAnalysisJobs(signal?: AbortSignal): Promise<AgentAnalysisJobListResponse> {
+    return this.request<AgentAnalysisJobListResponse>('/api/agent-analysis/jobs', {}, signal)
+  }
+
+  async getAgentAnalysisJob(jobId: string, signal?: AbortSignal): Promise<AgentAnalysisJobDetail> {
+    return this.request<AgentAnalysisJobDetail>(
+      `/api/agent-analysis/jobs/${jobId}`,
+      {},
+      signal
+    )
+  }
+
+  async getAgentAnalysisItem(
+    itemId: string,
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisJobItemDetail> {
+    return this.request<AgentAnalysisJobItemDetail>(
+      `/api/agent-analysis/items/${itemId}`,
+      {},
+      signal
+    )
+  }
+
+  async approveAgentAnalysisItem(
+    itemId: string,
+    payload: AgentAnalysisReviewRequest = {},
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisReviewResult> {
+    return this.request<AgentAnalysisReviewResult>(
+      `/api/agent-analysis/items/${itemId}/approve`,
+      this.withJsonBody('POST', payload),
+      signal
+    )
+  }
+
+  async rejectAgentAnalysisItem(
+    itemId: string,
+    payload: AgentAnalysisReviewRequest = {},
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisReviewResult> {
+    return this.request<AgentAnalysisReviewResult>(
+      `/api/agent-analysis/items/${itemId}/reject`,
+      this.withJsonBody('POST', payload),
+      signal
+    )
   }
 
   async getTracking(status?: TrackingStatus, signal?: AbortSignal): Promise<TrackingItem[]> {

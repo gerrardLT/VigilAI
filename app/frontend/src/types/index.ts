@@ -1,4 +1,5 @@
-import type { AnalysisFieldPayload } from './analysis'
+import type { AnalysisFieldPayload, AnalysisLayerResult } from './analysis'
+import type { AgentAnalysisSnapshot } from './agentAnalysis'
 
 export type {
   AnalysisCondition,
@@ -14,6 +15,25 @@ export type {
   AnalysisTemplateCreateRequest,
   AnalysisTemplateUpdateRequest,
 } from './analysis'
+
+export type {
+  AgentAnalysisActivitySummary,
+  AgentAnalysisEvidence,
+  AgentAnalysisJobCreateRequest,
+  AgentAnalysisJobDetail,
+  AgentAnalysisJobItem,
+  AgentAnalysisJobItemDetail,
+  AgentAnalysisJobListResponse,
+  AgentAnalysisJobScopeType,
+  AgentAnalysisJobSummary,
+  AgentAnalysisJobTriggerType,
+  AgentAnalysisReview,
+  AgentAnalysisReviewRequest,
+  AgentAnalysisReviewResult,
+  AgentAnalysisSnapshot,
+  AgentAnalysisSnapshotStatus,
+  AgentAnalysisStep,
+} from './agentAnalysis'
 
 export type Category =
   | 'hackathon'
@@ -95,6 +115,17 @@ export interface ActivityListItem {
   analysis_status?: 'passed' | 'watch' | 'rejected' | null
   analysis_failed_layer?: string | null
   analysis_summary_reasons?: string[]
+  analysis_summary?: string | null
+  analysis_reasons?: string[]
+  analysis_risk_flags?: string[]
+  analysis_recommended_action?: string | null
+  analysis_confidence?: number | null
+  analysis_structured?: Record<string, unknown>
+  analysis_approved_snapshot?: AgentAnalysisSnapshot | null
+  analysis_latest_draft?: AgentAnalysisSnapshot | null
+  analysis_template_id?: string | null
+  analysis_current_run_id?: string | null
+  analysis_updated_at?: string | null
   is_tracking?: boolean
   is_favorited?: boolean
   is_digest_candidate?: boolean
