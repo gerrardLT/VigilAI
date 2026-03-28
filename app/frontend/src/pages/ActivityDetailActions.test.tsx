@@ -8,6 +8,11 @@ const apiMocks = vi.hoisted(() => ({
   createTracking: vi.fn(),
   updateTracking: vi.fn(),
   addDigestCandidate: vi.fn(),
+  removeDigestCandidate: vi.fn(),
+  createAgentAnalysisJob: vi.fn(),
+  getAgentAnalysisJob: vi.fn(),
+  approveAgentAnalysisItem: vi.fn(),
+  rejectAgentAnalysisItem: vi.fn(),
 }))
 const analysisTemplateHookState = vi.hoisted(() => ({
   current: {
@@ -111,6 +116,61 @@ describe('ActivityDetailPage tracking actions', () => {
       updated_at: '2026-03-23T08:00:00Z',
     })
     apiMocks.addDigestCandidate.mockResolvedValue({ success: true })
+    apiMocks.removeDigestCandidate.mockResolvedValue({ success: true })
+    apiMocks.createAgentAnalysisJob.mockResolvedValue({
+      id: 'job-1',
+      trigger_type: 'manual',
+      scope_type: 'single',
+      template_id: 'tpl-1',
+      route_policy: {},
+      budget_policy: {},
+      status: 'completed',
+      requested_by: null,
+      created_at: '2026-03-23T08:00:00Z',
+      finished_at: '2026-03-23T08:00:10Z',
+      item_count: 1,
+      items: [
+        {
+          id: 'item-1',
+          job_id: 'job-1',
+          activity_id: 'activity-1',
+          status: 'completed',
+          needs_research: true,
+          final_draft_status: 'watch',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:00:10Z',
+          activity: null,
+          draft: {
+            status: 'watch',
+            summary: 'Need manual review',
+            reasons: ['Reward cap still needs confirmation'],
+            risk_flags: ['reward_unclear'],
+            structured: {
+              should_deep_research: true,
+              confidence_band: 'medium',
+            },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+      ],
+    })
+    apiMocks.getAgentAnalysisJob.mockResolvedValue(null)
+    apiMocks.approveAgentAnalysisItem.mockResolvedValue({
+      review_action: 'approved',
+      item_id: 'item-1',
+      activity_id: 'activity-1',
+      review_note: 'Looks good',
+      snapshot: null,
+    })
+    apiMocks.rejectAgentAnalysisItem.mockResolvedValue({
+      review_action: 'rejected',
+      item_id: 'item-1',
+      activity_id: 'activity-1',
+      review_note: 'Need rewrite',
+      snapshot: null,
+    })
   })
 
   it('adds the activity to tracking and favorites from the detail page', async () => {
@@ -182,5 +242,30 @@ describe('ActivityDetailPage tracking actions', () => {
       'href',
       '/activities?analysis_status=passed'
     )
+  })
+
+  it('starts a manual deep-analysis job from the detail page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities/activity-1']}>
+        <Routes>
+          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /deep analysis/i }))
+
+    await waitFor(() => {
+      expect(apiMocks.createAgentAnalysisJob).toHaveBeenCalledWith({
+        scope_type: 'single',
+        trigger_type: 'manual',
+        activity_ids: ['activity-1'],
+        template_id: 'tpl-1',
+      })
+    })
   })
 })

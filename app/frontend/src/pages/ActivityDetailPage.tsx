@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AgentVerdictCard } from '../components/analysis/AgentVerdictCard'
+import { EvidencePanel } from '../components/analysis/EvidencePanel'
+import { ExecutionTracePanel } from '../components/analysis/ExecutionTracePanel'
+import { ReviewActionBar } from '../components/analysis/ReviewActionBar'
+import { StructuredFactorCard } from '../components/analysis/StructuredFactorCard'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Loading } from '../components/Loading'
 import { Toast } from '../components/Toast'
+import { useAgentAnalysisReview } from '../hooks/useAgentAnalysisReview'
 import { useAnalysisTemplates } from '../hooks/useAnalysisTemplates'
 import { api } from '../services/api'
-import type { ActivityDetail, TrackingState } from '../types'
+import type { ActivityDetail, AgentAnalysisJobDetail, AgentAnalysisJobItemDetail, TrackingState } from '../types'
 import { CATEGORY_COLOR_MAP, CATEGORY_ICON_MAP } from '../utils/constants'
 import { daysUntil, formatDateOnly, formatDateTime, isExpired } from '../utils/formatDate'
 import { CATEGORY_LABELS } from '../types'
@@ -106,10 +112,18 @@ function normalizeTextField(value: string) {
   return trimmed ? trimmed : null
 }
 
+function selectAgentAnalysisItem(
+  job: AgentAnalysisJobDetail,
+  activityId: string
+): AgentAnalysisJobItemDetail | null {
+  return job.items.find(item => item.activity_id === activityId) ?? job.items[0] ?? null
+}
+
 export function ActivityDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { defaultTemplate } = useAnalysisTemplates()
+  const { approveItem, rejectItem, reviewing, error: reviewError } = useAgentAnalysisReview()
   const localizedDefaultTemplate = defaultTemplate ? localizeAnalysisTemplate(defaultTemplate) : null
   const [activity, setActivity] = useState<ActivityDetail | null>(null)
   const [tracking, setTracking] = useState<TrackingState | null>(null)
@@ -119,6 +133,11 @@ export function ActivityDetailPage() {
   const [actionLoading, setActionLoading] = useState<DetailAction | null>(null)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [planForm, setPlanForm] = useState<TrackingPlanForm>(() => buildTrackingPlanForm(null, false))
+  const [agentJob, setAgentJob] = useState<AgentAnalysisJobDetail | null>(null)
+  const [agentItem, setAgentItem] = useState<AgentAnalysisJobItemDetail | null>(null)
+  const [agentLoading, setAgentLoading] = useState(false)
+  const [agentError, setAgentError] = useState<string | null>(null)
+  const [agentRunBusy, setAgentRunBusy] = useState(false)
   const trackingReadyRef = useRef(false)
 
   useEffect(() => {
@@ -145,6 +164,36 @@ export function ActivityDetailPage() {
 
     void fetchActivity()
   }, [id])
+
+  useEffect(() => {
+    if (!activity?.analysis_current_run_id || !activity.id) {
+      setAgentJob(null)
+      setAgentItem(null)
+      setAgentError(null)
+      setAgentLoading(false)
+      return
+    }
+
+    const fetchAgentJob = async () => {
+      setAgentLoading(true)
+      setAgentError(null)
+
+      try {
+        const job = await api.getAgentAnalysisJob(activity.analysis_current_run_id as string)
+        setAgentJob(job)
+        setAgentItem(selectAgentAnalysisItem(job, activity.id))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '加载 agent analysis draft 失败'
+        setAgentError(message)
+        setAgentJob(null)
+        setAgentItem(null)
+      } finally {
+        setAgentLoading(false)
+      }
+    }
+
+    void fetchAgentJob()
+  }, [activity?.analysis_current_run_id, activity?.id])
 
   const applyTrackingState = (nextTracking: TrackingState) => {
     trackingReadyRef.current = true
@@ -276,6 +325,74 @@ export function ActivityDetailPage() {
     }
   }
 
+  const handleDeepAnalysis = async () => {
+    if (!activity) return
+
+    setAgentRunBusy(true)
+    setAgentError(null)
+
+    try {
+      const job = await api.createAgentAnalysisJob({
+        scope_type: 'single',
+        trigger_type: 'manual',
+        activity_ids: [activity.id],
+        template_id: defaultTemplate?.id,
+      })
+
+      const nextItem = selectAgentAnalysisItem(job, activity.id)
+      setAgentJob(job)
+      setAgentItem(nextItem)
+      setActivity(prev => (prev ? { ...prev, analysis_current_run_id: job.id } : prev))
+      setToast({ type: 'success', message: 'Deep analysis draft 已生成' })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '运行 deep analysis 失败'
+      setAgentError(message)
+      setToast({ type: 'error', message })
+    } finally {
+      setAgentRunBusy(false)
+    }
+  }
+
+  const handleApproveAnalysis = async (note: string) => {
+    if (!id || !activity || !agentItem) return
+
+    const result = await approveItem(agentItem.id, {
+      review_note: normalizeTextField(note),
+    })
+
+    if (!result) {
+      return
+    }
+
+    setToast({ type: 'success', message: 'Draft 已批准并写回 activity' })
+
+    try {
+      const refreshed = await api.getActivity(id)
+      const isTracking = Boolean(refreshed.tracking || refreshed.is_tracking)
+      setActivity(refreshed)
+      setTracking(refreshed.tracking ?? null)
+      setPlanForm(buildTrackingPlanForm(refreshed.tracking ?? null, isTracking))
+      trackingReadyRef.current = isTracking
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '刷新 activity 详情失败'
+      setAgentError(message)
+    }
+  }
+
+  const handleRejectAnalysis = async (note: string) => {
+    if (!agentItem) return
+
+    const result = await rejectItem(agentItem.id, {
+      review_note: normalizeTextField(note),
+    })
+
+    if (!result) {
+      return
+    }
+
+    setToast({ type: 'success', message: 'Draft 已拒绝，主 activity 未被写回' })
+  }
+
   if (loading) {
     return <Loading text="加载活动详情..." />
   }
@@ -305,6 +422,12 @@ export function ActivityDetailPage() {
   const analysisLayerResults = activity.analysis_layer_results ?? []
   const analysisFieldEntries = Object.entries(activity.analysis_fields ?? {}).filter(([key]) => !key.startsWith('_'))
   const analysisAdjustHref = analysisStatus ? `/activities?analysis_status=${analysisStatus}` : '/activities'
+  const agentDraft = agentItem?.draft ?? activity.analysis_latest_draft ?? null
+  const agentStructured =
+    (agentItem?.draft?.structured as Record<string, unknown> | undefined) ??
+    activity.analysis_latest_draft?.structured ??
+    activity.analysis_structured ??
+    {}
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -535,6 +658,62 @@ export function ActivityDetailPage() {
               )}
             </section>
           )}
+
+          <section
+            data-testid="activity-agent-analysis-workbench"
+            className="rounded-2xl border border-slate-200 bg-slate-50/60 p-6"
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">AI Agent Workbench</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  在详情页里直接运行深度分析、查看证据与执行轨迹，再决定是否写回主结论。
+                </p>
+              </div>
+              {agentJob && (
+                <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500">
+                  Current run: {agentJob.id}
+                </div>
+              )}
+            </div>
+
+            {agentError && (
+              <div className="mt-4">
+                <ErrorMessage message={agentError} />
+              </div>
+            )}
+            {reviewError && (
+              <div className="mt-4">
+                <ErrorMessage message={reviewError} />
+              </div>
+            )}
+
+            <div className="mt-5 grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <AgentVerdictCard
+                snapshot={agentDraft}
+                onRun={handleDeepAnalysis}
+                running={agentRunBusy}
+              />
+              <StructuredFactorCard structured={agentStructured} />
+            </div>
+
+            {(agentItem || agentLoading) && (
+              <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <EvidencePanel evidence={agentItem?.evidence ?? []} />
+                <ExecutionTracePanel steps={agentItem?.steps ?? []} />
+              </div>
+            )}
+
+            {agentItem && (
+              <div className="mt-6">
+                <ReviewActionBar
+                  reviewing={reviewing}
+                  onApprove={handleApproveAnalysis}
+                  onReject={handleRejectAnalysis}
+                />
+              </div>
+            )}
+          </section>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="rounded-2xl border border-gray-100 p-5">
