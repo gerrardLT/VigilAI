@@ -20,11 +20,11 @@ class MockAnalysisProvider:
         default_payload: dict[str, Any] | None = None,
     ) -> None:
         self.payloads = {
-            "screening": screening_payload or {"status": "watch"},
-            "research": research_payload or {"research_state": "not_requested"},
-            "verdict": verdict_payload or {"status": "watch"},
+            "screening": screening_payload if screening_payload is not None else {"status": "watch"},
+            "research": research_payload if research_payload is not None else {"research_state": "not_requested"},
+            "verdict": verdict_payload if verdict_payload is not None else {"status": "watch"},
         }
-        self.default_payload = default_payload or {"status": "watch"}
+        self.default_payload = default_payload if default_payload is not None else {"status": "watch"}
 
     def generate_structured(
         self,
