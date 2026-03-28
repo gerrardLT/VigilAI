@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from analysis.run_manager import AnalysisRunManager
 from analysis.review_service import ReviewService
-from config import SOURCES_CONFIG
+from config import ANALYSIS_SCHEDULE_MAX_ITEMS, ANALYSIS_SCHEDULE_STALE_HOURS, SOURCES_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -401,25 +401,38 @@ async def get_analysis_result_detail(request: Request, activity_id: str):
 
 @app.post("/api/agent-analysis/jobs")
 async def create_agent_analysis_job(request: Request, payload: AgentAnalysisJobCreateRequest):
-    if payload.scope_type != "single" or payload.trigger_type != "manual":
-        raise HTTPException(status_code=400, detail="Only manual single-item jobs are supported in this stage")
-    if len(payload.activity_ids) != 1:
-        raise HTTPException(status_code=400, detail="Manual single-item jobs require exactly one activity id")
-
     run_manager = getattr(request.app.state, "analysis_run_manager", None)
     if run_manager is None or getattr(run_manager, "data_manager", None) is not request.app.state.data_manager:
         run_manager = AnalysisRunManager(data_manager=request.app.state.data_manager)
         request.app.state.analysis_run_manager = run_manager
 
     try:
-        return run_manager.run_single_job(
-            activity_id=payload.activity_ids[0],
-            template_id=payload.template_id,
-            requested_by=payload.requested_by,
-            trigger_type=payload.trigger_type,
-        )
+        if payload.scope_type == "single" and payload.trigger_type == "manual":
+            if len(payload.activity_ids) != 1:
+                raise HTTPException(status_code=400, detail="Manual single-item jobs require exactly one activity id")
+            return run_manager.run_single_job(
+                activity_id=payload.activity_ids[0],
+                template_id=payload.template_id,
+                requested_by=payload.requested_by,
+                trigger_type=payload.trigger_type,
+            )
+        if payload.scope_type == "batch" and payload.trigger_type == "scheduled":
+            return run_manager.run_batch_job(
+                template_id=payload.template_id,
+                requested_by=payload.requested_by,
+                trigger_type=payload.trigger_type,
+                activity_ids=payload.activity_ids or None,
+                max_items=ANALYSIS_SCHEDULE_MAX_ITEMS,
+                stale_before_hours=ANALYSIS_SCHEDULE_STALE_HOURS,
+            )
+        raise HTTPException(status_code=400, detail="Unsupported agent-analysis job mode")
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/agent-analysis/jobs")
+async def list_agent_analysis_jobs(request: Request):
+    return request.app.state.data_manager.list_analysis_jobs()
 
 
 @app.get("/api/agent-analysis/jobs/{job_id}")

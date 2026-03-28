@@ -1695,6 +1695,76 @@ class DataManager:
             "items": materialized_items,
         }
 
+    def list_analysis_jobs(self, limit: int = 20) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            total = conn.execute("SELECT COUNT(*) AS count FROM analysis_jobs").fetchone()["count"]
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_jobs
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                job = self._analysis_job_from_row(row)
+                item_rows = conn.execute(
+                    """
+                    SELECT status, needs_research
+                    FROM analysis_job_items
+                    WHERE job_id = ?
+                    """,
+                    (job.id,),
+                ).fetchall()
+                items.append(
+                    {
+                        **job.model_dump(mode="json"),
+                        "item_count": len(item_rows),
+                        "completed_items": sum(1 for item in item_rows if item["status"] == "completed"),
+                        "failed_items": sum(1 for item in item_rows if item["status"] == "failed"),
+                        "needs_research_count": sum(1 for item in item_rows if item["needs_research"]),
+                    }
+                )
+            return {"total": total, "items": items}
+
+    def select_batch_candidates(
+        self,
+        *,
+        stale_before_hours: int,
+        max_items: int,
+    ) -> List[str]:
+        threshold = (datetime.now() - timedelta(hours=stale_before_hours)).isoformat()
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM activities
+                WHERE analysis_updated_at IS NULL
+                   OR analysis_updated_at < updated_at
+                   OR analysis_updated_at < ?
+                ORDER BY
+                    CASE
+                        WHEN analysis_updated_at IS NULL THEN 0
+                        WHEN analysis_updated_at < updated_at THEN 1
+                        ELSE 2
+                    END,
+                    updated_at DESC
+                LIMIT ?
+                """,
+                (threshold, max_items * 3),
+            ).fetchall()
+
+        candidate_ids: list[str] = []
+        for row in rows:
+            if self._is_hidden_activity_row(row):
+                continue
+            candidate_ids.append(row["id"])
+            if len(candidate_ids) >= max_items:
+                break
+        return candidate_ids
+
     def insert_analysis_review(
         self,
         *,
