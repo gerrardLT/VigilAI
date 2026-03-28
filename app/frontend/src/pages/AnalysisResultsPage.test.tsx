@@ -6,6 +6,98 @@ import AnalysisResultsPage from './AnalysisResultsPage'
 const apiMocks = vi.hoisted(() => ({
   getAnalysisResults: vi.fn(),
 }))
+const agentAnalysisJobsHookState = vi.hoisted(() => ({
+  current: {
+    jobs: [
+      {
+        id: 'job-batch-1',
+        trigger_type: 'scheduled',
+        scope_type: 'batch',
+        template_id: 'tpl-1',
+        route_policy: {},
+        budget_policy: {},
+        status: 'completed',
+        requested_by: null,
+        created_at: '2026-03-23T08:00:00Z',
+        finished_at: '2026-03-23T08:05:00Z',
+        item_count: 2,
+        completed_items: 2,
+        failed_items: 0,
+        needs_research_count: 1,
+      },
+    ],
+    total: 1,
+    activeJob: {
+      id: 'job-batch-1',
+      trigger_type: 'scheduled',
+      scope_type: 'batch',
+      template_id: 'tpl-1',
+      route_policy: {},
+      budget_policy: {},
+      status: 'completed',
+      requested_by: null,
+      created_at: '2026-03-23T08:00:00Z',
+      finished_at: '2026-03-23T08:05:00Z',
+      item_count: 2,
+      items: [
+        {
+          id: 'job-item-1',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-1',
+          status: 'completed',
+          needs_research: false,
+          final_draft_status: 'pass',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: {
+            id: 'activity-1',
+            title: 'AI Hackathon',
+          },
+          draft: {
+            status: 'pass',
+            summary: 'Safe to pursue',
+            reasons: ['Reward clarity passed'],
+            risk_flags: [],
+            structured: {},
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+        {
+          id: 'job-item-2',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-2',
+          status: 'failed',
+          needs_research: true,
+          final_draft_status: 'watch',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: {
+            id: 'activity-2',
+            title: 'Enterprise RFP',
+          },
+          draft: {
+            status: 'watch',
+            summary: 'Blocked by team requirement',
+            reasons: ['Solo only failed hard gate'],
+            risk_flags: ['team_required'],
+            structured: {},
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+      ],
+    },
+    loading: false,
+    refreshing: false,
+    error: null,
+    refetch: vi.fn(),
+    loadJob: vi.fn(),
+    createJob: vi.fn(),
+  },
+}))
 
 const analysisTemplateHookState = vi.hoisted(() => ({
   current: {
@@ -65,6 +157,10 @@ vi.mock('../hooks/useAnalysisTemplates', () => ({
 
 vi.mock('../hooks/useWorkspace', () => ({
   useWorkspace: () => workspaceHookState.current,
+}))
+
+vi.mock('../hooks/useAgentAnalysisJobs', () => ({
+  useAgentAnalysisJobs: () => agentAnalysisJobsHookState.current,
 }))
 
 describe('AnalysisResultsPage', () => {
@@ -211,5 +307,18 @@ describe('AnalysisResultsPage', () => {
     })
     expect(await screen.findByText('Enterprise RFP')).toBeInTheDocument()
     expect(screen.queryByText('AI Hackathon')).not.toBeInTheDocument()
+  })
+
+  it('shows the job operations console with the latest agent-analysis job detail', async () => {
+    render(
+      <MemoryRouter>
+        <AnalysisResultsPage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByTestId('analysis-results-job-list')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-analysis-job-banner')).toHaveTextContent('job-batch-1')
+    expect(screen.getByText('Enterprise RFP')).toBeInTheDocument()
+    expect(screen.getByText('Solo only failed hard gate')).toBeInTheDocument()
   })
 })

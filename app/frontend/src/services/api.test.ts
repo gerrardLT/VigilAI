@@ -501,6 +501,54 @@ describe('ApiService', () => {
     })
   })
 
+  it('fans out batch agent-analysis review actions through per-item endpoints', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          review_action: 'approved',
+          item_id: 'item-1',
+          activity_id: 'activity-1',
+          review_note: 'Batch approved',
+          snapshot: { status: 'pass', summary: 'Approved', reasons: [], risk_flags: [], structured: {} },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          review_action: 'approved',
+          item_id: 'item-2',
+          activity_id: 'activity-2',
+          review_note: 'Batch approved',
+          snapshot: { status: 'watch', summary: 'Approved with watch', reasons: [], risk_flags: [], structured: {} },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          review_action: 'rejected',
+          item_id: 'item-3',
+          activity_id: 'activity-3',
+          review_note: 'Batch rejected',
+          snapshot: null,
+        })
+      ) as typeof fetch
+
+    const approved = await api.approveAgentAnalysisBatch(['item-1', 'item-2'], {
+      review_note: 'Batch approved',
+    })
+    const rejected = await api.rejectAgentAnalysisBatch(['item-3'], {
+      review_note: 'Batch rejected',
+    })
+
+    expect(approved).toHaveLength(2)
+    expect(approved[1].item_id).toBe('item-2')
+    expect(rejected[0].review_action).toBe('rejected')
+
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
+    expect(calls[0][0]).toBe('http://localhost:8000/api/agent-analysis/items/item-1/approve')
+    expect(calls[1][0]).toBe('http://localhost:8000/api/agent-analysis/items/item-2/approve')
+    expect(calls[2][0]).toBe('http://localhost:8000/api/agent-analysis/items/item-3/reject')
+  })
+
   it('creates tracking items with a JSON POST body', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
       jsonResponse({

@@ -9,6 +9,94 @@ const apiMocks = vi.hoisted(() => ({
   createTracking: vi.fn(),
   updateTracking: vi.fn(),
   previewDraftAnalysisTemplateResults: vi.fn(),
+  approveAgentAnalysisBatch: vi.fn(),
+  rejectAgentAnalysisBatch: vi.fn(),
+}))
+const agentAnalysisJobsHookState = vi.hoisted(() => ({
+  current: {
+    jobs: [
+      {
+        id: 'job-batch-1',
+        trigger_type: 'scheduled',
+        scope_type: 'batch',
+        template_id: 'tpl-1',
+        route_policy: {},
+        budget_policy: {},
+        status: 'completed',
+        requested_by: null,
+        created_at: '2026-03-23T08:00:00Z',
+        finished_at: '2026-03-23T08:05:00Z',
+        item_count: 2,
+        completed_items: 2,
+        failed_items: 0,
+        needs_research_count: 1,
+      },
+    ],
+    total: 1,
+    activeJob: {
+      id: 'job-batch-1',
+      trigger_type: 'scheduled',
+      scope_type: 'batch',
+      template_id: 'tpl-1',
+      route_policy: {},
+      budget_policy: {},
+      status: 'completed',
+      requested_by: null,
+      created_at: '2026-03-23T08:00:00Z',
+      finished_at: '2026-03-23T08:05:00Z',
+      item_count: 2,
+      items: [
+        {
+          id: 'job-item-1',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-1',
+          status: 'completed',
+          needs_research: false,
+          final_draft_status: 'pass',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: null,
+          draft: {
+            status: 'pass',
+            summary: 'Safe to pursue',
+            reasons: ['Reward clarity passed'],
+            risk_flags: [],
+            structured: { confidence_band: 'high' },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+        {
+          id: 'job-item-2',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-2',
+          status: 'completed',
+          needs_research: true,
+          final_draft_status: 'watch',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: null,
+          draft: {
+            status: 'watch',
+            summary: 'Needs manual review',
+            reasons: ['Solo fit is unclear'],
+            risk_flags: ['solo_unclear'],
+            structured: { confidence_band: 'medium' },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+      ],
+    },
+    loading: false,
+    refreshing: false,
+    error: null,
+    refetch: vi.fn(),
+    loadJob: vi.fn(),
+    createJob: vi.fn(),
+  },
 }))
 const analysisTemplateHookState = vi.hoisted(() => ({
   current: {
@@ -202,6 +290,10 @@ vi.mock('../hooks/useActivities', () => ({
   }),
 }))
 
+vi.mock('../hooks/useAgentAnalysisJobs', () => ({
+  useAgentAnalysisJobs: () => agentAnalysisJobsHookState.current,
+}))
+
 describe('Opportunity pool page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -250,6 +342,8 @@ describe('Opportunity pool page', () => {
       name: 'Adjusted quick money',
       is_default: false,
     })
+    apiMocks.approveAgentAnalysisBatch.mockResolvedValue([])
+    apiMocks.rejectAgentAnalysisBatch.mockResolvedValue([])
   })
 
   it('renders the V2 opportunity pool and supports batch tracking/favorite actions', async () => {
@@ -374,6 +468,37 @@ describe('Opportunity pool page', () => {
 
     await waitFor(() => {
       expect(analysisTemplateHookState.current.activateTemplate).toHaveBeenCalledWith('tpl-2')
+    })
+  })
+
+  it('shows the latest batch job banner and draft-only filters', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByTestId('agent-analysis-job-banner')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-analysis-filter-draft-only')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-analysis-job-banner')).toHaveTextContent('job-batch-1')
+  })
+
+  it('supports batch approval from the opportunity pool', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByTestId('select-activity-1'))
+    fireEvent.click(screen.getByTestId('select-activity-2'))
+    fireEvent.click(screen.getByTestId('agent-analysis-batch-approve'))
+
+    await waitFor(() => {
+      expect(apiMocks.approveAgentAnalysisBatch).toHaveBeenCalledWith(
+        ['job-item-1', 'job-item-2'],
+        { review_note: 'Batch approved from opportunity pool' }
+      )
     })
   })
 })

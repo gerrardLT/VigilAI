@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ActivityCard } from '../components/ActivityCard'
+import { DraftBatchToolbar } from '../components/analysis/DraftBatchToolbar'
+import { JobStatusBanner } from '../components/analysis/JobStatusBanner'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { FilterBar } from '../components/FilterBar'
 import { Loading } from '../components/Loading'
 import { Pagination } from '../components/Pagination'
 import { SearchBox } from '../components/SearchBox'
 import { SortSelect } from '../components/SortSelect'
+import { useAgentAnalysisJobs } from '../hooks/useAgentAnalysisJobs'
 import { useActivities } from '../hooks/useActivities'
 import { useAnalysisTemplates } from '../hooks/useAnalysisTemplates'
 import { api } from '../services/api'
-import type { Activity, ActivityFilters, AnalysisTemplate, AnalysisTemplatePreviewResults } from '../types'
+import type {
+  Activity,
+  ActivityFilters,
+  AnalysisTemplate,
+  AnalysisTemplatePreviewResults,
+  AgentAnalysisJobDetail,
+  AgentAnalysisJobItemDetail,
+  AgentAnalysisJobSummary,
+} from '../types'
 import { DEFAULT_SORT_BY, DEFAULT_SORT_ORDER } from '../utils/constants'
 import {
   getAnalysisFieldLabel,
@@ -93,11 +104,44 @@ function stringifyDraftConditionValue(value: NonNullable<Activity['analysis_fiel
   return String(value)
 }
 
+function mapAgentSnapshotStatusToActivityStatus(status?: string | null): Activity['analysis_status'] {
+  if (status === 'pass') {
+    return 'passed'
+  }
+  if (status === 'reject') {
+    return 'rejected'
+  }
+  if (status === 'watch') {
+    return 'watch'
+  }
+  return null
+}
+
+function pickLatestBatchJob(jobs: AgentAnalysisJobSummary[]): AgentAnalysisJobSummary | null {
+  return jobs.find(job => job.scope_type === 'batch') ?? null
+}
+
+function getBatchItemsByActivity(
+  job: AgentAnalysisJobDetail | null
+): Record<string, AgentAnalysisJobItemDetail> {
+  return Object.fromEntries((job?.items ?? []).map(item => [item.activity_id, item]))
+}
+
 export function ActivitiesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { templates, defaultTemplate, createTemplate, activateTemplate } = useAnalysisTemplates()
+  const {
+    jobs: agentJobs,
+    activeJob: activeAgentJob,
+    error: agentJobsError,
+    refetch: refetchAgentJobs,
+    loadJob: loadAgentJob,
+    createJob: createAgentJob,
+  } = useAgentAnalysisJobs()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isApplyingBatch, setIsApplyingBatch] = useState(false)
+  const [isReviewingBatch, setIsReviewingBatch] = useState(false)
+  const [draftOnlyFilter, setDraftOnlyFilter] = useState(false)
   const [draftTemplate, setDraftTemplate] = useState<AnalysisTemplate | null>(null)
   const [draftPreview, setDraftPreview] = useState<AnalysisTemplatePreviewResults | null>(null)
   const [draftLoading, setDraftLoading] = useState(false)
@@ -140,6 +184,13 @@ export function ActivitiesPage() {
   const localizedDefaultTemplate = useMemo(
     () => (defaultTemplate ? localizeAnalysisTemplate(defaultTemplate) : null),
     [defaultTemplate]
+  )
+  const latestBatchJobSummary = useMemo(() => pickLatestBatchJob(agentJobs), [agentJobs])
+  const latestBatchJob = activeAgentJob?.scope_type === 'batch' ? activeAgentJob : null
+  const latestBatchBannerJob = latestBatchJob ?? latestBatchJobSummary
+  const batchItemsByActivityId = useMemo(
+    () => getBatchItemsByActivity(latestBatchJob),
+    [latestBatchJob]
   )
 
   useEffect(() => {
@@ -191,9 +242,28 @@ export function ActivitiesPage() {
     setDraftError(null)
   }, [localizedDefaultTemplate])
 
+  useEffect(() => {
+    if (!latestBatchJobSummary) {
+      return
+    }
+
+    if (activeAgentJob?.id === latestBatchJobSummary.id) {
+      return
+    }
+
+    void loadAgentJob(latestBatchJobSummary.id)
+  }, [activeAgentJob?.id, latestBatchJobSummary, loadAgentJob])
+
   const selectedActivities = useMemo(
     () => activities.filter(activity => selectedIds.includes(activity.id)),
     [activities, selectedIds]
+  )
+  const selectedAgentItemIds = useMemo(
+    () =>
+      (latestBatchJob?.items ?? [])
+        .filter(item => selectedIds.includes(item.activity_id))
+        .map(item => item.id),
+    [latestBatchJob, selectedIds]
   )
 
   const draftDirty = useMemo(() => {
@@ -356,21 +426,35 @@ export function ActivitiesPage() {
     [draftPreview]
   )
 
-  const visibleActivities = useMemo(
+  const enrichedActivities = useMemo(
     () =>
       activities.map(activity => {
         const draftResult = draftResultsById[activity.id]
-        if (!draftResult) {
+        const batchDraft = batchItemsByActivityId[activity.id]?.draft
+
+        if (!draftResult && !batchDraft) {
           return activity
         }
+
         return {
           ...activity,
-          analysis_status: draftResult.status as Activity['analysis_status'],
-          analysis_failed_layer: draftResult.failed_layer,
-          analysis_summary_reasons: draftResult.summary_reasons,
+          analysis_status: draftResult
+            ? (draftResult.status as Activity['analysis_status'])
+            : mapAgentSnapshotStatusToActivityStatus(batchDraft?.status) ?? activity.analysis_status,
+          analysis_failed_layer: draftResult?.failed_layer ?? activity.analysis_failed_layer,
+          analysis_summary_reasons: draftResult?.summary_reasons ?? batchDraft?.reasons ?? activity.analysis_summary_reasons,
+          analysis_latest_draft: batchDraft ?? activity.analysis_latest_draft,
         }
       }),
-    [activities, draftResultsById]
+    [activities, batchItemsByActivityId, draftResultsById]
+  )
+
+  const visibleActivities = useMemo(
+    () =>
+      draftOnlyFilter
+        ? enrichedActivities.filter(activity => Boolean(batchItemsByActivityId[activity.id]?.draft))
+        : enrichedActivities,
+    [batchItemsByActivityId, draftOnlyFilter, enrichedActivities]
   )
 
   const updateDraftLayerEnabled = useCallback((layerIndex: number, enabled: boolean) => {
@@ -491,6 +575,69 @@ export function ActivitiesPage() {
     [activateTemplate, localizedDefaultTemplate?.id]
   )
 
+  const handleBatchApprove = useCallback(async () => {
+    if (selectedAgentItemIds.length === 0) {
+      return
+    }
+
+    setIsReviewingBatch(true)
+    try {
+      await api.approveAgentAnalysisBatch(selectedAgentItemIds, {
+        review_note: 'Batch approved from opportunity pool',
+      })
+      await Promise.all([refetch(), refetchAgentJobs()])
+      if (latestBatchJobSummary) {
+        await loadAgentJob(latestBatchJobSummary.id)
+      }
+    } catch (batchError) {
+      console.error(batchError)
+    } finally {
+      setIsReviewingBatch(false)
+    }
+  }, [latestBatchJobSummary, loadAgentJob, refetch, refetchAgentJobs, selectedAgentItemIds])
+
+  const handleBatchReject = useCallback(async () => {
+    if (selectedAgentItemIds.length === 0) {
+      return
+    }
+
+    setIsReviewingBatch(true)
+    try {
+      await api.rejectAgentAnalysisBatch(selectedAgentItemIds, {
+        review_note: 'Batch rejected from opportunity pool',
+      })
+      await Promise.all([refetch(), refetchAgentJobs()])
+      if (latestBatchJobSummary) {
+        await loadAgentJob(latestBatchJobSummary.id)
+      }
+    } catch (batchError) {
+      console.error(batchError)
+    } finally {
+      setIsReviewingBatch(false)
+    }
+  }, [latestBatchJobSummary, loadAgentJob, refetch, refetchAgentJobs, selectedAgentItemIds])
+
+  const handleBatchDeepResearch = useCallback(async () => {
+    if (selectedIds.length === 0) {
+      return
+    }
+
+    setIsReviewingBatch(true)
+    try {
+      await createAgentJob({
+        scope_type: 'batch',
+        trigger_type: 'manual',
+        activity_ids: selectedIds,
+        template_id: localizedDefaultTemplate?.id,
+      })
+      await refetchAgentJobs()
+    } catch (batchError) {
+      console.error(batchError)
+    } finally {
+      setIsReviewingBatch(false)
+    }
+  }, [createAgentJob, localizedDefaultTemplate?.id, refetchAgentJobs, selectedIds])
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -579,6 +726,25 @@ export function ActivitiesPage() {
         <div className="space-y-6">
 
       <div className="space-y-4 rounded-xl bg-white p-4 shadow">
+        {latestBatchBannerJob && (
+          <JobStatusBanner
+            job={latestBatchBannerJob}
+            title="Latest batch review run"
+          />
+        )}
+
+        {latestBatchBannerJob && (
+          <DraftBatchToolbar
+            selectedCount={selectedAgentItemIds.length}
+            busy={isReviewingBatch}
+            onApprove={() => void handleBatchApprove()}
+            onReject={() => void handleBatchReject()}
+            onDeepResearch={() => void handleBatchDeepResearch()}
+          />
+        )}
+
+        {agentJobsError && <ErrorMessage message={agentJobsError} />}
+
         {localizedDefaultTemplate && (
           <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div
@@ -694,6 +860,18 @@ export function ActivitiesPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="agent-analysis-filter-draft-only"
+              onClick={() => setDraftOnlyFilter(current => !current)}
+              className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                draftOnlyFilter
+                  ? 'border-sky-300 bg-sky-50 text-sky-800'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+              }`}
+            >
+              {draftOnlyFilter ? 'Draft only on' : 'Draft only'}
+            </button>
             <button
               type="button"
               data-testid="batch-track-button"

@@ -327,6 +327,26 @@ class ApiService {
     )
   }
 
+  async approveAgentAnalysisBatch(
+    itemIds: string[],
+    payload: AgentAnalysisReviewRequest = {},
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisReviewResult[]> {
+    return Promise.all(
+      itemIds.map(itemId => this.approveAgentAnalysisItem(itemId, payload, signal))
+    )
+  }
+
+  async rejectAgentAnalysisBatch(
+    itemIds: string[],
+    payload: AgentAnalysisReviewRequest = {},
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisReviewResult[]> {
+    return Promise.all(
+      itemIds.map(itemId => this.rejectAgentAnalysisItem(itemId, payload, signal))
+    )
+  }
+
   async getTracking(status?: TrackingStatus, signal?: AbortSignal): Promise<TrackingItem[]> {
     return this.request<TrackingItem[]>(
       `/api/tracking${this.buildQueryString({ status })}`,

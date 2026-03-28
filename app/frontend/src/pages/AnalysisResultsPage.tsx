@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { JobStatusBanner } from '../components/analysis/JobStatusBanner'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Loading } from '../components/Loading'
+import { useAgentAnalysisJobs } from '../hooks/useAgentAnalysisJobs'
 import { useAnalysisTemplates } from '../hooks/useAnalysisTemplates'
 import { useWorkspace } from '../hooks/useWorkspace'
 import { api } from '../services/api'
-import type { AnalysisResultItem } from '../types'
+import type { AnalysisResultItem, AgentAnalysisJobSummary } from '../types'
 
 const STATUS_STYLES = {
   passed: 'bg-emerald-100 text-emerald-700',
@@ -26,14 +28,28 @@ const FILTER_OPTIONS = [
   { value: 'rejected', label: '拦截', testId: 'analysis-results-filter-rejected' },
 ] as const
 
+function pickLatestBatchJob(jobs: AgentAnalysisJobSummary[]): AgentAnalysisJobSummary | null {
+  return jobs.find(job => job.scope_type === 'batch') ?? null
+}
+
 export function AnalysisResultsPage() {
   const { defaultTemplate } = useAnalysisTemplates()
   const { workspace, loading: workspaceLoading, error: workspaceError, refetch: refetchWorkspace } = useWorkspace()
+  const {
+    jobs: agentJobs,
+    activeJob: activeAgentJob,
+    loading: agentJobsLoading,
+    error: agentJobsError,
+    refetch: refetchAgentJobs,
+    loadJob: loadAgentJob,
+  } = useAgentAnalysisJobs()
   const [results, setResults] = useState<AnalysisResultItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [analysisStatusFilter, setAnalysisStatusFilter] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
+  const latestBatchJobSummary = useMemo(() => pickLatestBatchJob(agentJobs), [agentJobs])
 
   useEffect(() => {
     let cancelled = false
@@ -72,6 +88,26 @@ export function AnalysisResultsPage() {
     }
   }, [analysisStatusFilter, reloadKey])
 
+  useEffect(() => {
+    if (!latestBatchJobSummary || selectedJobId) {
+      return
+    }
+
+    setSelectedJobId(latestBatchJobSummary.id)
+  }, [latestBatchJobSummary, selectedJobId])
+
+  useEffect(() => {
+    if (!selectedJobId) {
+      return
+    }
+
+    if (activeAgentJob?.id === selectedJobId) {
+      return
+    }
+
+    void loadAgentJob(selectedJobId)
+  }, [activeAgentJob?.id, loadAgentJob, selectedJobId])
+
   if (workspaceLoading && !workspace) {
     return <Loading text="正在加载分析结果..." />
   }
@@ -86,6 +122,9 @@ export function AnalysisResultsPage() {
     watch: 0,
     rejected: 0,
   }
+  const displayedJob =
+    activeAgentJob && activeAgentJob.scope_type === 'batch' ? activeAgentJob : null
+  const bannerJob = displayedJob ?? latestBatchJobSummary
 
   return (
     <div className="space-y-6" data-testid="analysis-results-page">
@@ -152,10 +191,138 @@ export function AnalysisResultsPage() {
             <Link to="/analysis/templates" className="btn btn-secondary">
               优化模板
             </Link>
-            <button type="button" onClick={() => setReloadKey(value => value + 1)} className="btn btn-secondary">
+            <button
+              type="button"
+              onClick={() => {
+                setReloadKey(value => value + 1)
+                void refetchAgentJobs()
+              }}
+              className="btn btn-secondary"
+            >
               刷新结果
             </button>
           </div>
+        </div>
+      </section>
+
+      {bannerJob && (
+        <JobStatusBanner
+          job={bannerJob}
+          title="Latest batch operations console"
+        />
+      )}
+
+      <section
+        data-testid="analysis-results-job-list"
+        className="grid gap-4 xl:grid-cols-[320px_1fr]"
+      >
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Batch jobs</h2>
+              <p className="mt-1 text-sm text-slate-500">Review recent agent-analysis runs and inspect failed items.</p>
+            </div>
+            {agentJobsLoading && <span className="text-xs text-slate-400">Loading...</span>}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {agentJobs.map(job => {
+              const active = selectedJobId === job.id
+              return (
+                <button
+                  key={job.id}
+                  type="button"
+                  onClick={() => setSelectedJobId(job.id)}
+                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                    active
+                      ? 'border-sky-300 bg-sky-50'
+                      : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-slate-900">{job.id}</span>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                      {job.status}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {job.item_count} items · {job.completed_items} completed · {job.failed_items} failed
+                  </div>
+                </button>
+              )
+            })}
+
+            {agentJobs.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                No batch jobs yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Selected job detail</h2>
+              <p className="mt-1 text-sm text-slate-500">Focus the review queue on batch outcomes that still need attention.</p>
+            </div>
+            {displayedJob && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                {displayedJob.items.length} items
+              </span>
+            )}
+          </div>
+
+          {agentJobsError && (
+            <div className="mt-4">
+              <ErrorMessage message={agentJobsError} onRetry={refetchAgentJobs} />
+            </div>
+          )}
+
+          {displayedJob ? (
+            <div className="mt-4 space-y-3">
+              {displayedJob.items.map(item => (
+                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">
+                        Activity: {item.activity?.title ?? item.activity_id}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {item.id} · {item.status} · draft {item.draft?.status ?? item.final_draft_status ?? 'n/a'}
+                      </div>
+                    </div>
+                    {item.needs_research && (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                        Needs research
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="mt-3 text-sm text-slate-600">
+                    {item.draft?.summary ?? 'No draft summary available for this job item.'}
+                  </p>
+
+                  {(item.draft?.reasons ?? []).length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {item.draft?.reasons.map(reason => (
+                        <span
+                          key={`${item.id}-${reason}`}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600"
+                        >
+                          Reason: {reason}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+              Pick a batch job to inspect its item-level draft results.
+            </div>
+          )}
         </div>
       </section>
 
