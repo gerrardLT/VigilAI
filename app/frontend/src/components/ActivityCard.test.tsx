@@ -5,14 +5,6 @@ import fc from 'fast-check'
 import ActivityCard from './ActivityCard'
 import type { Activity, Category } from '../types'
 
-/**
- * Property 3: 活动卡片字段显示完整性
- * Validates: Requirements 3.3
- * 
- * For any Activity with non-null fields, the ActivityCard component SHALL render 
- * the title, source_name, and category; and SHALL conditionally render prize and deadline when available.
- */
-
 const VALID_CATEGORIES: Category[] = [
   'hackathon',
   'data_competition',
@@ -25,11 +17,9 @@ const VALID_CATEGORIES: Category[] = [
   'news',
 ]
 
-// 使用字母数字字符串避免特殊字符导致的测试问题
 const alphanumericString = (minLength: number, maxLength: number) =>
   fc.string({ minLength, maxLength }).filter(s => /^[a-zA-Z0-9]+$/.test(s) && s.length >= minLength)
 
-// 生成有效的Activity对象
 const activityArbitrary = fc.record({
   id: alphanumericString(1, 20),
   title: alphanumericString(3, 50),
@@ -52,8 +42,9 @@ const activityArbitrary = fc.record({
       start_date: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
       end_date: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
       deadline: fc.option(
-        fc.date({ min: new Date(), max: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) })
-          .map(d => d.toISOString()),
+        fc.date({ min: new Date(), max: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) }).map(d =>
+          d.toISOString()
+        ),
         { nil: null }
       ),
     }),
@@ -70,13 +61,12 @@ const renderWithRouter = (component: React.ReactElement) => {
   return render(<BrowserRouter>{component}</BrowserRouter>)
 }
 
-describe('ActivityCard字段显示完整性', () => {
+describe('ActivityCard', () => {
   afterEach(() => {
     cleanup()
   })
 
-  // Feature: vigilai-frontend, Property 3: 活动卡片字段显示完整性
-  it('对于任何Activity，应显示title', () => {
+  it('renders title for any valid activity', () => {
     fc.assert(
       fc.property(activityArbitrary, (activity: Activity) => {
         cleanup()
@@ -87,7 +77,7 @@ describe('ActivityCard字段显示完整性', () => {
     )
   })
 
-  it('对于任何Activity，应显示source_name', () => {
+  it('renders source name for any valid activity', () => {
     fc.assert(
       fc.property(activityArbitrary, (activity: Activity) => {
         cleanup()
@@ -98,12 +88,11 @@ describe('ActivityCard字段显示完整性', () => {
     )
   })
 
-  it('对于任何Activity，应显示category标签', () => {
+  it('renders a category badge for any valid activity', () => {
     fc.assert(
       fc.property(activityArbitrary, (activity: Activity) => {
         cleanup()
         const { container } = renderWithRouter(<ActivityCard activity={activity} />)
-        // 验证类别标签存在（通过类别颜色类名）
         const categoryBadge = container.querySelector('.rounded-full')
         expect(categoryBadge).toBeInTheDocument()
       }),
@@ -111,7 +100,7 @@ describe('ActivityCard字段显示完整性', () => {
     )
   })
 
-  it('当Activity有prize.amount时，应显示奖金信息', () => {
+  it('renders prize info when prize amount is present', () => {
     const activityWithPrize: Activity = {
       id: 'test-1',
       title: 'Test Activity',
@@ -135,7 +124,7 @@ describe('ActivityCard字段显示完整性', () => {
     expect(screen.getByText(/10,000/)).toBeInTheDocument()
   })
 
-  it('当Activity没有prize时，不应显示奖金信息', () => {
+  it('does not render prize info when no prize exists', () => {
     const activityWithoutPrize: Activity = {
       id: 'test-2',
       title: 'Test Activity No Prize',
@@ -158,8 +147,8 @@ describe('ActivityCard字段显示完整性', () => {
     expect(screen.queryByText(/USD/)).not.toBeInTheDocument()
   })
 
-  it('当Activity有deadline时，应显示截止日期信息', () => {
-    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7天后
+  it('renders deadline info when a deadline exists', () => {
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     const activityWithDeadline: Activity = {
       id: 'test-3',
       title: 'Test Activity With Deadline',
@@ -179,11 +168,10 @@ describe('ActivityCard字段显示完整性', () => {
     }
 
     renderWithRouter(<ActivityCard activity={activityWithDeadline} />)
-    // 应显示"X天后截止"
     expect(screen.getByText(/天后截止/)).toBeInTheDocument()
   })
 
-  it('卡片应该是可点击的链接', () => {
+  it('links to the activity detail page', () => {
     const activity: Activity = {
       id: 'test-link',
       title: 'Clickable Activity',
@@ -205,5 +193,37 @@ describe('ActivityCard字段显示完整性', () => {
     renderWithRouter(<ActivityCard activity={activity} />)
     const link = screen.getByRole('link')
     expect(link).toHaveAttribute('href', `/activities/${activity.id}`)
+  })
+
+  it('renders analysis verdict and folded reasons when AI analysis is available', () => {
+    const activity: Activity = {
+      id: 'test-analysis',
+      title: 'AI Ranked Opportunity',
+      description: 'Fast-turnaround challenge.',
+      source_id: 'test-source',
+      source_name: 'Test Source',
+      url: 'https://example.com',
+      category: 'hackathon',
+      tags: [],
+      prize: null,
+      dates: null,
+      location: null,
+      organizer: null,
+      analysis_fields: {
+        roi_level: 'high',
+      },
+      analysis_status: 'passed',
+      analysis_failed_layer: null,
+      analysis_summary_reasons: ['Reward clarity passed', 'ROI score passed'],
+      status: 'upcoming',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    renderWithRouter(<ActivityCard activity={activity} />)
+
+    expect(screen.getByTestId('activity-card-analysis-status')).toHaveTextContent('通过')
+    expect(screen.getByText('Reward clarity passed')).toBeInTheDocument()
+    expect(screen.getByText('ROI score passed')).toBeInTheDocument()
   })
 })

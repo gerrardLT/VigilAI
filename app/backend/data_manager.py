@@ -4,19 +4,29 @@ SQLite-backed data manager for VigilAI.
 
 from __future__ import annotations
 
+from analysis.schemas import AnalysisSnapshot, ResearchEvidence
+from analysis.ai_enrichment import enrich_activity_for_analysis
+from analysis.rule_engine import run_analysis
+from analysis.template_defaults import apply_template_compat_defaults, get_default_analysis_templates
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import DB_PATH, PRIORITY_INTERVALS, SOURCES_CONFIG
+from config import DB_PATH, LOW_SIGNAL_FIRECRAWL_SOURCES, PRIORITY_INTERVALS, SOURCES_CONFIG
 from models import (
     Activity,
     ActivityDates,
+    AnalysisEvidence,
+    AnalysisJob,
+    AnalysisJobItem,
+    AnalysisReview,
+    AnalysisStep,
     DigestRecord,
     DigestStatus,
     Prize,
@@ -27,10 +37,28 @@ from models import (
     TrackingState,
     TrackingStatus,
 )
+from utils.content_cleaning import (
+    build_description_from_text,
+    clean_detail_content,
+    looks_like_invalid_activity_candidate,
+    looks_like_noisy_scraped_text,
+)
 
 logger = logging.getLogger(__name__)
 
 TRACKING_STATUS_VALUES = {status.value for status in TrackingStatus}
+ACTIVITY_SNAPSHOT_COLUMNS = (
+    "analysis_status",
+    "analysis_summary",
+    "analysis_reasons",
+    "analysis_risk_flags",
+    "analysis_recommended_action",
+    "analysis_confidence",
+    "analysis_structured",
+    "analysis_template_id",
+    "analysis_current_run_id",
+    "analysis_updated_at",
+)
 
 
 class DataManager:
@@ -39,6 +67,7 @@ class DataManager:
         self._ensure_data_dir()
         self._init_db()
         self._init_sources()
+        self._init_analysis_templates()
 
     def _ensure_data_dir(self) -> None:
         data_dir = os.path.dirname(self.db_path)
@@ -106,6 +135,19 @@ class DataManager:
                     "deadline_level": "TEXT",
                     "trust_level": "TEXT",
                     "updated_fields": "TEXT",
+                    "analysis_fields": "TEXT",
+                    "analysis_status": "TEXT",
+                    "analysis_failed_layer": "TEXT",
+                    "analysis_summary_reasons": "TEXT",
+                    "analysis_summary": "TEXT",
+                    "analysis_reasons": "TEXT",
+                    "analysis_risk_flags": "TEXT",
+                    "analysis_recommended_action": "TEXT",
+                    "analysis_confidence": "REAL",
+                    "analysis_structured": "TEXT",
+                    "analysis_template_id": "TEXT",
+                    "analysis_current_run_id": "TEXT",
+                    "analysis_updated_at": "TEXT",
                 },
             )
             conn.execute(
@@ -167,6 +209,33 @@ class DataManager:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS analysis_templates (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    slug TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    is_default INTEGER DEFAULT 0,
+                    tags TEXT NOT NULL,
+                    layers TEXT NOT NULL,
+                    sort_fields TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            self._ensure_columns(
+                conn,
+                "analysis_templates",
+                {
+                    "preference_profile": "TEXT",
+                    "risk_tolerance": "TEXT",
+                    "research_mode": "TEXT",
+                    "compiled_policy": "TEXT",
+                },
+            )
+            self._init_agent_analysis_tables(conn)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_source_id ON activities(source_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_category ON activities(category)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_created_at ON activities(created_at)")
@@ -175,12 +244,179 @@ class DataManager:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_digest_candidates_date ON digest_candidates(digest_date)"
             )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_templates_default ON analysis_templates(is_default)"
+            )
 
     def _ensure_columns(self, conn: sqlite3.Connection, table: str, columns: Dict[str, str]) -> None:
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         for name, column_type in columns.items():
             if name not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {column_type}")
+
+    def _init_agent_analysis_tables(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analysis_jobs (
+                id TEXT PRIMARY KEY,
+                trigger_type TEXT NOT NULL,
+                scope_type TEXT NOT NULL,
+                template_id TEXT,
+                route_policy TEXT,
+                budget_policy TEXT,
+                status TEXT NOT NULL,
+                requested_by TEXT,
+                created_at TEXT NOT NULL,
+                finished_at TEXT
+            )
+            """
+        )
+        self._ensure_columns(
+            conn,
+            "analysis_jobs",
+            {
+                "trigger_type": "TEXT",
+                "scope_type": "TEXT",
+                "template_id": "TEXT",
+                "route_policy": "TEXT",
+                "budget_policy": "TEXT",
+                "status": "TEXT",
+                "requested_by": "TEXT",
+                "created_at": "TEXT",
+                "finished_at": "TEXT",
+            },
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analysis_job_items (
+                id TEXT PRIMARY KEY,
+                job_id TEXT NOT NULL,
+                activity_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                needs_research INTEGER DEFAULT 0,
+                final_draft_status TEXT,
+                screening_model TEXT,
+                research_model TEXT,
+                verdict_model TEXT,
+                started_at TEXT,
+                finished_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        self._ensure_columns(
+            conn,
+            "analysis_job_items",
+            {
+                "job_id": "TEXT",
+                "activity_id": "TEXT",
+                "status": "TEXT",
+                "needs_research": "INTEGER",
+                "final_draft_status": "TEXT",
+                "screening_model": "TEXT",
+                "research_model": "TEXT",
+                "verdict_model": "TEXT",
+                "started_at": "TEXT",
+                "finished_at": "TEXT",
+                "created_at": "TEXT",
+                "updated_at": "TEXT",
+            },
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analysis_item_steps (
+                id TEXT PRIMARY KEY,
+                job_item_id TEXT NOT NULL,
+                step_type TEXT NOT NULL,
+                step_status TEXT NOT NULL,
+                input_digest TEXT,
+                output_payload TEXT,
+                latency_ms INTEGER,
+                cost_tokens_in INTEGER,
+                cost_tokens_out INTEGER,
+                model_name TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self._ensure_columns(
+            conn,
+            "analysis_item_steps",
+            {
+                "job_item_id": "TEXT",
+                "step_type": "TEXT",
+                "step_status": "TEXT",
+                "input_digest": "TEXT",
+                "output_payload": "TEXT",
+                "latency_ms": "INTEGER",
+                "cost_tokens_in": "INTEGER",
+                "cost_tokens_out": "INTEGER",
+                "model_name": "TEXT",
+                "created_at": "TEXT",
+            },
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analysis_evidence (
+                id TEXT PRIMARY KEY,
+                job_item_id TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                url TEXT,
+                title TEXT,
+                snippet TEXT,
+                relevance_score REAL,
+                trust_score REAL,
+                supports_claim INTEGER,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self._ensure_columns(
+            conn,
+            "analysis_evidence",
+            {
+                "job_item_id": "TEXT",
+                "source_type": "TEXT",
+                "url": "TEXT",
+                "title": "TEXT",
+                "snippet": "TEXT",
+                "relevance_score": "REAL",
+                "trust_score": "REAL",
+                "supports_claim": "INTEGER",
+                "created_at": "TEXT",
+            },
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analysis_reviews (
+                id TEXT PRIMARY KEY,
+                job_item_id TEXT NOT NULL,
+                activity_id TEXT NOT NULL,
+                review_action TEXT NOT NULL,
+                review_note TEXT,
+                reviewed_by TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self._ensure_columns(
+            conn,
+            "analysis_reviews",
+            {
+                "job_item_id": "TEXT",
+                "activity_id": "TEXT",
+                "review_action": "TEXT",
+                "review_note": "TEXT",
+                "reviewed_by": "TEXT",
+                "created_at": "TEXT",
+            },
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_analysis_job_items_job ON analysis_job_items(job_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_analysis_job_items_activity ON analysis_job_items(activity_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_analysis_item_steps_item ON analysis_item_steps(job_item_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_analysis_evidence_item ON analysis_evidence(job_item_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_analysis_reviews_item ON analysis_reviews(job_item_id)")
 
     def _init_sources(self) -> None:
         with self._get_connection() as conn:
@@ -205,14 +441,249 @@ class DataManager:
                     ),
                 )
 
+    def _init_analysis_templates(self) -> None:
+        with self._get_connection() as conn:
+            existing = conn.execute("SELECT COUNT(*) AS count FROM analysis_templates").fetchone()["count"]
+            if existing:
+                self._backfill_analysis_template_records(conn)
+                return
+            for template in get_default_analysis_templates():
+                self._insert_analysis_template(conn, template)
+
+    def _backfill_analysis_template_records(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("SELECT * FROM analysis_templates").fetchall()
+        now = datetime.now().isoformat()
+        for row in rows:
+            template = {
+                "id": row["id"],
+                "name": row["name"],
+                "slug": row["slug"],
+                "description": row["description"],
+                "is_default": bool(row["is_default"]),
+                "tags": json.loads(row["tags"]) if row["tags"] else [],
+                "layers": json.loads(row["layers"]) if row["layers"] else [],
+                "sort_fields": json.loads(row["sort_fields"]) if row["sort_fields"] else [],
+                "preference_profile": row["preference_profile"] if "preference_profile" in row.keys() else None,
+                "risk_tolerance": row["risk_tolerance"] if "risk_tolerance" in row.keys() else None,
+                "research_mode": row["research_mode"] if "research_mode" in row.keys() else None,
+            }
+            normalized = apply_template_compat_defaults(template)
+            stored_compiled_policy = row["compiled_policy"] if "compiled_policy" in row.keys() else None
+            normalized_compiled_policy = json.dumps(normalized["compiled_policy"])
+
+            if (
+                template["preference_profile"] == normalized["preference_profile"]
+                and template["risk_tolerance"] == normalized["risk_tolerance"]
+                and template["research_mode"] == normalized["research_mode"]
+                and template["layers"] == normalized["layers"]
+                and template["sort_fields"] == normalized["sort_fields"]
+                and stored_compiled_policy == normalized_compiled_policy
+            ):
+                continue
+
+            conn.execute(
+                """
+                UPDATE analysis_templates
+                SET tags = ?,
+                    layers = ?,
+                    sort_fields = ?,
+                    preference_profile = ?,
+                    risk_tolerance = ?,
+                    research_mode = ?,
+                    compiled_policy = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    json.dumps(normalized["tags"]),
+                    json.dumps(normalized["layers"]),
+                    json.dumps(normalized["sort_fields"]),
+                    normalized["preference_profile"],
+                    normalized["risk_tolerance"],
+                    normalized["research_mode"],
+                    normalized_compiled_policy,
+                    now,
+                    row["id"],
+                ),
+            )
+
     @staticmethod
     def generate_activity_id(source_id: str, url: str) -> str:
         return hashlib.md5(f"{source_id}:{url}".encode()).hexdigest()
 
+    def _generate_record_id(self) -> str:
+        return hashlib.md5(f"{datetime.now().isoformat()}:{os.urandom(8).hex()}".encode()).hexdigest()
+
+    def _slugify(self, value: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+        return slug or "analysis-template"
+
+    def _unique_template_slug(self, conn: sqlite3.Connection, base_slug: str, exclude_id: str | None = None) -> str:
+        candidate = base_slug
+        suffix = 2
+        while True:
+            params: List[Any] = [candidate]
+            query = "SELECT id FROM analysis_templates WHERE slug = ?"
+            if exclude_id:
+                query += " AND id != ?"
+                params.append(exclude_id)
+            existing = conn.execute(query, params).fetchone()
+            if not existing:
+                return candidate
+            candidate = f"{base_slug}-{suffix}"
+            suffix += 1
+
+    def _insert_analysis_template(self, conn: sqlite3.Connection, payload: Dict[str, Any]) -> Dict[str, Any]:
+        now = datetime.now().isoformat()
+        payload = apply_template_compat_defaults(payload)
+        template_id = payload.get("id") or self._generate_record_id()
+        slug = self._unique_template_slug(conn, payload.get("slug") or self._slugify(payload["name"]))
+        if payload.get("is_default"):
+            conn.execute("UPDATE analysis_templates SET is_default = 0")
+        conn.execute(
+            """
+            INSERT INTO analysis_templates (
+                id, name, slug, description, is_default, tags, layers, sort_fields, preference_profile,
+                risk_tolerance, research_mode, compiled_policy, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                template_id,
+                payload["name"],
+                slug,
+                payload.get("description"),
+                1 if payload.get("is_default") else 0,
+                json.dumps(payload.get("tags") or []),
+                json.dumps(payload.get("layers") or []),
+                json.dumps(payload.get("sort_fields") or []),
+                payload.get("preference_profile"),
+                payload.get("risk_tolerance"),
+                payload.get("research_mode"),
+                json.dumps(payload.get("compiled_policy") or {}),
+                now,
+                now,
+            ),
+        )
+        row = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+        return self._analysis_template_from_row(row)
+
+    def _analysis_template_from_row(self, row: sqlite3.Row) -> Dict[str, Any]:
+        template = {
+            "id": row["id"],
+            "name": row["name"],
+            "slug": row["slug"],
+            "description": row["description"],
+            "is_default": bool(row["is_default"]),
+            "tags": json.loads(row["tags"]) if row["tags"] else [],
+            "layers": json.loads(row["layers"]) if row["layers"] else [],
+            "sort_fields": json.loads(row["sort_fields"]) if row["sort_fields"] else [],
+            "preference_profile": row["preference_profile"] if "preference_profile" in row.keys() else None,
+            "risk_tolerance": row["risk_tolerance"] if "risk_tolerance" in row.keys() else None,
+            "research_mode": row["research_mode"] if "research_mode" in row.keys() else None,
+            "compiled_policy": json.loads(row["compiled_policy"])
+            if "compiled_policy" in row.keys() and row["compiled_policy"]
+            else None,
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+        return apply_template_compat_defaults(template)
+
+    def _default_analysis_template_for_conn(self, conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+        row = conn.execute(
+            """
+            SELECT * FROM analysis_templates
+            ORDER BY is_default DESC, created_at ASC
+            LIMIT 1
+            """
+        ).fetchone()
+        return self._analysis_template_from_row(row) if row else None
+
     def _source_snapshot(self, conn: sqlite3.Connection, source_id: str) -> Optional[sqlite3.Row]:
         return conn.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
 
+    def _is_firecrawl_source(self, source_id: str) -> bool:
+        return SOURCES_CONFIG.get(source_id, {}).get("type") == "firecrawl"
+
+    def _is_hidden_activity(
+        self,
+        *,
+        source_id: str,
+        title: str,
+        url: str,
+        description: str | None,
+        full_content: str | None,
+    ) -> bool:
+        if source_id in LOW_SIGNAL_FIRECRAWL_SOURCES:
+            return True
+        if not self._is_firecrawl_source(source_id):
+            return False
+        return looks_like_invalid_activity_candidate(
+            title,
+            url,
+            full_content or description,
+            source_id=source_id,
+        )
+
+    def _is_hidden_activity_row(self, row: sqlite3.Row) -> bool:
+        return self._is_hidden_activity(
+            source_id=row["source_id"],
+            title=row["title"],
+            url=row["url"],
+            description=row["description"],
+            full_content=row["full_content"],
+        )
+
+    def _visible_activities_from_rows(self, rows: List[sqlite3.Row]) -> List[Activity]:
+        activities: List[Activity] = []
+        for row in rows:
+            if self._is_hidden_activity_row(row):
+                continue
+            activities.append(self._row_to_activity(row))
+        return activities
+
+    def _clean_activity_texts(
+        self,
+        *,
+        source_id: str,
+        title: str,
+        description: str | None,
+        full_content: str | None,
+        summary: str | None,
+    ) -> tuple[str | None, str | None, str | None]:
+        if not self._is_firecrawl_source(source_id):
+            return description, full_content, summary
+
+        cleaned_full_content = clean_detail_content(full_content) if full_content else full_content
+
+        cleaned_description = description
+        if description and looks_like_noisy_scraped_text(description):
+            cleaned_description = build_description_from_text(description, title=title, max_length=500) or description
+
+        if cleaned_full_content and (not cleaned_description or looks_like_noisy_scraped_text(description or "")):
+            cleaned_description = build_description_from_text(
+                cleaned_full_content,
+                title=title,
+                max_length=500,
+            ) or cleaned_description
+
+        cleaned_summary = summary
+        if not cleaned_summary or looks_like_noisy_scraped_text(cleaned_summary):
+            cleaned_summary = build_description_from_text(
+                cleaned_full_content or cleaned_description or title,
+                title=title,
+                max_length=220,
+            ) or cleaned_summary
+
+        return cleaned_description, cleaned_full_content, cleaned_summary
+
     def _build_summary(self, activity: Activity) -> str:
+        if self._is_firecrawl_source(activity.source_id):
+            if activity.description and not looks_like_noisy_scraped_text(activity.description):
+                return activity.description.strip()[:220]
+            source_text = activity.full_content or activity.description or activity.title
+            cleaned = build_description_from_text(source_text, title=activity.title, max_length=220)
+            return cleaned or activity.title[:220]
+
         source_text = activity.description or activity.full_content or activity.title
         return source_text.strip()[:220]
 
@@ -310,16 +781,107 @@ class DataManager:
             fields.append("prize")
         return fields
 
+    def _analysis_result_for_activity(
+        self,
+        activity: Activity,
+        source_row: sqlite3.Row | None,
+        conn: sqlite3.Connection,
+        template: Dict[str, Any] | None = None,
+    ) -> Tuple[Dict[str, Any], Any]:
+        analysis_fields = enrich_activity_for_analysis(
+            {
+                "title": activity.title,
+                "description": activity.description or activity.full_content,
+                "category": activity.category.value,
+                "prize_amount": activity.prize.amount if activity.prize else None,
+            }
+        )
+        trust_level = self._trust_level(source_row)
+        analysis_fields["source_trust"] = trust_level
+        analysis_fields["trust_score"] = {"high": 85, "medium": 65, "low": 40}[trust_level]
+
+        template = template or self._default_analysis_template_for_conn(conn) or {"layers": []}
+        result = run_analysis(
+            activity=activity.model_dump(mode="json"),
+            template=template,
+            analysis_fields=analysis_fields,
+        )
+        return analysis_fields, result
+
+    def _pack_activity_snapshot_fields(self, snapshot: AnalysisSnapshot | None) -> Dict[str, Any]:
+        if snapshot is None:
+            return {column: None for column in ACTIVITY_SNAPSHOT_COLUMNS}
+        return {
+            "analysis_status": snapshot.status,
+            "analysis_summary": snapshot.summary,
+            "analysis_reasons": json.dumps(snapshot.reasons),
+            "analysis_risk_flags": json.dumps(snapshot.risk_flags),
+            "analysis_recommended_action": snapshot.recommended_action,
+            "analysis_confidence": snapshot.confidence,
+            "analysis_structured": json.dumps(snapshot.structured),
+            "analysis_template_id": snapshot.template_id,
+            "analysis_current_run_id": snapshot.current_run_id,
+            "analysis_updated_at": snapshot.updated_at.isoformat() if snapshot.updated_at else None,
+        }
+
+    def _unpack_activity_snapshot_fields(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "analysis_status": row["analysis_status"] if "analysis_status" in row.keys() else None,
+            "analysis_summary": row["analysis_summary"] if "analysis_summary" in row.keys() else None,
+            "analysis_reasons": json.loads(row["analysis_reasons"])
+            if "analysis_reasons" in row.keys() and row["analysis_reasons"]
+            else [],
+            "analysis_risk_flags": json.loads(row["analysis_risk_flags"])
+            if "analysis_risk_flags" in row.keys() and row["analysis_risk_flags"]
+            else [],
+            "analysis_recommended_action": row["analysis_recommended_action"]
+            if "analysis_recommended_action" in row.keys()
+            else None,
+            "analysis_confidence": row["analysis_confidence"] if "analysis_confidence" in row.keys() else None,
+            "analysis_structured": json.loads(row["analysis_structured"])
+            if "analysis_structured" in row.keys() and row["analysis_structured"]
+            else {},
+            "analysis_template_id": row["analysis_template_id"] if "analysis_template_id" in row.keys() else None,
+            "analysis_current_run_id": row["analysis_current_run_id"]
+            if "analysis_current_run_id" in row.keys()
+            else None,
+            "analysis_updated_at": datetime.fromisoformat(row["analysis_updated_at"])
+            if "analysis_updated_at" in row.keys() and row["analysis_updated_at"]
+            else None,
+        }
+
     def _activity_enrichment(
         self,
         activity: Activity,
         source_row: sqlite3.Row | None,
-    ) -> Tuple[str, float, Optional[str], str, str]:
+        conn: sqlite3.Connection,
+    ) -> Tuple[
+        str,
+        float,
+        Optional[str],
+        str,
+        str,
+        Dict[str, Any],
+        str,
+        Optional[str],
+        List[str],
+    ]:
         summary = self._build_summary(activity)
         deadline_level = self._deadline_level(activity)
         trust_level = self._trust_level(source_row)
         score, reasons = self._score_components(activity, trust_level, deadline_level)
-        return summary, score, ", ".join(reasons) if reasons else None, deadline_level, trust_level
+        analysis_fields, analysis_result = self._analysis_result_for_activity(activity, source_row, conn)
+        return (
+            summary,
+            score,
+            ", ".join(reasons) if reasons else None,
+            deadline_level,
+            trust_level,
+            analysis_fields,
+            analysis_result.status,
+            analysis_result.failed_layer,
+            analysis_result.folded_summary_reasons,
+        )
 
     def _refresh_source_activity_signals(self, conn: sqlite3.Connection, source_id: str) -> None:
         source_row = self._source_snapshot(conn, source_id)
@@ -334,10 +896,23 @@ class DataManager:
             (source_id,),
         ).fetchall()
         for row in activity_rows:
+            if self._is_hidden_activity_row(row):
+                continue
             activity = self._row_to_activity(row)
-            summary, score, score_reason, deadline_level, trust_level = self._activity_enrichment(
+            (
+                summary,
+                score,
+                score_reason,
+                deadline_level,
+                trust_level,
+                analysis_fields,
+                analysis_status,
+                analysis_failed_layer,
+                analysis_summary_reasons,
+            ) = self._activity_enrichment(
                 activity,
                 source_row,
+                conn,
             )
             conn.execute(
                 """
@@ -346,7 +921,11 @@ class DataManager:
                     score = ?,
                     score_reason = ?,
                     deadline_level = ?,
-                    trust_level = ?
+                    trust_level = ?,
+                    analysis_fields = ?,
+                    analysis_status = ?,
+                    analysis_failed_layer = ?,
+                    analysis_summary_reasons = ?
                 WHERE id = ?
                 """,
                 (
@@ -355,11 +934,220 @@ class DataManager:
                     score_reason,
                     deadline_level,
                     trust_level,
+                    json.dumps(analysis_fields),
+                    analysis_status,
+                    analysis_failed_layer,
+                    json.dumps(analysis_summary_reasons),
                     activity.id,
                 ),
             )
 
+    def _refresh_all_activity_analysis(self, conn: sqlite3.Connection) -> None:
+        activity_rows = conn.execute(
+            """
+            SELECT a.*,
+                0 AS is_tracking,
+                0 AS is_favorited
+            FROM activities a
+            ORDER BY a.created_at DESC
+            """
+        ).fetchall()
+        for row in activity_rows:
+            if self._is_hidden_activity_row(row):
+                continue
+            activity = self._row_to_activity(row)
+            source_row = self._source_snapshot(conn, activity.source_id)
+            analysis_fields, analysis_result = self._analysis_result_for_activity(activity, source_row, conn)
+            conn.execute(
+                """
+                UPDATE activities
+                SET analysis_fields = ?,
+                    analysis_status = ?,
+                    analysis_failed_layer = ?,
+                    analysis_summary_reasons = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    json.dumps(analysis_fields),
+                    analysis_result.status,
+                    analysis_result.failed_layer,
+                    json.dumps(analysis_result.folded_summary_reasons),
+                    datetime.now().isoformat(),
+                    activity.id,
+                ),
+            )
+
+    def rerun_analysis_for_all_activities(self) -> int:
+        with self._get_connection() as conn:
+            self._refresh_all_activity_analysis(conn)
+            row = conn.execute("SELECT COUNT(*) AS count FROM activities").fetchone()
+            return int(row["count"]) if row else 0
+
+    def _preview_analysis_template_counts(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        template: Dict[str, Any],
+        template_id: str,
+    ) -> Dict[str, Any]:
+        activity_rows = conn.execute(
+            """
+            SELECT a.*,
+                0 AS is_tracking,
+                0 AS is_favorited
+            FROM activities a
+            ORDER BY a.created_at DESC
+            """
+        ).fetchall()
+
+        counts = {"passed": 0, "watch": 0, "rejected": 0}
+        total = 0
+        for activity_row in activity_rows:
+            if self._is_hidden_activity_row(activity_row):
+                continue
+            total += 1
+            activity = self._row_to_activity(activity_row)
+            source_row = self._source_snapshot(conn, activity.source_id)
+            _, analysis_result = self._analysis_result_for_activity(
+                activity,
+                source_row,
+                conn,
+                template=template,
+            )
+            if analysis_result.status in counts:
+                counts[analysis_result.status] += 1
+
+        return {
+            "template_id": template_id,
+            "total": total,
+            "passed": counts["passed"],
+            "watch": counts["watch"],
+            "rejected": counts["rejected"],
+        }
+
+    def preview_analysis_template(self, template_id: str) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"Analysis template {template_id} not found")
+
+            template = self._analysis_template_from_row(row)
+            return self._preview_analysis_template_counts(conn, template=template, template_id=template_id)
+
+    def preview_analysis_template_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            template_id = payload.get("id") or "draft"
+            template = apply_template_compat_defaults(
+                {
+                    "id": template_id,
+                    "name": payload.get("name") or "Draft template",
+                    "slug": payload.get("slug") or "draft-template",
+                    "description": payload.get("description"),
+                    "is_default": False,
+                    "tags": payload.get("tags") or [],
+                    "layers": payload.get("layers") or [],
+                    "sort_fields": payload.get("sort_fields") or [],
+                    "preference_profile": payload.get("preference_profile"),
+                    "risk_tolerance": payload.get("risk_tolerance"),
+                    "research_mode": payload.get("research_mode"),
+                }
+            )
+            return self._preview_analysis_template_counts(conn, template=template, template_id=template_id)
+
+    def preview_analysis_template_payload_results(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            template_id = payload.get("id") or "draft"
+            template = apply_template_compat_defaults(
+                {
+                    "id": template_id,
+                    "name": payload.get("name") or "Draft template",
+                    "slug": payload.get("slug") or "draft-template",
+                    "description": payload.get("description"),
+                    "is_default": False,
+                    "tags": payload.get("tags") or [],
+                    "layers": payload.get("layers") or [],
+                    "sort_fields": payload.get("sort_fields") or [],
+                    "preference_profile": payload.get("preference_profile"),
+                    "risk_tolerance": payload.get("risk_tolerance"),
+                    "research_mode": payload.get("research_mode"),
+                }
+            )
+            requested_ids = [item for item in (payload.get("activity_ids") or []) if item]
+            if requested_ids:
+                placeholders = ", ".join("?" for _ in requested_ids)
+                rows = conn.execute(
+                    f"""
+                    SELECT a.*,
+                        0 AS is_tracking,
+                        0 AS is_favorited,
+                        0 AS is_digest_candidate
+                    FROM activities a
+                    WHERE a.id IN ({placeholders})
+                    """,
+                    requested_ids,
+                ).fetchall()
+                visible_activities = self._visible_activities_from_rows(rows)
+                activity_by_id = {activity.id: activity for activity in visible_activities}
+                activities = [activity_by_id[item_id] for item_id in requested_ids if item_id in activity_by_id]
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT a.*,
+                        0 AS is_tracking,
+                        0 AS is_favorited,
+                        0 AS is_digest_candidate
+                    FROM activities a
+                    ORDER BY a.created_at DESC
+                    """
+                ).fetchall()
+                activities = self._visible_activities_from_rows(rows)
+
+            counts = {"passed": 0, "watch": 0, "rejected": 0}
+            items: List[Dict[str, Any]] = []
+
+            for activity in activities:
+                source_row = self._source_snapshot(conn, activity.source_id)
+                _, analysis_result = self._analysis_result_for_activity(
+                    activity,
+                    source_row,
+                    conn,
+                    template=template,
+                )
+                if analysis_result.status in counts:
+                    counts[analysis_result.status] += 1
+                items.append(
+                    {
+                        "activity_id": activity.id,
+                        "status": analysis_result.status,
+                        "failed_layer": analysis_result.failed_layer,
+                        "summary_reasons": analysis_result.folded_summary_reasons,
+                        "layer_results": [
+                            layer.model_dump(mode="json") if hasattr(layer, "model_dump") else layer
+                            for layer in analysis_result.layer_results
+                        ],
+                    }
+                )
+
+            return {
+                "template_id": template_id,
+                "total": len(activities),
+                "passed": counts["passed"],
+                "watch": counts["watch"],
+                "rejected": counts["rejected"],
+                "items": items,
+            }
+
     def add_activity(self, activity: Activity) -> bool:
+        if self._is_hidden_activity(
+            source_id=activity.source_id,
+            title=activity.title,
+            url=activity.url,
+            description=activity.description,
+            full_content=activity.full_content,
+        ):
+            logger.info("Skipping low-signal firecrawl activity from %s: %s", activity.source_id, activity.title)
+            return False
         with self._get_connection() as conn:
             existing = conn.execute(
                 "SELECT * FROM activities WHERE source_id = ? AND url = ?",
@@ -367,9 +1155,20 @@ class DataManager:
             ).fetchone()
             is_new = existing is None
             source_row = self._source_snapshot(conn, activity.source_id)
-            summary, score, score_reason, deadline_level, trust_level = self._activity_enrichment(
+            (
+                summary,
+                score,
+                score_reason,
+                deadline_level,
+                trust_level,
+                analysis_fields,
+                analysis_status,
+                analysis_failed_layer,
+                analysis_summary_reasons,
+            ) = self._activity_enrichment(
                 activity,
                 source_row,
+                conn,
             )
             updated_fields = self._updated_fields(existing, activity)
             now = datetime.now().isoformat()
@@ -380,8 +1179,9 @@ class DataManager:
                     prize_amount, prize_currency, prize_description,
                     start_date, end_date, deadline, location, organizer, image_url,
                     summary, score, score_reason, deadline_level, trust_level, updated_fields,
+                    analysis_fields, analysis_status, analysis_failed_layer, analysis_summary_reasons,
                     status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     activity.id,
@@ -408,6 +1208,10 @@ class DataManager:
                     deadline_level,
                     trust_level,
                     json.dumps(updated_fields),
+                    json.dumps(analysis_fields),
+                    analysis_status,
+                    analysis_failed_layer,
+                    json.dumps(analysis_summary_reasons),
                     activity.status,
                     activity.created_at.isoformat() if is_new else existing["created_at"],
                     now,
@@ -430,11 +1234,19 @@ class DataManager:
                 end_date=datetime.fromisoformat(row["end_date"]) if row["end_date"] else None,
                 deadline=datetime.fromisoformat(row["deadline"]) if row["deadline"] else None,
             )
-        return Activity(
-            id=row["id"],
+        description, full_content, summary = self._clean_activity_texts(
+            source_id=row["source_id"],
             title=row["title"],
             description=row["description"],
             full_content=row["full_content"],
+            summary=row["summary"],
+        )
+        snapshot_fields = self._unpack_activity_snapshot_fields(row)
+        return Activity(
+            id=row["id"],
+            title=row["title"],
+            description=description,
+            full_content=full_content,
             source_id=row["source_id"],
             source_name=row["source_name"],
             url=row["url"],
@@ -445,12 +1257,27 @@ class DataManager:
             location=row["location"],
             organizer=row["organizer"],
             image_url=row["image_url"],
-            summary=row["summary"],
+            summary=summary,
             score=row["score"],
             score_reason=row["score_reason"],
             deadline_level=row["deadline_level"],
             trust_level=row["trust_level"],
             updated_fields=json.loads(row["updated_fields"]) if row["updated_fields"] else [],
+            analysis_fields=json.loads(row["analysis_fields"]) if "analysis_fields" in row.keys() and row["analysis_fields"] else {},
+            analysis_status=snapshot_fields["analysis_status"],
+            analysis_failed_layer=row["analysis_failed_layer"] if "analysis_failed_layer" in row.keys() else None,
+            analysis_summary_reasons=json.loads(row["analysis_summary_reasons"])
+            if "analysis_summary_reasons" in row.keys() and row["analysis_summary_reasons"]
+            else [],
+            analysis_summary=snapshot_fields["analysis_summary"],
+            analysis_reasons=snapshot_fields["analysis_reasons"],
+            analysis_risk_flags=snapshot_fields["analysis_risk_flags"],
+            analysis_recommended_action=snapshot_fields["analysis_recommended_action"],
+            analysis_confidence=snapshot_fields["analysis_confidence"],
+            analysis_structured=snapshot_fields["analysis_structured"],
+            analysis_template_id=snapshot_fields["analysis_template_id"],
+            analysis_current_run_id=snapshot_fields["analysis_current_run_id"],
+            analysis_updated_at=snapshot_fields["analysis_updated_at"],
             is_tracking=bool(row["is_tracking"]) if "is_tracking" in row.keys() else False,
             is_favorited=bool(row["is_favorited"]) if "is_favorited" in row.keys() else False,
             is_digest_candidate=bool(row["is_digest_candidate"]) if "is_digest_candidate" in row.keys() else False,
@@ -486,6 +1313,525 @@ class DataManager:
             send_channel=row["send_channel"],
         )
 
+    def _analysis_job_from_row(self, row: sqlite3.Row) -> AnalysisJob:
+        return AnalysisJob(
+            id=row["id"],
+            trigger_type=row["trigger_type"],
+            scope_type=row["scope_type"],
+            template_id=row["template_id"],
+            route_policy=json.loads(row["route_policy"]) if row["route_policy"] else {},
+            budget_policy=json.loads(row["budget_policy"]) if row["budget_policy"] else {},
+            status=row["status"],
+            requested_by=row["requested_by"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+        )
+
+    def _analysis_job_item_from_row(self, row: sqlite3.Row) -> AnalysisJobItem:
+        return AnalysisJobItem(
+            id=row["id"],
+            job_id=row["job_id"],
+            activity_id=row["activity_id"],
+            status=row["status"],
+            needs_research=bool(row["needs_research"]),
+            final_draft_status=row["final_draft_status"],
+            screening_model=row["screening_model"],
+            research_model=row["research_model"],
+            verdict_model=row["verdict_model"],
+            started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
+            finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    def _analysis_step_from_row(self, row: sqlite3.Row) -> AnalysisStep:
+        return AnalysisStep(
+            id=row["id"],
+            job_item_id=row["job_item_id"],
+            step_type=row["step_type"],
+            step_status=row["step_status"],
+            input_digest=row["input_digest"],
+            output_payload=json.loads(row["output_payload"]) if row["output_payload"] else {},
+            latency_ms=row["latency_ms"],
+            cost_tokens_in=row["cost_tokens_in"],
+            cost_tokens_out=row["cost_tokens_out"],
+            model_name=row["model_name"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def _analysis_evidence_from_row(self, row: sqlite3.Row) -> AnalysisEvidence:
+        return AnalysisEvidence(
+            id=row["id"],
+            job_item_id=row["job_item_id"],
+            source_type=row["source_type"],
+            url=row["url"],
+            title=row["title"],
+            snippet=row["snippet"],
+            relevance_score=row["relevance_score"],
+            trust_score=row["trust_score"],
+            supports_claim=bool(row["supports_claim"]) if row["supports_claim"] is not None else None,
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def replace_analysis_evidence(
+        self,
+        job_item_id: str,
+        evidence: list[ResearchEvidence],
+    ) -> List[AnalysisEvidence]:
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM analysis_evidence WHERE job_item_id = ?", (job_item_id,))
+            for item in evidence:
+                payload = item.model_dump() if hasattr(item, "model_dump") else dict(item)
+                conn.execute(
+                    """
+                    INSERT INTO analysis_evidence (
+                        id, job_item_id, source_type, url, title, snippet, relevance_score,
+                        trust_score, supports_claim, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        self._generate_record_id(),
+                        job_item_id,
+                        payload.get("source_type"),
+                        payload.get("url"),
+                        payload.get("title"),
+                        payload.get("snippet"),
+                        payload.get("relevance_score"),
+                        payload.get("trust_score"),
+                        payload.get("supports_claim"),
+                        datetime.now().isoformat(),
+                    ),
+                )
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_evidence
+                WHERE job_item_id = ?
+                ORDER BY rowid ASC
+                """,
+                (job_item_id,),
+            ).fetchall()
+            return [self._analysis_evidence_from_row(row) for row in rows]
+
+    def get_analysis_evidence(self, job_item_id: str) -> List[AnalysisEvidence]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_evidence
+                WHERE job_item_id = ?
+                ORDER BY rowid ASC
+                """,
+                (job_item_id,),
+            ).fetchall()
+            return [self._analysis_evidence_from_row(row) for row in rows]
+
+    def create_analysis_job(
+        self,
+        *,
+        trigger_type: str,
+        scope_type: str,
+        template_id: str | None,
+        route_policy: dict[str, Any],
+        budget_policy: dict[str, Any],
+        status: str,
+        requested_by: str | None = None,
+    ) -> AnalysisJob:
+        with self._get_connection() as conn:
+            job_id = self._generate_record_id()
+            now = datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO analysis_jobs (
+                    id, trigger_type, scope_type, template_id, route_policy, budget_policy,
+                    status, requested_by, created_at, finished_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    trigger_type,
+                    scope_type,
+                    template_id,
+                    json.dumps(route_policy),
+                    json.dumps(budget_policy),
+                    status,
+                    requested_by,
+                    now,
+                    now if status in {"completed", "failed"} else None,
+                ),
+            )
+            row = conn.execute("SELECT * FROM analysis_jobs WHERE id = ?", (job_id,)).fetchone()
+            return self._analysis_job_from_row(row)
+
+    def update_analysis_job(self, job_id: str, **fields: Any) -> AnalysisJob:
+        if not fields:
+            job = self.get_analysis_job(job_id)
+            if job is None:
+                raise ValueError(f"Analysis job {job_id} not found")
+            return job
+
+        assignments: list[str] = []
+        params: list[Any] = []
+        for key, value in fields.items():
+            assignments.append(f"{key} = ?")
+            if key in {"route_policy", "budget_policy"} and isinstance(value, dict):
+                params.append(json.dumps(value))
+            elif isinstance(value, datetime):
+                params.append(value.isoformat())
+            else:
+                params.append(value)
+        if "status" in fields and fields["status"] in {"completed", "failed"} and "finished_at" not in fields:
+            assignments.append("finished_at = ?")
+            params.append(datetime.now().isoformat())
+        params.append(job_id)
+
+        with self._get_connection() as conn:
+            conn.execute(
+                f"UPDATE analysis_jobs SET {', '.join(assignments)} WHERE id = ?",
+                params,
+            )
+            row = conn.execute("SELECT * FROM analysis_jobs WHERE id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"Analysis job {job_id} not found")
+            return self._analysis_job_from_row(row)
+
+    def get_analysis_job(self, job_id: str) -> AnalysisJob | None:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM analysis_jobs WHERE id = ?", (job_id,)).fetchone()
+            return self._analysis_job_from_row(row) if row else None
+
+    def create_analysis_job_item(
+        self,
+        *,
+        job_id: str,
+        activity_id: str,
+        status: str,
+        needs_research: bool = False,
+        final_draft_status: str | None = None,
+        screening_model: str | None = None,
+        research_model: str | None = None,
+        verdict_model: str | None = None,
+    ) -> AnalysisJobItem:
+        with self._get_connection() as conn:
+            item_id = self._generate_record_id()
+            now = datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO analysis_job_items (
+                    id, job_id, activity_id, status, needs_research, final_draft_status,
+                    screening_model, research_model, verdict_model, started_at, finished_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item_id,
+                    job_id,
+                    activity_id,
+                    status,
+                    1 if needs_research else 0,
+                    final_draft_status,
+                    screening_model,
+                    research_model,
+                    verdict_model,
+                    now,
+                    now if status in {"completed", "failed"} else None,
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM analysis_job_items WHERE id = ?", (item_id,)).fetchone()
+            return self._analysis_job_item_from_row(row)
+
+    def update_analysis_job_item(self, item_id: str, **fields: Any) -> AnalysisJobItem:
+        if not fields:
+            item = self.get_analysis_job_item(item_id)
+            if item is None:
+                raise ValueError(f"Analysis job item {item_id} not found")
+            return item
+
+        assignments: list[str] = ["updated_at = ?"]
+        params: list[Any] = [datetime.now().isoformat()]
+        for key, value in fields.items():
+            assignments.append(f"{key} = ?")
+            if key == "needs_research":
+                params.append(1 if value else 0)
+            elif isinstance(value, datetime):
+                params.append(value.isoformat())
+            else:
+                params.append(value)
+        if "status" in fields and fields["status"] in {"completed", "failed"} and "finished_at" not in fields:
+            assignments.append("finished_at = ?")
+            params.append(datetime.now().isoformat())
+        params.append(item_id)
+
+        with self._get_connection() as conn:
+            conn.execute(
+                f"UPDATE analysis_job_items SET {', '.join(assignments)} WHERE id = ?",
+                params,
+            )
+            row = conn.execute("SELECT * FROM analysis_job_items WHERE id = ?", (item_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"Analysis job item {item_id} not found")
+            return self._analysis_job_item_from_row(row)
+
+    def get_analysis_job_item(self, item_id: str) -> AnalysisJobItem | None:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM analysis_job_items WHERE id = ?", (item_id,)).fetchone()
+            return self._analysis_job_item_from_row(row) if row else None
+
+    def get_analysis_job_items(self, job_id: str) -> List[AnalysisJobItem]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_job_items
+                WHERE job_id = ?
+                ORDER BY created_at ASC
+                """,
+                (job_id,),
+            ).fetchall()
+            return [self._analysis_job_item_from_row(row) for row in rows]
+
+    def create_analysis_step(
+        self,
+        *,
+        job_item_id: str,
+        step_type: str,
+        step_status: str,
+        input_digest: str | None = None,
+        output_payload: dict[str, Any] | None = None,
+        latency_ms: int | None = None,
+        cost_tokens_in: int | None = None,
+        cost_tokens_out: int | None = None,
+        model_name: str | None = None,
+    ) -> AnalysisStep:
+        with self._get_connection() as conn:
+            step_id = self._generate_record_id()
+            now = datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO analysis_item_steps (
+                    id, job_item_id, step_type, step_status, input_digest, output_payload,
+                    latency_ms, cost_tokens_in, cost_tokens_out, model_name, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    step_id,
+                    job_item_id,
+                    step_type,
+                    step_status,
+                    input_digest,
+                    json.dumps(output_payload or {}, default=str),
+                    latency_ms,
+                    cost_tokens_in,
+                    cost_tokens_out,
+                    model_name,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM analysis_item_steps WHERE id = ?", (step_id,)).fetchone()
+            return self._analysis_step_from_row(row)
+
+    def get_analysis_steps(self, job_item_id: str) -> List[AnalysisStep]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_item_steps
+                WHERE job_item_id = ?
+                ORDER BY created_at ASC
+                """,
+                (job_item_id,),
+            ).fetchall()
+            return [self._analysis_step_from_row(row) for row in rows]
+
+    def _analysis_snapshot_from_payload(self, payload: dict[str, Any]) -> AnalysisSnapshot | None:
+        if not payload:
+            return None
+        draft_payload = payload.get("draft") if isinstance(payload.get("draft"), dict) else payload
+        if not isinstance(draft_payload, dict):
+            return None
+        try:
+            return AnalysisSnapshot.model_validate(draft_payload)
+        except Exception:
+            return None
+
+    def get_latest_draft_snapshot(self, job_item_id: str) -> AnalysisSnapshot | None:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_item_steps
+                WHERE job_item_id = ? AND step_type IN ('safety', 'verdict')
+                ORDER BY CASE step_type WHEN 'safety' THEN 0 ELSE 1 END, created_at DESC
+                """,
+                (job_item_id,),
+            ).fetchall()
+            for row in rows:
+                payload = json.loads(row["output_payload"]) if row["output_payload"] else {}
+                draft = self._analysis_snapshot_from_payload(payload)
+                if draft is not None:
+                    return draft
+            return None
+
+    def get_analysis_item_detail(self, item_id: str) -> Dict[str, Any] | None:
+        item = self.get_analysis_job_item(item_id)
+        if item is None:
+            return None
+        activity = self.get_activity_by_id(item.activity_id)
+        draft = self.get_latest_draft_snapshot(item.id)
+        return {
+            **item.model_dump(mode="json"),
+            "activity": activity.model_dump(mode="json") if activity else None,
+            "draft": draft.model_dump(mode="json") if draft else None,
+            "steps": [step.model_dump(mode="json") for step in self.get_analysis_steps(item.id)],
+            "evidence": [evidence.model_dump(mode="json") for evidence in self.get_analysis_evidence(item.id)],
+            "reviews": [review.model_dump(mode="json") for review in self.get_analysis_reviews(item.id)],
+        }
+
+    def get_analysis_job_detail(self, job_id: str) -> Dict[str, Any] | None:
+        job = self.get_analysis_job(job_id)
+        if job is None:
+            return None
+        items = [self.get_analysis_item_detail(item.id) for item in self.get_analysis_job_items(job_id)]
+        materialized_items = [item for item in items if item is not None]
+        return {
+            **job.model_dump(mode="json"),
+            "item_count": len(materialized_items),
+            "items": materialized_items,
+        }
+
+    def list_analysis_jobs(self, limit: int = 20) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            total = conn.execute("SELECT COUNT(*) AS count FROM analysis_jobs").fetchone()["count"]
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_jobs
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                job = self._analysis_job_from_row(row)
+                item_rows = conn.execute(
+                    """
+                    SELECT status, needs_research
+                    FROM analysis_job_items
+                    WHERE job_id = ?
+                    """,
+                    (job.id,),
+                ).fetchall()
+                items.append(
+                    {
+                        **job.model_dump(mode="json"),
+                        "item_count": len(item_rows),
+                        "completed_items": sum(1 for item in item_rows if item["status"] == "completed"),
+                        "failed_items": sum(1 for item in item_rows if item["status"] == "failed"),
+                        "needs_research_count": sum(1 for item in item_rows if item["needs_research"]),
+                    }
+                )
+            return {"total": total, "items": items}
+
+    def select_batch_candidates(
+        self,
+        *,
+        stale_before_hours: int,
+        max_items: int,
+    ) -> List[str]:
+        threshold = (datetime.now() - timedelta(hours=stale_before_hours)).isoformat()
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM activities
+                WHERE analysis_updated_at IS NULL
+                   OR analysis_updated_at < updated_at
+                   OR analysis_updated_at < ?
+                ORDER BY
+                    CASE
+                        WHEN analysis_updated_at IS NULL THEN 0
+                        WHEN analysis_updated_at < updated_at THEN 1
+                        ELSE 2
+                    END,
+                    updated_at DESC
+                LIMIT ?
+                """,
+                (threshold, max_items * 3),
+            ).fetchall()
+
+        candidate_ids: list[str] = []
+        for row in rows:
+            if self._is_hidden_activity_row(row):
+                continue
+            candidate_ids.append(row["id"])
+            if len(candidate_ids) >= max_items:
+                break
+        return candidate_ids
+
+    def insert_analysis_review(
+        self,
+        *,
+        job_item_id: str,
+        activity_id: str,
+        review_action: str,
+        review_note: str | None = None,
+        reviewed_by: str | None = None,
+    ) -> AnalysisReview:
+        with self._get_connection() as conn:
+            review_id = self._generate_record_id()
+            now = datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO analysis_reviews (
+                    id, job_item_id, activity_id, review_action, review_note, reviewed_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    review_id,
+                    job_item_id,
+                    activity_id,
+                    review_action,
+                    review_note,
+                    reviewed_by,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM analysis_reviews WHERE id = ?", (review_id,)).fetchone()
+            return self._analysis_review_from_row(row)
+
+    def get_analysis_reviews(self, job_item_id: str) -> List[AnalysisReview]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM analysis_reviews
+                WHERE job_item_id = ?
+                ORDER BY created_at ASC
+                """,
+                (job_item_id,),
+            ).fetchall()
+            return [self._analysis_review_from_row(row) for row in rows]
+
+    def write_activity_snapshot(self, activity_id: str, snapshot: AnalysisSnapshot) -> Activity:
+        packed = self._pack_activity_snapshot_fields(snapshot)
+        assignment_clause = ", ".join(f"{column} = ?" for column in packed.keys())
+        with self._get_connection() as conn:
+            conn.execute(
+                f"UPDATE activities SET {assignment_clause} WHERE id = ?",
+                [*packed.values(), activity_id],
+            )
+        activity = self.get_activity_by_id(activity_id)
+        if activity is None:
+            raise ValueError(f"Activity {activity_id} not found")
+        return activity
+
+    def _analysis_review_from_row(self, row: sqlite3.Row) -> AnalysisReview:
+        return AnalysisReview(
+            id=row["id"],
+            job_item_id=row["job_item_id"],
+            activity_id=row["activity_id"],
+            review_action=row["review_action"],
+            review_note=row["review_note"],
+            reviewed_by=row["reviewed_by"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
     def get_activity_by_id(self, activity_id: str) -> Optional[Activity]:
         with self._get_connection() as conn:
             digest_date = self._normalize_digest_date()
@@ -502,7 +1848,9 @@ class DataManager:
                 """,
                 (digest_date, activity_id),
             ).fetchone()
-            return self._row_to_activity(row) if row else None
+            if not row or self._is_hidden_activity_row(row):
+                return None
+            return self._row_to_activity(row)
 
     def _timeline_for_activity(self, activity: Activity) -> List[Dict[str, str]]:
         if activity.dates is None:
@@ -534,19 +1882,66 @@ class DataManager:
                 """,
                 (digest_date, category, activity_id, limit),
             ).fetchall()
-            return [self._row_to_activity(row) for row in rows]
+            return self._visible_activities_from_rows(rows)
 
     def get_activity_detail(self, activity_id: str) -> Optional[Dict[str, Any]]:
         activity = self.get_activity_by_id(activity_id)
         if activity is None:
             return None
         result = activity.model_dump(mode="json")
+        with self._get_connection() as conn:
+            source_row = self._source_snapshot(conn, activity.source_id)
+            _, analysis_result = self._analysis_result_for_activity(activity, source_row, conn)
+        result["analysis_layer_results"] = [
+            layer.model_dump(mode="json") if hasattr(layer, "model_dump") else layer
+            for layer in analysis_result.layer_results
+        ]
+        result["analysis_score_breakdown"] = analysis_result.score_breakdown
         result["timeline"] = self._timeline_for_activity(activity)
         result["related_items"] = [
             item.model_dump(mode="json") for item in self.get_related_activities(activity.id, activity.category.value)
         ]
         result["tracking"] = self.get_tracking_item(activity.id)
         return result
+
+    def get_analysis_results(
+        self,
+        *,
+        analysis_status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Dict[str, Any]:
+        filters: Dict[str, Any] = {}
+        if analysis_status:
+            filters["analysis_status"] = analysis_status
+
+        activities, total = self.get_activities(
+            filters=filters,
+            sort_by="score",
+            sort_order="desc",
+            page=page,
+            page_size=page_size,
+        )
+
+        items: List[Dict[str, Any]] = []
+        with self._get_connection() as conn:
+            for activity in activities:
+                source_row = self._source_snapshot(conn, activity.source_id)
+                _, analysis_result = self._analysis_result_for_activity(activity, source_row, conn)
+                item = activity.model_dump(mode="json")
+                item["analysis_layer_results"] = [
+                    layer.model_dump(mode="json") if hasattr(layer, "model_dump") else layer
+                    for layer in analysis_result.layer_results
+                ]
+                item["analysis_score_breakdown"] = analysis_result.score_breakdown
+                items.append(item)
+
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "items": items,
+        }
 
     def get_activities(
         self,
@@ -579,6 +1974,9 @@ class DataManager:
             conditions.append("(a.title LIKE ? OR a.description LIKE ? OR a.summary LIKE ?)")
             term = f"%{filters['search']}%"
             params.extend([term, term, term])
+        if filters.get("analysis_status"):
+            conditions.append("a.analysis_status = ?")
+            params.append(filters["analysis_status"])
         if filters.get("deadline_level"):
             conditions.append("a.deadline_level = ?")
             params.append(filters["deadline_level"])
@@ -606,10 +2004,6 @@ class DataManager:
         sort_expression = order_map.get(sort_by, "a.created_at")
         direction = "DESC" if sort_order.lower() == "desc" else "ASC"
         with self._get_connection() as conn:
-            total = conn.execute(
-                f"SELECT COUNT(*) AS total {base_from} WHERE {where_clause}",
-                params,
-            ).fetchone()["total"]
             rows = conn.execute(
                 f"""
                 SELECT a.*,
@@ -619,15 +2013,21 @@ class DataManager:
                 {base_from}
                 WHERE {where_clause}
                 ORDER BY {sort_expression} {direction}, a.created_at DESC
-                LIMIT ? OFFSET ?
                 """,
-                [*params, page_size, (page - 1) * page_size],
+                params,
             ).fetchall()
-            return [self._row_to_activity(row) for row in rows], total
+            visible = self._visible_activities_from_rows(rows)
+            total = len(visible)
+            start = max(0, (page - 1) * page_size)
+            end = start + page_size
+            return visible[start:end], total
 
     def get_activities_count(self) -> int:
         with self._get_connection() as conn:
-            return conn.execute("SELECT COUNT(*) AS count FROM activities").fetchone()["count"]
+            rows = conn.execute(
+                "SELECT source_id, title, description, full_content, url FROM activities"
+            ).fetchall()
+            return sum(0 if self._is_hidden_activity_row(row) else 1 for row in rows)
 
     def update_source_status(
         self,
@@ -686,24 +2086,173 @@ class DataManager:
 
     def get_stats(self) -> StatsResponse:
         with self._get_connection() as conn:
-            category_rows = conn.execute(
-                "SELECT category, COUNT(*) AS count FROM activities GROUP BY category"
-            ).fetchall()
-            source_rows = conn.execute(
-                "SELECT source_id, COUNT(*) AS count FROM activities GROUP BY source_id"
-            ).fetchall()
             recent_threshold = (datetime.now() - timedelta(days=1)).isoformat()
+            rows = conn.execute(
+                "SELECT source_id, title, description, full_content, url, category, created_at, updated_at FROM activities"
+            ).fetchall()
+            visible_rows = [row for row in rows if not self._is_hidden_activity_row(row)]
+            category_counts: Dict[str, int] = {}
+            source_counts: Dict[str, int] = {}
+            recent_activities = 0
+            last_update: str | None = None
+            for row in visible_rows:
+                category_counts[row["category"]] = category_counts.get(row["category"], 0) + 1
+                source_counts[row["source_id"]] = source_counts.get(row["source_id"], 0) + 1
+                if row["created_at"] and row["created_at"] > recent_threshold:
+                    recent_activities += 1
+                if row["updated_at"] and (last_update is None or row["updated_at"] > last_update):
+                    last_update = row["updated_at"]
             return StatsResponse(
-                total_activities=conn.execute("SELECT COUNT(*) AS count FROM activities").fetchone()["count"],
+                total_activities=len(visible_rows),
                 total_sources=conn.execute("SELECT COUNT(*) AS count FROM sources").fetchone()["count"],
-                activities_by_category={row["category"]: row["count"] for row in category_rows},
-                activities_by_source={row["source_id"]: row["count"] for row in source_rows},
-                recent_activities=conn.execute(
-                    "SELECT COUNT(*) AS count FROM activities WHERE created_at > ?",
-                    (recent_threshold,),
-                ).fetchone()["count"],
-                last_update=conn.execute("SELECT MAX(updated_at) AS last_update FROM activities").fetchone()["last_update"],
+                activities_by_category=category_counts,
+                activities_by_source=source_counts,
+                recent_activities=recent_activities,
+                last_update=last_update,
             )
+
+    def get_analysis_templates(self) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM analysis_templates ORDER BY is_default DESC, created_at ASC"
+            ).fetchall()
+            return [self._analysis_template_from_row(row) for row in rows]
+
+    def get_default_analysis_template(self) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM analysis_templates
+                ORDER BY is_default DESC, created_at ASC
+                LIMIT 1
+                """
+            ).fetchone()
+            return self._analysis_template_from_row(row) if row else None
+
+    def get_analysis_template_by_id(self, template_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+            return self._analysis_template_from_row(row) if row else None
+
+    def create_analysis_template(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            template_payload = dict(payload)
+            template_payload["slug"] = self._unique_template_slug(
+                conn,
+                template_payload.get("slug") or self._slugify(template_payload["name"]),
+            )
+            return self._insert_analysis_template(conn, template_payload)
+
+    def duplicate_analysis_template(self, template_id: str, name: str) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"Analysis template {template_id} not found")
+            payload = self._analysis_template_from_row(row)
+            payload["id"] = self._generate_record_id()
+            payload["name"] = name
+            payload["slug"] = self._unique_template_slug(conn, self._slugify(name))
+            payload["is_default"] = False
+            return self._insert_analysis_template(conn, payload)
+
+    def update_analysis_template(self, template_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"Analysis template {template_id} not found")
+
+            current = self._analysis_template_from_row(row)
+            merged = {**current, **payload}
+            business_fields_changed = any(
+                field in payload for field in ("preference_profile", "risk_tolerance", "research_mode")
+            )
+            legacy_shape_overridden = "layers" in payload or "sort_fields" in payload
+            if business_fields_changed and not legacy_shape_overridden:
+                merged["layers"] = []
+                merged["sort_fields"] = []
+            merged = apply_template_compat_defaults(merged)
+            name = merged["name"]
+            slug = payload.get("slug")
+            if slug:
+                slug = self._unique_template_slug(conn, self._slugify(slug), exclude_id=template_id)
+            elif name != current["name"]:
+                slug = self._unique_template_slug(conn, self._slugify(name), exclude_id=template_id)
+            else:
+                slug = current["slug"]
+
+            conn.execute(
+                """
+                UPDATE analysis_templates
+                SET name = ?,
+                    slug = ?,
+                    description = ?,
+                    tags = ?,
+                    layers = ?,
+                    sort_fields = ?,
+                    preference_profile = ?,
+                    risk_tolerance = ?,
+                    research_mode = ?,
+                    compiled_policy = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    name,
+                    slug,
+                    merged["description"],
+                    json.dumps(merged["tags"]),
+                    json.dumps(merged["layers"]),
+                    json.dumps(merged["sort_fields"]),
+                    merged["preference_profile"],
+                    merged["risk_tolerance"],
+                    merged["research_mode"],
+                    json.dumps(merged["compiled_policy"]),
+                    datetime.now().isoformat(),
+                    template_id,
+                ),
+            )
+            updated = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+            return self._analysis_template_from_row(updated)
+
+    def set_default_analysis_template(self, template_id: str) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"Analysis template {template_id} not found")
+            conn.execute("UPDATE analysis_templates SET is_default = 0")
+            conn.execute(
+                "UPDATE analysis_templates SET is_default = 1, updated_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), template_id),
+            )
+            self._refresh_all_activity_analysis(conn)
+            updated = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+            return self._analysis_template_from_row(updated)
+
+    def delete_analysis_template(self, template_id: str) -> bool:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM analysis_templates WHERE id = ?", (template_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"Analysis template {template_id} not found")
+
+            total = conn.execute("SELECT COUNT(*) AS count FROM analysis_templates").fetchone()["count"]
+            if total <= 1:
+                raise ValueError("Cannot delete the last analysis template")
+
+            was_default = bool(row["is_default"])
+            conn.execute("DELETE FROM analysis_templates WHERE id = ?", (template_id,))
+
+            if was_default:
+                replacement = conn.execute(
+                    "SELECT id FROM analysis_templates ORDER BY created_at ASC LIMIT 1"
+                ).fetchone()
+                if replacement is not None:
+                    conn.execute(
+                        "UPDATE analysis_templates SET is_default = 1, updated_at = ? WHERE id = ?",
+                        (datetime.now().isoformat(), replacement["id"]),
+                    )
+                    self._refresh_all_activity_analysis(conn)
+
+            return True
 
     def upsert_tracking_item(self, activity_id: str, payload: Dict[str, Any]) -> TrackingState:
         with self._get_connection() as conn:
@@ -760,6 +2309,8 @@ class DataManager:
             ).fetchall()
             result = []
             for row in rows:
+                if self._is_hidden_activity_row(row):
+                    continue
                 activity = self._row_to_activity(row)
                 tracking = self._tracking_state_from_row(row)
                 result.append({"activity": activity.model_dump(mode="json"), **tracking.model_dump()})
@@ -810,7 +2361,7 @@ class DataManager:
                 """,
                 (target_date,),
             ).fetchall()
-            return [self._row_to_activity(row) for row in rows]
+            return self._visible_activities_from_rows(rows)
 
     def _digest_item_ids_for_date(self, conn: sqlite3.Connection, digest_date: str) -> List[str]:
         candidate_rows = conn.execute(
@@ -866,7 +2417,11 @@ class DataManager:
             """,
             [digest_date, *item_ids],
         ).fetchall()
-        activity_map = {row["id"]: self._row_to_activity(row) for row in rows}
+        activity_map = {
+            row["id"]: self._row_to_activity(row)
+            for row in rows
+            if not self._is_hidden_activity_row(row)
+        }
         return [activity_map[item_id] for item_id in item_ids if item_id in activity_map]
 
     def generate_digest(self, digest_date: str | None = None) -> DigestRecord:
@@ -965,16 +2520,14 @@ class DataManager:
                 FROM activities a
                 LEFT JOIN tracking_items t ON t.activity_id = a.id
                 ORDER BY COALESCE(a.score, 0) DESC, a.created_at DESC
-                LIMIT 5
+                LIMIT 20
                 """
             ).fetchall()
-            trend_rows = conn.execute(
+            trend_source_rows = conn.execute(
                 """
-                SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS count
+                SELECT source_id, title, description, full_content, url, created_at
                 FROM activities
                 WHERE created_at >= ?
-                GROUP BY substr(created_at, 1, 10)
-                ORDER BY day ASC
                 """,
                 ((datetime.now() - timedelta(days=6)).isoformat(),),
             ).fetchall()
@@ -1000,23 +2553,64 @@ class DataManager:
                 LEFT JOIN tracking_items t ON t.activity_id = a.id
                 WHERE (t.activity_id IS NULL OR t.status != ?) AND a.deadline IS NOT NULL
                 ORDER BY a.deadline ASC, COALESCE(a.score, 0) DESC
-                LIMIT 5
+                LIMIT 20
                 """,
                 (TrackingStatus.DONE.value,),
             ).fetchall()
+            analysis_rows = conn.execute(
+                """
+                SELECT source_id, title, description, full_content, url, analysis_status
+                FROM activities
+                """
+            ).fetchall()
+            blocked_rows = conn.execute(
+                """
+                SELECT a.*,
+                    CASE WHEN t.activity_id IS NULL THEN 0 ELSE 1 END AS is_tracking,
+                    COALESCE(t.is_favorited, 0) AS is_favorited,
+                    0 AS is_digest_candidate
+                FROM activities a
+                LEFT JOIN tracking_items t ON t.activity_id = a.id
+                WHERE a.analysis_status = ?
+                ORDER BY COALESCE(a.score, 0) DESC, a.created_at DESC
+                LIMIT 20
+                """,
+                ("rejected",),
+            ).fetchall()
         digest_preview = self.get_digests(limit=1)
         tracking_items = self.get_tracking_items()
+        trends: Dict[str, int] = {}
+        analysis_overview = {"total": 0, "passed": 0, "watch": 0, "rejected": 0}
+        for row in trend_source_rows:
+            if self._is_hidden_activity_row(row):
+                continue
+            day = row["created_at"][:10]
+            trends[day] = trends.get(day, 0) + 1
+        for row in analysis_rows:
+            if self._is_hidden_activity_row(row):
+                continue
+            analysis_overview["total"] += 1
+            status = row["analysis_status"]
+            if status in {"passed", "watch", "rejected"}:
+                analysis_overview[status] += 1
+        top_opportunities = [activity.model_dump(mode="json") for activity in self._visible_activities_from_rows(top_rows)[:5]]
+        first_actions = [activity.model_dump(mode="json") for activity in self._visible_activities_from_rows(first_action_rows)[:5]]
+        blocked_opportunities = [
+            activity.model_dump(mode="json") for activity in self._visible_activities_from_rows(blocked_rows)[:4]
+        ]
         return {
             "overview": {
                 **stats,
                 "tracked_count": len(tracking_items),
                 "favorited_count": len([item for item in tracking_items if item["is_favorited"]]),
             },
-            "top_opportunities": [self._row_to_activity(row).model_dump(mode="json") for row in top_rows],
+            "top_opportunities": top_opportunities,
             "digest_preview": digest_preview[0].model_dump() if digest_preview else None,
-            "trends": [{"date": row["day"], "count": row["count"]} for row in trend_rows],
+            "trends": [{"date": day, "count": trends[day]} for day in sorted(trends)],
             "alert_sources": [self._source_from_row(row).model_dump(mode="json") for row in source_rows],
-            "first_actions": [self._row_to_activity(row).model_dump(mode="json") for row in first_action_rows],
+            "first_actions": first_actions,
+            "analysis_overview": analysis_overview,
+            "blocked_opportunities": blocked_opportunities,
         }
 
     def delete_activity(self, activity_id: str) -> bool:

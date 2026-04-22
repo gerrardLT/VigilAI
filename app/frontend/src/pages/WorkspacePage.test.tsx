@@ -1,16 +1,138 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WorkspaceResponse } from '../types'
 import WorkspacePage from './WorkspacePage'
 
 const refetch = vi.fn()
+type WorkspaceHookState = {
+  workspace: WorkspaceResponse | null
+  loading: boolean
+  error: string | null
+  refetch: typeof refetch
+}
+const workspaceHookState = vi.hoisted(() => ({
+  current: null as WorkspaceHookState | null,
+}))
 const serviceMocks = vi.hoisted(() => ({
   createTracking: vi.fn(),
   updateTracking: vi.fn(),
 }))
+const analysisTemplateHookState = vi.hoisted(() => ({
+  current: {
+    templates: [{ id: 'tpl-1', slug: 'quick-money', name: 'Quick money' }],
+    defaultTemplate: { id: 'tpl-1', slug: 'quick-money', name: 'Quick money' },
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    duplicateTemplate: vi.fn(),
+    activateTemplate: vi.fn(),
+  },
+}))
+const agentAnalysisJobsHookState = vi.hoisted(() => ({
+  current: {
+    jobs: [
+      {
+        id: 'job-batch-1',
+        trigger_type: 'scheduled',
+        scope_type: 'batch',
+        template_id: 'tpl-1',
+        route_policy: {},
+        budget_policy: {},
+        status: 'completed',
+        requested_by: null,
+        created_at: '2026-03-23T08:00:00Z',
+        finished_at: '2026-03-23T08:05:00Z',
+        item_count: 3,
+        completed_items: 2,
+        failed_items: 1,
+        needs_research_count: 1,
+      },
+    ],
+    total: 1,
+    activeJob: {
+      id: 'job-batch-1',
+      trigger_type: 'scheduled',
+      scope_type: 'batch',
+      template_id: 'tpl-1',
+      route_policy: {},
+      budget_policy: {},
+      status: 'completed',
+      requested_by: null,
+      created_at: '2026-03-23T08:00:00Z',
+      finished_at: '2026-03-23T08:05:00Z',
+      item_count: 3,
+      items: [
+        {
+          id: 'job-item-1',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-1',
+          status: 'completed',
+          needs_research: false,
+          final_draft_status: 'pass',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: { id: 'activity-1', title: 'AI Hackathon' },
+          draft: { status: 'pass', summary: 'Good fit', reasons: [], risk_flags: [], structured: {} },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+        {
+          id: 'job-item-2',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-3',
+          status: 'completed',
+          needs_research: true,
+          final_draft_status: 'watch',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: { id: 'activity-3', title: 'Enterprise RFP' },
+          draft: {
+            status: 'watch',
+            summary: 'Needs manual review',
+            reasons: ['Solo only failed hard gate'],
+            risk_flags: ['team_required'],
+            structured: { confidence_band: 'medium' },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+        {
+          id: 'job-item-3',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-4',
+          status: 'failed',
+          needs_research: false,
+          final_draft_status: 'reject',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: { id: 'activity-4', title: 'Slow grant' },
+          draft: {
+            status: 'reject',
+            summary: 'Low confidence',
+            reasons: ['Insufficient evidence'],
+            risk_flags: ['low_confidence'],
+            structured: { confidence_band: 'low' },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+      ],
+    },
+    loading: false,
+    refreshing: false,
+    error: null,
+    refetch: vi.fn(),
+    loadJob: vi.fn(),
+    createJob: vi.fn(),
+  },
+}))
 
-vi.mock('../hooks/useWorkspace', () => ({
-  useWorkspace: () => ({
+function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): WorkspaceHookState {
+  return {
     workspace: {
       overview: {
         total_activities: 24,
@@ -106,11 +228,59 @@ vi.mock('../hooks/useWorkspace', () => ({
           updated_at: '2026-03-23T08:00:00Z',
         },
       ],
+      analysis_overview: {
+        total: 4,
+        passed: 2,
+        watch: 1,
+        rejected: 1,
+      },
+      blocked_opportunities: [
+        {
+          id: 'activity-3',
+          title: 'Enterprise RFP',
+          description: 'Looks big but not solo-friendly.',
+          source_id: 'enterprise',
+          source_name: 'Enterprise Feed',
+          url: 'https://example.com/rfp',
+          category: 'bounty',
+          tags: [],
+          prize: null,
+          dates: null,
+          location: null,
+          organizer: null,
+          summary: 'Likely blocked by hard gate.',
+          score: 6.2,
+          score_reason: 'Low solo fit',
+          deadline_level: 'soon',
+          trust_level: 'medium',
+          updated_fields: [],
+          analysis_status: 'rejected',
+          analysis_summary_reasons: ['Solo only failed hard gate'],
+          is_tracking: false,
+          is_favorited: false,
+          status: 'upcoming',
+          created_at: '2026-03-22T08:00:00Z',
+          updated_at: '2026-03-23T08:00:00Z',
+        },
+      ],
     },
     loading: false,
     error: null,
     refetch,
-  }),
+    ...overrides,
+  }
+}
+
+vi.mock('../hooks/useWorkspace', () => ({
+  useWorkspace: () => workspaceHookState.current ?? buildWorkspaceHookState(),
+}))
+
+vi.mock('../hooks/useAnalysisTemplates', () => ({
+  useAnalysisTemplates: () => analysisTemplateHookState.current,
+}))
+
+vi.mock('../hooks/useAgentAnalysisJobs', () => ({
+  useAgentAnalysisJobs: () => agentAnalysisJobsHookState.current,
 }))
 
 vi.mock('../services/api', () => ({
@@ -122,6 +292,7 @@ vi.mock('../services/api', () => ({
 
 beforeEach(() => {
   refetch.mockClear()
+  workspaceHookState.current = buildWorkspaceHookState()
   serviceMocks.createTracking.mockReset()
   serviceMocks.updateTracking.mockReset()
   serviceMocks.createTracking.mockResolvedValue({
@@ -147,6 +318,33 @@ beforeEach(() => {
 })
 
 describe('WorkspacePage', () => {
+  it('keeps hook ordering stable when the workspace finishes loading', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    workspaceHookState.current = buildWorkspaceHookState({
+      workspace: null,
+      loading: true,
+    })
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    workspaceHookState.current = buildWorkspaceHookState()
+
+    expect(() => {
+      rerender(
+        <MemoryRouter>
+          <WorkspacePage />
+        </MemoryRouter>
+      )
+    }).not.toThrow()
+
+    expect(screen.getByTestId('workspace-page')).toBeInTheDocument()
+    consoleErrorSpy.mockRestore()
+  })
+
   it('renders workspace overview, digest preview, alerts, and first actions', () => {
     render(
       <MemoryRouter>
@@ -155,10 +353,16 @@ describe('WorkspacePage', () => {
     )
 
     expect(screen.getByTestId('workspace-page')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '机会工作台' })).toBeInTheDocument()
     expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
     expect(screen.getByText('Daily Digest')).toBeInTheDocument()
     expect(screen.getByText('Hackathon Feed')).toBeInTheDocument()
     expect(screen.getByText('Ship MVP Fast')).toBeInTheDocument()
+    expect(screen.getByText('Enterprise RFP')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-analysis-overview')).toHaveTextContent('2')
+    expect(screen.getByTestId('workspace-default-template')).toHaveTextContent('Quick money')
+    expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('50%')
+    expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('Solo only failed hard gate')
   })
 
   it('exposes quick actions and supports refreshing the workspace', () => {
@@ -172,7 +376,9 @@ describe('WorkspacePage', () => {
     expect(screen.getByTestId('workspace-quick-action-digest')).toBeInTheDocument()
     expect(screen.getByTestId('workspace-quick-action-tracking')).toBeInTheDocument()
     expect(screen.getByTestId('workspace-quick-action-opportunities')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-quick-action-analysis-results')).toBeInTheDocument()
     expect(screen.getByTestId('workspace-quick-action-sources')).toBeInTheDocument()
+    expect(screen.getByText('查看分析结果')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('workspace-refresh-button'))
 
@@ -197,5 +403,17 @@ describe('WorkspacePage', () => {
     await waitFor(() => {
       expect(serviceMocks.updateTracking).toHaveBeenCalledWith('activity-1', { is_favorited: true })
     })
+  })
+
+  it('shows active template and draft-review workload on the workspace', async () => {
+    render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByTestId('workspace-agent-analysis-summary')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-agent-analysis-summary')).toHaveTextContent('Quick money')
+    expect(screen.getByTestId('workspace-agent-analysis-summary')).toHaveTextContent('job-batch-1')
   })
 })

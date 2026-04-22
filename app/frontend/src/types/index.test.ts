@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   Activity,
   ActivityDetail,
+  AnalysisTemplate,
   Category,
   DigestDetail,
   DigestStatus,
@@ -83,11 +84,51 @@ const activity: Activity = {
   deadline_level: 'urgent',
   trust_level: 'high',
   updated_fields: ['summary', 'score'],
+  analysis_fields: {
+    roi_level: 'high',
+    solo_friendliness: 'solo_friendly',
+    _confidence: {
+      roi_level: 'high',
+    },
+  },
+  analysis_status: 'passed',
+  analysis_failed_layer: null,
+  analysis_summary_reasons: ['Reward clarity passed', 'ROI score passed'],
   is_tracking: true,
   is_favorited: true,
   status: 'upcoming',
   created_at: '2026-03-20T08:00:00Z',
   updated_at: '2026-03-23T08:00:00Z',
+}
+
+const template: AnalysisTemplate = {
+  id: 'tpl-1',
+  name: 'Quick money',
+  slug: 'quick-money',
+  description: 'Prefer fast and low-effort opportunities.',
+  is_default: true,
+  tags: ['money-first'],
+  layers: [
+    {
+      key: 'hard_gate',
+      label: 'Hard gate',
+      enabled: true,
+      mode: 'filter',
+      conditions: [
+        {
+          key: 'reward_clarity',
+          label: 'Reward clarity',
+          enabled: true,
+          operator: 'gte',
+          value: 'medium',
+          hard_fail: true,
+        },
+      ],
+    },
+  ],
+  sort_fields: ['roi', 'payout_speed'],
+  created_at: '2026-03-25T08:00:00Z',
+  updated_at: '2026-03-25T08:00:00Z',
 }
 
 const activityDetail: ActivityDetail = {
@@ -189,7 +230,14 @@ describe('frontend V2 contract types', () => {
     expect(activity.summary).toContain('hackathon')
     expect(activity.updated_fields).toEqual(['summary', 'score'])
     expect(activity.is_tracking).toBe(true)
+    expect(activity.analysis_fields?.roi_level).toBe('high')
+    expect(activity.analysis_status).toBe('passed')
     expectTypeOf(activity.score).toMatchTypeOf<number | null | undefined>()
+  })
+
+  it('accepts analysis templates used by the AI filtering MVP', () => {
+    expect(template.slug).toBe('quick-money')
+    expect(template.layers[0].conditions[0].hard_fail).toBe(true)
   })
 
   it('accepts activity detail payloads with timeline, related items, and tracking state', () => {

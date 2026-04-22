@@ -1,13 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AgentVerdictCard } from '../components/analysis/AgentVerdictCard'
+import { EvidencePanel } from '../components/analysis/EvidencePanel'
+import { ExecutionTracePanel } from '../components/analysis/ExecutionTracePanel'
+import { ReviewActionBar } from '../components/analysis/ReviewActionBar'
+import { StructuredFactorCard } from '../components/analysis/StructuredFactorCard'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Loading } from '../components/Loading'
 import { Toast } from '../components/Toast'
+import { useAgentAnalysisReview } from '../hooks/useAgentAnalysisReview'
+import { useAnalysisTemplates } from '../hooks/useAnalysisTemplates'
 import { api } from '../services/api'
-import type { ActivityDetail, TrackingState } from '../types'
+import type { ActivityDetail, AgentAnalysisJobDetail, AgentAnalysisJobItemDetail, TrackingState } from '../types'
 import { CATEGORY_COLOR_MAP, CATEGORY_ICON_MAP } from '../utils/constants'
 import { daysUntil, formatDateOnly, formatDateTime, isExpired } from '../utils/formatDate'
 import { CATEGORY_LABELS } from '../types'
+import {
+  getAnalysisStatusLabel,
+  getTrustLevelLabel,
+  localizeAnalysisTemplate,
+} from '../utils/analysisI18n'
 
 const TRUST_STYLES = {
   high: 'bg-emerald-100 text-emerald-700',
@@ -31,6 +43,18 @@ const DEADLINE_LABELS = {
   later: '后续关注',
   none: '无截止信息',
   expired: '已截止',
+} as const
+
+const ANALYSIS_STATUS_STYLES = {
+  passed: 'bg-emerald-100 text-emerald-700',
+  watch: 'bg-amber-100 text-amber-700',
+  rejected: 'bg-rose-100 text-rose-700',
+} as const
+
+const LAYER_DECISION_STYLES = {
+  passed: 'bg-emerald-100 text-emerald-700',
+  borderline: 'bg-amber-100 text-amber-700',
+  failed: 'bg-rose-100 text-rose-700',
 } as const
 
 const FIELD_LABELS: Record<string, string> = {
@@ -88,9 +112,19 @@ function normalizeTextField(value: string) {
   return trimmed ? trimmed : null
 }
 
+function selectAgentAnalysisItem(
+  job: AgentAnalysisJobDetail,
+  activityId: string
+): AgentAnalysisJobItemDetail | null {
+  return job.items.find(item => item.activity_id === activityId) ?? job.items[0] ?? null
+}
+
 export function ActivityDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { defaultTemplate } = useAnalysisTemplates()
+  const { approveItem, rejectItem, reviewing, error: reviewError } = useAgentAnalysisReview()
+  const localizedDefaultTemplate = defaultTemplate ? localizeAnalysisTemplate(defaultTemplate) : null
   const [activity, setActivity] = useState<ActivityDetail | null>(null)
   const [tracking, setTracking] = useState<TrackingState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -99,6 +133,11 @@ export function ActivityDetailPage() {
   const [actionLoading, setActionLoading] = useState<DetailAction | null>(null)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [planForm, setPlanForm] = useState<TrackingPlanForm>(() => buildTrackingPlanForm(null, false))
+  const [agentJob, setAgentJob] = useState<AgentAnalysisJobDetail | null>(null)
+  const [agentItem, setAgentItem] = useState<AgentAnalysisJobItemDetail | null>(null)
+  const [agentLoading, setAgentLoading] = useState(false)
+  const [agentError, setAgentError] = useState<string | null>(null)
+  const [agentRunBusy, setAgentRunBusy] = useState(false)
   const trackingReadyRef = useRef(false)
 
   useEffect(() => {
@@ -125,6 +164,36 @@ export function ActivityDetailPage() {
 
     void fetchActivity()
   }, [id])
+
+  useEffect(() => {
+    if (!activity?.analysis_current_run_id || !activity.id) {
+      setAgentJob(null)
+      setAgentItem(null)
+      setAgentError(null)
+      setAgentLoading(false)
+      return
+    }
+
+    const fetchAgentJob = async () => {
+      setAgentLoading(true)
+      setAgentError(null)
+
+      try {
+        const job = await api.getAgentAnalysisJob(activity.analysis_current_run_id as string)
+        setAgentJob(job)
+        setAgentItem(selectAgentAnalysisItem(job, activity.id))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '加载 agent analysis draft 失败'
+        setAgentError(message)
+        setAgentJob(null)
+        setAgentItem(null)
+      } finally {
+        setAgentLoading(false)
+      }
+    }
+
+    void fetchAgentJob()
+  }, [activity?.analysis_current_run_id, activity?.id])
 
   const applyTrackingState = (nextTracking: TrackingState) => {
     trackingReadyRef.current = true
@@ -256,6 +325,74 @@ export function ActivityDetailPage() {
     }
   }
 
+  const handleDeepAnalysis = async () => {
+    if (!activity) return
+
+    setAgentRunBusy(true)
+    setAgentError(null)
+
+    try {
+      const job = await api.createAgentAnalysisJob({
+        scope_type: 'single',
+        trigger_type: 'manual',
+        activity_ids: [activity.id],
+        template_id: defaultTemplate?.id,
+      })
+
+      const nextItem = selectAgentAnalysisItem(job, activity.id)
+      setAgentJob(job)
+      setAgentItem(nextItem)
+      setActivity(prev => (prev ? { ...prev, analysis_current_run_id: job.id } : prev))
+      setToast({ type: 'success', message: 'Deep analysis draft 已生成' })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '运行 deep analysis 失败'
+      setAgentError(message)
+      setToast({ type: 'error', message })
+    } finally {
+      setAgentRunBusy(false)
+    }
+  }
+
+  const handleApproveAnalysis = async (note: string) => {
+    if (!id || !activity || !agentItem) return
+
+    const result = await approveItem(agentItem.id, {
+      review_note: normalizeTextField(note),
+    })
+
+    if (!result) {
+      return
+    }
+
+    setToast({ type: 'success', message: 'Draft 已批准并写回 activity' })
+
+    try {
+      const refreshed = await api.getActivity(id)
+      const isTracking = Boolean(refreshed.tracking || refreshed.is_tracking)
+      setActivity(refreshed)
+      setTracking(refreshed.tracking ?? null)
+      setPlanForm(buildTrackingPlanForm(refreshed.tracking ?? null, isTracking))
+      trackingReadyRef.current = isTracking
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '刷新 activity 详情失败'
+      setAgentError(message)
+    }
+  }
+
+  const handleRejectAnalysis = async (note: string) => {
+    if (!agentItem) return
+
+    const result = await rejectItem(agentItem.id, {
+      review_note: normalizeTextField(note),
+    })
+
+    if (!result) {
+      return
+    }
+
+    setToast({ type: 'success', message: 'Draft 已拒绝，主 activity 未被写回' })
+  }
+
   if (loading) {
     return <Loading text="加载活动详情..." />
   }
@@ -280,6 +417,17 @@ export function ActivityDetailPage() {
   const days = deadline ? daysUntil(deadline) : null
   const expired = deadline ? isExpired(deadline) : false
   const deadlineLevel = activity.deadline_level ?? 'none'
+  const analysisStatus = activity.analysis_status ?? null
+  const analysisReasons = activity.analysis_summary_reasons ?? []
+  const analysisLayerResults = activity.analysis_layer_results ?? []
+  const analysisFieldEntries = Object.entries(activity.analysis_fields ?? {}).filter(([key]) => !key.startsWith('_'))
+  const analysisAdjustHref = analysisStatus ? `/activities?analysis_status=${analysisStatus}` : '/activities'
+  const agentDraft = agentItem?.draft ?? activity.analysis_latest_draft ?? null
+  const agentStructured =
+    (agentItem?.draft?.structured as Record<string, unknown> | undefined) ??
+    activity.analysis_latest_draft?.structured ??
+    activity.analysis_structured ??
+    {}
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -325,13 +473,13 @@ export function ActivityDetailPage() {
 
             {activity.score !== undefined && activity.score !== null && (
               <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                Score {activity.score.toFixed(1)}
+                评分 {activity.score.toFixed(1)}
               </span>
             )}
 
             {activity.trust_level && (
               <span className={`rounded-full px-3 py-1 text-sm font-medium ${TRUST_STYLES[activity.trust_level]}`}>
-                Trust {activity.trust_level}
+                可信度 {getTrustLevelLabel(activity.trust_level)}
               </span>
             )}
 
@@ -392,11 +540,180 @@ export function ActivityDetailPage() {
           {(activity.summary || activity.full_content) && (
             <section className="rounded-2xl bg-slate-50 p-6">
               <h2 className="mb-3 text-lg font-semibold text-gray-900">机会摘要</h2>
-              <p className="whitespace-pre-wrap leading-7 text-gray-700">
+              <p data-testid="activity-summary" className="whitespace-pre-wrap break-words leading-7 text-gray-700">
                 {activity.summary || activity.full_content}
               </p>
             </section>
           )}
+
+          {(analysisStatus || analysisReasons.length > 0 || activity.analysis_fields) && (
+            <section
+              data-testid="activity-analysis-panel"
+              className="rounded-2xl border border-sky-100 bg-sky-50/60 p-6"
+            >
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">AI 分析</h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    用规则结果帮助你更快判断这条机会值不值得跟进。
+                  </p>
+                  {localizedDefaultTemplate && (
+                    <div
+                      data-testid="activity-analysis-template-context"
+                      className="mt-3 inline-flex rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-sky-800"
+                    >
+                      当前模板: {localizedDefaultTemplate.name}
+                    </div>
+                  )}
+                  <div className="mt-3">
+                    <Link
+                      to={analysisAdjustHref}
+                      data-testid="activity-analysis-adjust-link"
+                      className="inline-flex items-center rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-sky-800 transition hover:border-sky-300 hover:text-sky-900"
+                    >
+                      去机会池继续调规则
+                    </Link>
+                  </div>
+                </div>
+                {analysisStatus && (
+                  <span
+                    data-testid="activity-analysis-status"
+                    className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-medium ${ANALYSIS_STATUS_STYLES[analysisStatus]}`}
+                  >
+                    {getAnalysisStatusLabel(analysisStatus, { watch: '观察', rejected: '拦截' })}
+                  </span>
+                )}
+              </div>
+
+              {activity.analysis_failed_layer && (
+                <p className="mt-4 text-sm text-gray-600">
+                  拦截层级: {activity.analysis_failed_layer}
+                </p>
+              )}
+
+              {analysisReasons.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {analysisReasons.map((reason: string) => (
+                    <span
+                      key={reason}
+                      className="rounded-full border border-sky-200 bg-white px-3 py-1 text-sm text-slate-700"
+                    >
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {analysisLayerResults.length > 0 && (
+                <div data-testid="activity-analysis-chain" className="mt-6 space-y-3">
+                  <div className="text-sm font-semibold text-slate-900">判断链路</div>
+                  {analysisLayerResults.map(layer => (
+                    <div key={layer.key} className="rounded-2xl border border-sky-100 bg-white/80 p-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">{layer.label}</div>
+                          <div className="text-xs text-slate-500">{layer.key}</div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${
+                              LAYER_DECISION_STYLES[layer.decision as keyof typeof LAYER_DECISION_STYLES] ||
+                              'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {getAnalysisStatusLabel(layer.decision, { watch: '观察', rejected: '拦截' })}
+                          </span>
+                          <span className="text-xs text-slate-500">得分 {layer.score.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      {layer.reasons.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {layer.reasons.map((reason: string) => (
+                            <span
+                              key={`${layer.key}-${reason}`}
+                              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                            >
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {analysisFieldEntries.length > 0 && (
+                <div data-testid="activity-analysis-fields" className="mt-6">
+                  <div className="text-sm font-semibold text-slate-900">结构化分析字段</div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {analysisFieldEntries.map(([key, value]) => (
+                      <div key={key} className="rounded-2xl border border-sky-100 bg-white/80 p-4">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">{key}</div>
+                        <div className="mt-2 text-sm font-medium text-slate-900">{String(value)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          <section
+            data-testid="activity-agent-analysis-workbench"
+            className="rounded-2xl border border-slate-200 bg-slate-50/60 p-6"
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">AI Agent Workbench</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  在详情页里直接运行深度分析、查看证据与执行轨迹，再决定是否写回主结论。
+                </p>
+              </div>
+              {agentJob && (
+                <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500">
+                  Current run: {agentJob.id}
+                </div>
+              )}
+            </div>
+
+            {agentError && (
+              <div className="mt-4">
+                <ErrorMessage message={agentError} />
+              </div>
+            )}
+            {reviewError && (
+              <div className="mt-4">
+                <ErrorMessage message={reviewError} />
+              </div>
+            )}
+
+            <div className="mt-5 grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <AgentVerdictCard
+                snapshot={agentDraft}
+                onRun={handleDeepAnalysis}
+                running={agentRunBusy}
+              />
+              <StructuredFactorCard structured={agentStructured} />
+            </div>
+
+            {(agentItem || agentLoading) && (
+              <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <EvidencePanel evidence={agentItem?.evidence ?? []} />
+                <ExecutionTracePanel steps={agentItem?.steps ?? []} />
+              </div>
+            )}
+
+            {agentItem && (
+              <div className="mt-6">
+                <ReviewActionBar
+                  reviewing={reviewing}
+                  onApprove={handleApproveAnalysis}
+                  onReject={handleRejectAnalysis}
+                />
+              </div>
+            )}
+          </section>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="rounded-2xl border border-gray-100 p-5">
@@ -510,7 +827,9 @@ export function ActivityDetailPage() {
           {activity.description && (
             <section>
               <h2 className="mb-2 text-lg font-semibold text-gray-900">活动描述</h2>
-              <p className="whitespace-pre-wrap leading-7 text-gray-600">{activity.description}</p>
+              <p data-testid="activity-description" className="whitespace-pre-wrap break-words leading-7 text-gray-600">
+                {activity.description}
+              </p>
             </section>
           )}
 

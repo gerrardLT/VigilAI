@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scrapers.firecrawl_scraper import FirecrawlScraper
 from models import Activity
 from config import FETCH_DETAIL_CONTENT, DETAIL_FETCH_MAX_COUNT, DETAIL_FETCH_DELAY
+from utils.content_cleaning import build_description_from_text, looks_like_invalid_activity_candidate
 
 logger = logging.getLogger(__name__)
 
@@ -789,7 +790,10 @@ class UniversalScraper(FirecrawlScraper):
             
             if not title or len(title) < 3:
                 continue
-            
+
+            if looks_like_invalid_activity_candidate(title, url, markdown, source_id=self.source_id):
+                continue
+
             if self._is_navigation_link(title, url):
                 continue
             
@@ -812,7 +816,11 @@ class UniversalScraper(FirecrawlScraper):
             '首页', '关于', '联系', '登录', '注册', '帮助',
         ]
         title_lower = title.lower()
-        return any(kw in title_lower for kw in nav_keywords) or len(title) < 3
+        return (
+            any(kw in title_lower for kw in nav_keywords)
+            or len(title) < 3
+            or looks_like_invalid_activity_candidate(title, url, source_id=self.source_id)
+        )
     
     def _looks_like_activity(self, title: str) -> bool:
         """判断标题是否像活动"""
@@ -836,7 +844,10 @@ class UniversalScraper(FirecrawlScraper):
         context: str
     ) -> Optional[Activity]:
         """从链接创建活动"""
-        description = self._extract_context(title, context)
+        raw_context = self._extract_context(title, context)
+        description = build_description_from_text(raw_context, title=title, max_length=500) or raw_context
+        if looks_like_invalid_activity_candidate(title, url, description, source_id=self.source_id):
+            return None
         deadline = self._extract_deadline(description)
         prize_amount, prize_currency = self._extract_prize(description)
         

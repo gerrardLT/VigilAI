@@ -4,14 +4,13 @@ import { APP_NAME } from '../utils/constants'
 const navLinks = [
   { path: '/', label: '工作台' },
   { path: '/activities', label: '机会池' },
+  { path: '/analysis/results', label: '分析结果' },
+  { path: '/analysis/templates', label: '模板中心' },
   { path: '/tracking', label: '跟进' },
   { path: '/digests', label: '日报' },
-  { path: '/sources', label: '信息源管理' },
+  { path: '/sources', label: '来源' },
 ]
 
-/**
- * 头部导航组件
- */
 export function Header() {
   const location = useLocation()
 
@@ -23,45 +22,37 @@ export function Header() {
   }
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2">
-            <span className="text-2xl">🎯</span>
-            <span className="text-xl font-bold text-gray-900">{APP_NAME}</span>
-          </Link>
+    <header className="border-b border-gray-200 bg-white shadow-sm">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <Link to="/" className="flex items-center gap-2">
+          <span className="text-2xl">V</span>
+          <span className="text-xl font-bold text-gray-900">{APP_NAME}</span>
+        </Link>
 
-          {/* Navigation */}
-          <nav className="hidden md:flex items-center gap-1">
-            {navLinks.map(link => (
-              <Link
-                key={link.path}
-                to={link.path}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive(link.path)
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+        <nav className="hidden items-center gap-1 md:flex">
+          {navLinks.map(link => (
+            <Link
+              key={link.path}
+              to={link.path}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                isActive(link.path)
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            <MobileMenu />
-          </div>
+        <div className="md:hidden">
+          <MobileMenu />
         </div>
       </div>
     </header>
   )
 }
 
-/**
- * 移动端菜单组件
- */
 function MobileMenu() {
   const location = useLocation()
 
@@ -73,21 +64,19 @@ function MobileMenu() {
   }
 
   return (
-    <div className="relative group">
-      <button className="p-2 rounded-lg hover:bg-gray-100">
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className="group relative">
+      <button type="button" className="rounded-lg p-2 hover:bg-gray-100">
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
-      <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+      <div className="invisible absolute right-0 top-full mt-2 w-48 rounded-lg border border-gray-200 bg-white opacity-0 shadow-lg transition-all group-hover:visible group-hover:opacity-100">
         {navLinks.map(link => (
           <Link
             key={link.path}
             to={link.path}
             className={`block px-4 py-2 text-sm ${
-              isActive(link.path)
-                ? 'bg-primary-50 text-primary-700'
-                : 'text-gray-600 hover:bg-gray-50'
+              isActive(link.path) ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
             {link.label}

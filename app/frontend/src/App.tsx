@@ -8,6 +8,8 @@ import TrackingPage from './pages/TrackingPage'
 import DigestsPage from './pages/DigestsPage'
 import SourcesPage from './pages/SourcesPage'
 import DashboardPage from './pages/DashboardPage'
+import AnalysisTemplatesPage from './pages/AnalysisTemplatesPage'
+import AnalysisResultsPage from './pages/AnalysisResultsPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 function App() {
@@ -20,6 +22,8 @@ function App() {
             <Route path="workspace" element={<WorkspacePage />} />
             <Route path="activities" element={<ActivitiesPage />} />
             <Route path="activities/:id" element={<ActivityDetailPage />} />
+            <Route path="analysis/results" element={<AnalysisResultsPage />} />
+            <Route path="analysis/templates" element={<AnalysisTemplatesPage />} />
             <Route path="tracking" element={<TrackingPage />} />
             <Route path="digests" element={<DigestsPage />} />
             <Route path="sources" element={<SourcesPage />} />

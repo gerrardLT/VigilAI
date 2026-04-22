@@ -3,16 +3,212 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ActivitiesPage from './ActivitiesPage'
 
+const setFilters = vi.fn()
 const apiMocks = vi.hoisted(() => ({
   getSources: vi.fn(),
   createTracking: vi.fn(),
   updateTracking: vi.fn(),
+  previewDraftAnalysisTemplateResults: vi.fn(),
+  approveAgentAnalysisBatch: vi.fn(),
+  rejectAgentAnalysisBatch: vi.fn(),
+}))
+const agentAnalysisJobsHookState = vi.hoisted(() => ({
+  current: {
+    jobs: [
+      {
+        id: 'job-batch-1',
+        trigger_type: 'scheduled',
+        scope_type: 'batch',
+        template_id: 'tpl-1',
+        route_policy: {},
+        budget_policy: {},
+        status: 'completed',
+        requested_by: null,
+        created_at: '2026-03-23T08:00:00Z',
+        finished_at: '2026-03-23T08:05:00Z',
+        item_count: 2,
+        completed_items: 2,
+        failed_items: 0,
+        needs_research_count: 1,
+      },
+    ],
+    total: 1,
+    activeJob: {
+      id: 'job-batch-1',
+      trigger_type: 'scheduled',
+      scope_type: 'batch',
+      template_id: 'tpl-1',
+      route_policy: {},
+      budget_policy: {},
+      status: 'completed',
+      requested_by: null,
+      created_at: '2026-03-23T08:00:00Z',
+      finished_at: '2026-03-23T08:05:00Z',
+      item_count: 2,
+      items: [
+        {
+          id: 'job-item-1',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-1',
+          status: 'completed',
+          needs_research: false,
+          final_draft_status: 'pass',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: null,
+          draft: {
+            status: 'pass',
+            summary: 'Safe to pursue',
+            reasons: ['Reward clarity passed'],
+            risk_flags: [],
+            structured: { confidence_band: 'high' },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+        {
+          id: 'job-item-2',
+          job_id: 'job-batch-1',
+          activity_id: 'activity-2',
+          status: 'completed',
+          needs_research: true,
+          final_draft_status: 'watch',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:05:00Z',
+          activity: null,
+          draft: {
+            status: 'watch',
+            summary: 'Needs manual review',
+            reasons: ['Solo fit is unclear'],
+            risk_flags: ['solo_unclear'],
+            structured: { confidence_band: 'medium' },
+          },
+          steps: [],
+          evidence: [],
+          reviews: [],
+        },
+      ],
+    },
+    loading: false,
+    refreshing: false,
+    error: null,
+    refetch: vi.fn(),
+    loadJob: vi.fn(),
+    createJob: vi.fn(),
+  },
+}))
+const analysisTemplateHookState = vi.hoisted(() => ({
+  current: {
+    templates: [
+      {
+        id: 'tpl-1',
+        slug: 'quick-money',
+        name: 'Quick money',
+        description: 'Focus on solo-friendly, clear-reward opportunities',
+        is_default: true,
+        tags: ['roi'],
+        layers: [
+          {
+            key: 'hard_gate',
+            label: 'Hard gate',
+            enabled: true,
+            mode: 'filter',
+            conditions: [
+              {
+                key: 'solo_friendliness',
+                label: 'Solo only',
+                enabled: true,
+                operator: 'eq',
+                value: 'solo_friendly',
+                hard_fail: true,
+                strictness: 'strict',
+              },
+            ],
+          },
+        ],
+        sort_fields: ['roi_score'],
+        created_at: '2026-03-23T08:00:00Z',
+        updated_at: '2026-03-23T08:00:00Z',
+      },
+      {
+        id: 'tpl-2',
+        slug: 'steady-trust',
+        name: 'Steady trust',
+        description: 'Prefer trustworthy and well-documented opportunities',
+        is_default: false,
+        tags: ['trust'],
+        layers: [
+          {
+            key: 'trust_gate',
+            label: 'Trust gate',
+            enabled: true,
+            mode: 'filter',
+            conditions: [
+              {
+                key: 'trust_risk_level',
+                label: 'Low risk only',
+                enabled: true,
+                operator: 'in',
+                value: ['low', 'medium'],
+                hard_fail: true,
+                strictness: 'strict',
+              },
+            ],
+          },
+        ],
+        sort_fields: ['trust_score'],
+        created_at: '2026-03-23T09:00:00Z',
+        updated_at: '2026-03-23T09:00:00Z',
+      },
+    ],
+    defaultTemplate: {
+      id: 'tpl-1',
+      slug: 'quick-money',
+      name: 'Quick money',
+      description: 'Focus on solo-friendly, clear-reward opportunities',
+      is_default: true,
+      tags: ['roi'],
+      layers: [
+        {
+          key: 'hard_gate',
+          label: 'Hard gate',
+          enabled: true,
+          mode: 'filter',
+          conditions: [
+            {
+              key: 'solo_friendliness',
+              label: 'Solo only',
+              enabled: true,
+              operator: 'eq',
+              value: 'solo_friendly',
+              hard_fail: true,
+              strictness: 'strict',
+            },
+          ],
+        },
+      ],
+      sort_fields: ['roi_score'],
+      created_at: '2026-03-23T08:00:00Z',
+      updated_at: '2026-03-23T08:00:00Z',
+    },
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    createTemplate: vi.fn(),
+    duplicateTemplate: vi.fn(),
+    activateTemplate: vi.fn(),
+  },
 }))
 
 const refetch = vi.fn()
 
 vi.mock('../services/api', () => ({
   api: apiMocks,
+}))
+
+vi.mock('../hooks/useAnalysisTemplates', () => ({
+  useAnalysisTemplates: () => analysisTemplateHookState.current,
 }))
 
 vi.mock('../hooks/useActivities', () => ({
@@ -37,6 +233,7 @@ vi.mock('../hooks/useActivities', () => ({
         deadline_level: 'urgent',
         trust_level: 'high',
         updated_fields: [],
+        analysis_status: 'passed',
         is_tracking: false,
         is_favorited: false,
         status: 'upcoming',
@@ -62,6 +259,7 @@ vi.mock('../hooks/useActivities', () => ({
         deadline_level: 'soon',
         trust_level: 'medium',
         updated_fields: [],
+        analysis_status: 'watch',
         is_tracking: true,
         is_favorited: false,
         status: 'upcoming',
@@ -81,14 +279,19 @@ vi.mock('../hooks/useActivities', () => ({
       search: '',
       deadline_level: '',
       tracking_state: '',
+      analysis_status: '',
       sort_by: 'score',
       sort_order: 'desc',
       page: 1,
     },
-    setFilters: vi.fn(),
+    setFilters,
     setPage: vi.fn(),
     refetch,
   }),
+}))
+
+vi.mock('../hooks/useAgentAnalysisJobs', () => ({
+  useAgentAnalysisJobs: () => agentAnalysisJobsHookState.current,
 }))
 
 describe('Opportunity pool page', () => {
@@ -109,6 +312,38 @@ describe('Opportunity pool page', () => {
     ])
     apiMocks.createTracking.mockResolvedValue({})
     apiMocks.updateTracking.mockResolvedValue({})
+    apiMocks.previewDraftAnalysisTemplateResults.mockResolvedValue({
+      template_id: 'tpl-1-draft',
+      total: 2,
+      passed: 1,
+      watch: 0,
+      rejected: 1,
+      items: [
+        {
+          activity_id: 'activity-1',
+          status: 'passed',
+          failed_layer: null,
+          summary_reasons: ['Reward clarity passed'],
+          layer_results: [],
+        },
+        {
+          activity_id: 'activity-2',
+          status: 'rejected',
+          failed_layer: 'hard_gate',
+          summary_reasons: ['Solo only failed hard gate'],
+          layer_results: [],
+        },
+      ],
+    })
+    analysisTemplateHookState.current.createTemplate.mockResolvedValue({
+      ...analysisTemplateHookState.current.defaultTemplate,
+      id: 'tpl-3',
+      slug: 'adjusted-quick-money',
+      name: 'Adjusted quick money',
+      is_default: false,
+    })
+    apiMocks.approveAgentAnalysisBatch.mockResolvedValue([])
+    apiMocks.rejectAgentAnalysisBatch.mockResolvedValue([])
   })
 
   it('renders the V2 opportunity pool and supports batch tracking/favorite actions', async () => {
@@ -140,5 +375,130 @@ describe('Opportunity pool page', () => {
       })
     })
     expect(apiMocks.updateTracking).toHaveBeenCalledWith('activity-2', { is_favorited: true })
+  })
+
+  it('shows the active AI template and lets the user switch analysis status filters', () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('opportunity-pool-active-template')).toHaveTextContent('快钱优先')
+
+    fireEvent.click(screen.getByTestId('analysis-status-filter-passed'))
+    expect(setFilters).toHaveBeenCalledWith({ analysis_status: 'passed' })
+
+    fireEvent.click(screen.getByTestId('analysis-status-filter-cleared'))
+    expect(setFilters).toHaveBeenCalledWith({ analysis_status: '' })
+  })
+
+  it('applies temporary rule adjustments and refreshes the visible AI verdicts', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByTestId('opportunity-pool-draft-banner')).toHaveTextContent('当前模板 快钱优先')
+    expect(screen.getByText('仅限单人')).toBeInTheDocument()
+    expect(screen.getByText('单人友好度 · 等于')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('opportunity-pool-condition-enabled-tpl-1-0-0'))
+
+    await waitFor(() => {
+      expect(apiMocks.previewDraftAnalysisTemplateResults).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'tpl-1-draft',
+          activity_ids: ['activity-1', 'activity-2'],
+        })
+      )
+    })
+
+    expect(await screen.findByTestId('opportunity-pool-draft-banner')).toHaveTextContent('临时调整已生效')
+    expect(screen.getByTestId('opportunity-pool-draft-preview')).toHaveTextContent('1')
+    expect(screen.getAllByTestId('activity-card-analysis-status')[1]).toHaveTextContent('淘汰')
+    expect(screen.getByText('Solo only failed hard gate')).toBeInTheDocument()
+  })
+
+  it('can save temporary adjustments as a new template', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Adjusted quick money')
+
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByTestId('opportunity-pool-condition-enabled-tpl-1-0-0'))
+    fireEvent.click(screen.getByTestId('save-draft-as-template-button'))
+
+    await waitFor(() => {
+      expect(analysisTemplateHookState.current.createTemplate).toHaveBeenCalledWith(
+        'Adjusted quick money',
+        expect.objectContaining({
+          id: 'tpl-1',
+          layers: [
+            expect.objectContaining({
+              conditions: [
+                expect.objectContaining({
+                  enabled: false,
+                }),
+              ],
+            }),
+          ],
+        })
+      )
+    })
+
+    await waitFor(() => {
+      expect(analysisTemplateHookState.current.activateTemplate).toHaveBeenCalledWith('tpl-3')
+    })
+  })
+
+  it('allows switching the active template from the opportunity pool', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.change(screen.getByTestId('opportunity-pool-template-switcher'), {
+      target: { value: 'tpl-2' },
+    })
+
+    await waitFor(() => {
+      expect(analysisTemplateHookState.current.activateTemplate).toHaveBeenCalledWith('tpl-2')
+    })
+  })
+
+  it('shows the latest batch job banner and draft-only filters', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByTestId('agent-analysis-job-banner')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-analysis-filter-draft-only')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-analysis-job-banner')).toHaveTextContent('job-batch-1')
+  })
+
+  it('supports batch approval from the opportunity pool', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByTestId('select-activity-1'))
+    fireEvent.click(screen.getByTestId('select-activity-2'))
+    fireEvent.click(screen.getByTestId('agent-analysis-batch-approve'))
+
+    await waitFor(() => {
+      expect(apiMocks.approveAgentAnalysisBatch).toHaveBeenCalledWith(
+        ['job-item-1', 'job-item-2'],
+        { review_note: 'Batch approved from opportunity pool' }
+      )
+    })
   })
 })

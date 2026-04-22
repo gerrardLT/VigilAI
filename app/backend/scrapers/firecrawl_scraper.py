@@ -32,6 +32,7 @@ from models import Activity, Category
 from config import USER_AGENTS, MAX_RETRIES
 from utils.error_handler import ErrorHandler
 from utils.api_key_pool import ApiKeyPool
+from utils.content_cleaning import build_description_from_text, clean_detail_content, looks_like_noisy_scraped_text
 
 logger = logging.getLogger(__name__)
 
@@ -464,6 +465,11 @@ class FirecrawlScraper(ABC):
             cleaned = cleaned[:10000] + "\n\n...(内容已截断)"
         
         return cleaned.strip()
+
+    # Override the legacy implementation above with the shared cleaner so
+    # firecrawl detail pages and stored rows use the same normalization rules.
+    def _clean_detail_content(self, content: str) -> str:
+        return clean_detail_content(content)
     
     async def enrich_activities_with_details(
         self, 
@@ -510,6 +516,48 @@ class FirecrawlScraper(ABC):
             else:
                 enriched.append(activity)
         
+        logger.info(f"Enriched {count} activities with detail content")
+        return enriched
+
+    async def enrich_activities_with_details(
+        self,
+        activities: List[Activity],
+        max_count: int = 10,
+        delay_between: float = 2.0
+    ) -> List[Activity]:
+        enriched = []
+        count = 0
+
+        for activity in activities:
+            if count < max_count and activity.url:
+                logger.info(f"Fetching detail for: {activity.title}")
+
+                try:
+                    detail_content = await self.fetch_detail_content(activity.url)
+                    if detail_content:
+                        activity_dict = activity.model_dump()
+                        activity_dict['full_content'] = detail_content
+                        if not activity.description or looks_like_noisy_scraped_text(activity.description):
+                            detail_excerpt = build_description_from_text(
+                                detail_content,
+                                title=activity.title,
+                                max_length=500,
+                            )
+                            if detail_excerpt:
+                                activity_dict['description'] = detail_excerpt
+                        enriched.append(Activity(**activity_dict))
+                        count += 1
+
+                        if count < max_count:
+                            await asyncio.sleep(delay_between)
+                    else:
+                        enriched.append(activity)
+                except Exception as e:
+                    logger.error(f"Failed to fetch detail for {activity.title}: {e}")
+                    enriched.append(activity)
+            else:
+                enriched.append(activity)
+
         logger.info(f"Enriched {count} activities with detail content")
         return enriched
     

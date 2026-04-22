@@ -1,0 +1,542 @@
+[
+  {
+    "id": "solo-fast-bounty",
+    "context": {
+      "activity_id": "activity-solo-fast-bounty",
+      "source_id": "source-official",
+      "content": {
+        "title": "Solo API Security Bounty",
+        "description": "Guaranteed fast payout for individual contributors.",
+        "full_content": "Official program with clear reward mechanics and lightweight solo tasks.",
+        "full_text": "Solo API Security Bounty\n\nGuaranteed fast payout for individual contributors.\n\nOfficial program with clear reward mechanics and lightweight solo tasks.",
+        "url": "https://example.com/solo-fast-bounty",
+        "category": "bounty",
+        "summary": "Strong solo-fit payout opportunity.",
+        "source_name": "Official Source"
+      },
+      "source_health": {
+        "status": "success",
+        "health_score": 92,
+        "freshness_level": "fresh",
+        "last_success_age_hours": 6,
+        "needs_attention": false,
+        "activity_count": 18
+      },
+      "tracking": {
+        "is_tracking": false,
+        "is_favorited": false,
+        "activity_status": "upcoming"
+      },
+      "heuristic_signals": {
+        "solo_friendliness": "solo_friendly",
+        "reward_clarity": "high",
+        "reward_clarity_score": 3,
+        "effort_level": "low",
+        "payout_speed": "14d",
+        "source_trust": "high",
+        "trust_score": 88,
+        "roi_score": 90,
+        "roi_level": "high",
+        "_confidence": {
+          "solo_friendliness": "high",
+          "reward_clarity": "high",
+          "roi_level": "high",
+          "source_trust": "high"
+        }
+      },
+      "metadata": {
+        "deadline_level": "soon",
+        "prize_amount": 1200,
+        "organizer": "Official Source",
+        "template_id": "tpl-money-first"
+      },
+      "current_snapshot": null
+    },
+    "screening_payload": {
+      "status": "pass",
+      "summary": "High-signal solo bounty with clear rewards.",
+      "reasons": [
+        "Reward terms are explicit.",
+        "Solo participation is fully supported."
+      ],
+      "recommended_action": "queue_for_review",
+      "confidence": 0.89,
+      "structured": {
+        "should_deep_research": false,
+        "reward_clarity": "high",
+        "effort_level": "low",
+        "payout_speed": "14d",
+        "source_credibility": "high",
+        "solo_fit": "solo_friendly",
+        "reward_estimate_present": true
+      }
+    },
+    "research_policy": {
+      "default_mode": "off",
+      "max_urls_per_item": 2
+    },
+    "research_documents": [],
+    "verdict_payload": {},
+    "safety_policy": {
+      "writeback_mode": "human_review"
+    },
+    "expected": {
+      "status": "pass",
+      "risk_flags": []
+    }
+  },
+  {
+    "id": "evidence-upgrades-watch",
+    "context": {
+      "activity_id": "activity-evidence-upgrades-watch",
+      "source_id": "source-official",
+      "content": {
+        "title": "Documented Enterprise Bug Bounty",
+        "description": "Reward cap needs confirmation but official docs exist.",
+        "full_content": "Opportunity looks real, yet the payout schedule needs evidence from linked material.",
+        "full_text": "Documented Enterprise Bug Bounty\n\nReward cap needs confirmation but official docs exist.\n\nOpportunity looks real, yet the payout schedule needs evidence from linked material.",
+        "url": "https://example.com/evidence-upgrades-watch",
+        "category": "bounty",
+        "summary": "Needs research before promotion.",
+        "source_name": "Enterprise Security"
+      },
+      "source_health": {
+        "status": "success",
+        "health_score": 86,
+        "freshness_level": "fresh",
+        "last_success_age_hours": 10,
+        "needs_attention": false,
+        "activity_count": 14
+      },
+      "tracking": {
+        "is_tracking": true,
+        "is_favorited": true,
+        "activity_status": "upcoming"
+      },
+      "heuristic_signals": {
+        "solo_friendliness": "solo_friendly",
+        "reward_clarity": "medium",
+        "reward_clarity_score": 2,
+        "effort_level": "medium",
+        "payout_speed": "21d",
+        "source_trust": "high",
+        "trust_score": 84,
+        "roi_score": 68,
+        "roi_level": "medium",
+        "_confidence": {
+          "solo_friendliness": "high",
+          "reward_clarity": "medium",
+          "roi_level": "medium",
+          "source_trust": "high"
+        }
+      },
+      "metadata": {
+        "deadline_level": "upcoming",
+        "prize_amount": 750,
+        "organizer": "Enterprise Security",
+        "template_id": "tpl-balanced"
+      },
+      "current_snapshot": null
+    },
+    "screening_payload": {
+      "status": "watch",
+      "summary": "Looks promising but needs evidence review.",
+      "reasons": [
+        "Reward cap is not explicit in the stored copy."
+      ],
+      "recommended_action": "request_deep_research",
+      "confidence": 0.72,
+      "structured": {
+        "should_deep_research": true,
+        "reward_clarity": "medium",
+        "effort_level": "medium",
+        "payout_speed": "21d",
+        "source_credibility": "high",
+        "solo_fit": "solo_friendly",
+        "reward_estimate_present": true
+      }
+    },
+    "research_policy": {
+      "default_mode": "layered",
+      "max_urls_per_item": 2,
+      "allowed_source_classes": [
+        "official",
+        "search"
+      ]
+    },
+    "research_documents": [
+      {
+        "source_type": "official",
+        "url": "https://example.com/evidence-upgrades-watch/official",
+        "title": "Official payout terms",
+        "snippet": "Official terms confirm a guaranteed minimum reward band.",
+        "trust_score": 0.92,
+        "supports_claim": true
+      },
+      {
+        "source_type": "search",
+        "url": "https://search.example.com/evidence-upgrades-watch",
+        "title": "Search summary",
+        "snippet": "Search results align with the official payout terms.",
+        "trust_score": 0.83,
+        "supports_claim": true
+      }
+    ],
+    "verdict_payload": {},
+    "safety_policy": {
+      "writeback_mode": "human_review"
+    },
+    "expected": {
+      "status": "pass",
+      "risk_flags": []
+    }
+  },
+  {
+    "id": "research-budget-blocked",
+    "context": {
+      "activity_id": "activity-research-budget-blocked",
+      "source_id": "source-search",
+      "content": {
+        "title": "Ambiguous Grant Posting",
+        "description": "Reward wording exists but caps are unclear.",
+        "full_content": "Stored content suggests value, but the reward details still need verification.",
+        "full_text": "Ambiguous Grant Posting\n\nReward wording exists but caps are unclear.\n\nStored content suggests value, but the reward details still need verification.",
+        "url": "https://example.com/research-budget-blocked",
+        "category": "grant",
+        "summary": "Research cannot complete under the current budget.",
+        "source_name": "Search Cache"
+      },
+      "source_health": {
+        "status": "success",
+        "health_score": 74,
+        "freshness_level": "aging",
+        "last_success_age_hours": 36,
+        "needs_attention": false,
+        "activity_count": 9
+      },
+      "tracking": {
+        "is_tracking": false,
+        "is_favorited": false,
+        "activity_status": "upcoming"
+      },
+      "heuristic_signals": {
+        "solo_friendliness": "unclear",
+        "reward_clarity": "medium",
+        "reward_clarity_score": 2,
+        "effort_level": "medium",
+        "payout_speed": "30d",
+        "source_trust": "medium",
+        "trust_score": 68,
+        "roi_score": 58,
+        "roi_level": "medium",
+        "_confidence": {
+          "solo_friendliness": "medium",
+          "reward_clarity": "medium",
+          "roi_level": "medium",
+          "source_trust": "medium"
+        }
+      },
+      "metadata": {
+        "deadline_level": "upcoming",
+        "prize_amount": null,
+        "organizer": "Search Cache",
+        "template_id": "tpl-layered"
+      },
+      "current_snapshot": null
+    },
+    "screening_payload": {
+      "status": "watch",
+      "summary": "Worth checking, but evidence is too thin.",
+      "reasons": [
+        "Reward evidence is incomplete."
+      ],
+      "recommended_action": "request_deep_research",
+      "confidence": 0.63,
+      "structured": {
+        "should_deep_research": true,
+        "reward_clarity": "medium",
+        "effort_level": "medium",
+        "payout_speed": "30d",
+        "source_credibility": "medium",
+        "solo_fit": "unclear",
+        "reward_estimate_present": false
+      }
+    },
+    "research_policy": {
+      "default_mode": "layered",
+      "max_urls_per_item": 0
+    },
+    "research_documents": [],
+    "verdict_payload": {},
+    "safety_policy": {
+      "writeback_mode": "human_review"
+    },
+    "expected": {
+      "status": "insufficient_evidence",
+      "risk_flags": [
+        "research_unavailable"
+      ]
+    }
+  },
+  {
+    "id": "team-only-safety-reject",
+    "context": {
+      "activity_id": "activity-team-only-safety-reject",
+      "source_id": "source-official",
+      "content": {
+        "title": "Team Innovation Challenge",
+        "description": "Reward is clear but participation is group-only.",
+        "full_content": "Official challenge page explicitly requires a team submission.",
+        "full_text": "Team Innovation Challenge\n\nReward is clear but participation is group-only.\n\nOfficial challenge page explicitly requires a team submission.",
+        "url": "https://example.com/team-only-safety-reject",
+        "category": "hackathon",
+        "summary": "Clear reward, wrong participation mode.",
+        "source_name": "Official Challenge"
+      },
+      "source_health": {
+        "status": "success",
+        "health_score": 89,
+        "freshness_level": "fresh",
+        "last_success_age_hours": 8,
+        "needs_attention": false,
+        "activity_count": 22
+      },
+      "tracking": {
+        "is_tracking": false,
+        "is_favorited": false,
+        "activity_status": "upcoming"
+      },
+      "heuristic_signals": {
+        "solo_friendliness": "team_required",
+        "reward_clarity": "high",
+        "reward_clarity_score": 3,
+        "effort_level": "medium",
+        "payout_speed": "21d",
+        "source_trust": "high",
+        "trust_score": 85,
+        "roi_score": 78,
+        "roi_level": "high",
+        "_confidence": {
+          "solo_friendliness": "high",
+          "reward_clarity": "high",
+          "roi_level": "high",
+          "source_trust": "high"
+        }
+      },
+      "metadata": {
+        "deadline_level": "soon",
+        "prize_amount": 2000,
+        "organizer": "Official Challenge",
+        "template_id": "tpl-solo"
+      },
+      "current_snapshot": null
+    },
+    "screening_payload": {
+      "status": "pass",
+      "summary": "Economically attractive, but participation shape matters.",
+      "reasons": [
+        "Rewards are attractive."
+      ],
+      "recommended_action": "queue_for_review",
+      "confidence": 0.84,
+      "structured": {
+        "should_deep_research": false,
+        "reward_clarity": "high",
+        "effort_level": "medium",
+        "payout_speed": "21d",
+        "source_credibility": "high",
+        "solo_fit": "team_required",
+        "reward_estimate_present": true
+      }
+    },
+    "research_policy": {
+      "default_mode": "off",
+      "max_urls_per_item": 1
+    },
+    "research_documents": [],
+    "verdict_payload": {},
+    "safety_policy": {
+      "writeback_mode": "human_review"
+    },
+    "expected": {
+      "status": "reject",
+      "risk_flags": [
+        "team_required"
+      ]
+    }
+  },
+  {
+    "id": "no-reward-safety-watch",
+    "context": {
+      "activity_id": "activity-no-reward-safety-watch",
+      "source_id": "source-community",
+      "content": {
+        "title": "Community Contribution Program",
+        "description": "Looks active, but payout mechanics are missing.",
+        "full_content": "Submission instructions are present, yet there is no explicit reward estimate.",
+        "full_text": "Community Contribution Program\n\nLooks active, but payout mechanics are missing.\n\nSubmission instructions are present, yet there is no explicit reward estimate.",
+        "url": "https://example.com/no-reward-safety-watch",
+        "category": "other_competition",
+        "summary": "Needs watch-level treatment because economics are vague.",
+        "source_name": "Community Board"
+      },
+      "source_health": {
+        "status": "success",
+        "health_score": 80,
+        "freshness_level": "fresh",
+        "last_success_age_hours": 5,
+        "needs_attention": false,
+        "activity_count": 11
+      },
+      "tracking": {
+        "is_tracking": false,
+        "is_favorited": false,
+        "activity_status": "upcoming"
+      },
+      "heuristic_signals": {
+        "solo_friendliness": "solo_friendly",
+        "reward_clarity": "low",
+        "reward_clarity_score": 1,
+        "effort_level": "low",
+        "payout_speed": "21d",
+        "source_trust": "high",
+        "trust_score": 82,
+        "roi_score": 61,
+        "roi_level": "medium",
+        "_confidence": {
+          "solo_friendliness": "high",
+          "reward_clarity": "medium",
+          "roi_level": "medium",
+          "source_trust": "high"
+        }
+      },
+      "metadata": {
+        "deadline_level": "later",
+        "prize_amount": null,
+        "organizer": "Community Board",
+        "template_id": "tpl-balanced"
+      },
+      "current_snapshot": null
+    },
+    "screening_payload": {
+      "status": "pass",
+      "summary": "Execution looks easy, but reward support is weak.",
+      "reasons": [
+        "Low setup friction."
+      ],
+      "recommended_action": "queue_for_review",
+      "confidence": 0.66,
+      "structured": {
+        "should_deep_research": false,
+        "reward_clarity": "low",
+        "effort_level": "low",
+        "payout_speed": "21d",
+        "source_credibility": "high",
+        "solo_fit": "solo_friendly",
+        "reward_estimate_present": false
+      }
+    },
+    "research_policy": {
+      "default_mode": "off",
+      "max_urls_per_item": 1
+    },
+    "research_documents": [],
+    "verdict_payload": {},
+    "safety_policy": {
+      "writeback_mode": "human_review"
+    },
+    "expected": {
+      "status": "watch",
+      "risk_flags": [
+        "explicit_no_reward_signal"
+      ]
+    }
+  },
+  {
+    "id": "trust-failure-safety-reject",
+    "context": {
+      "activity_id": "activity-trust-failure-safety-reject",
+      "source_id": "source-unknown",
+      "content": {
+        "title": "Unverified Sponsored Challenge",
+        "description": "Reward is advertised, but the source record is weak.",
+        "full_content": "The source has not refreshed recently and no official verification is attached.",
+        "full_text": "Unverified Sponsored Challenge\n\nReward is advertised, but the source record is weak.\n\nThe source has not refreshed recently and no official verification is attached.",
+        "url": "https://example.com/trust-failure-safety-reject",
+        "category": "bounty",
+        "summary": "Trust posture should force rejection.",
+        "source_name": "Unknown Feed"
+      },
+      "source_health": {
+        "status": "error",
+        "health_score": 18,
+        "freshness_level": "critical",
+        "last_success_age_hours": 190,
+        "needs_attention": true,
+        "activity_count": 2
+      },
+      "tracking": {
+        "is_tracking": false,
+        "is_favorited": false,
+        "activity_status": "upcoming"
+      },
+      "heuristic_signals": {
+        "solo_friendliness": "solo_friendly",
+        "reward_clarity": "high",
+        "reward_clarity_score": 3,
+        "effort_level": "medium",
+        "payout_speed": "21d",
+        "source_trust": "low",
+        "trust_score": 40,
+        "roi_score": 59,
+        "roi_level": "medium",
+        "_confidence": {
+          "solo_friendliness": "high",
+          "reward_clarity": "high",
+          "roi_level": "medium",
+          "source_trust": "medium"
+        }
+      },
+      "metadata": {
+        "deadline_level": "upcoming",
+        "prize_amount": 900,
+        "organizer": "Unknown Feed",
+        "template_id": "tpl-safety-first"
+      },
+      "current_snapshot": null
+    },
+    "screening_payload": {
+      "status": "watch",
+      "summary": "Reward exists, but trust posture is poor.",
+      "reasons": [
+        "Source verification is weak."
+      ],
+      "recommended_action": "manual_review",
+      "confidence": 0.48,
+      "structured": {
+        "should_deep_research": true,
+        "reward_clarity": "high",
+        "effort_level": "medium",
+        "payout_speed": "21d",
+        "source_credibility": "low",
+        "solo_fit": "solo_friendly",
+        "reward_estimate_present": true
+      }
+    },
+    "research_policy": {
+      "default_mode": "off",
+      "max_urls_per_item": 1
+    },
+    "research_documents": [],
+    "verdict_payload": {},
+    "safety_policy": {
+      "writeback_mode": "human_review"
+    },
+    "expected": {
+      "status": "reject",
+      "risk_flags": [
+        "obvious_trust_failure"
+      ]
+    }
+  }
+]

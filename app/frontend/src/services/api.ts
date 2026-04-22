@@ -1,6 +1,20 @@
 import type {
   ActivityListItem,
   ActivityDetail,
+  AgentAnalysisJobCreateRequest,
+  AgentAnalysisJobDetail,
+  AgentAnalysisJobItemDetail,
+  AgentAnalysisJobListResponse,
+  AgentAnalysisReviewRequest,
+  AgentAnalysisReviewResult,
+  AnalysisResultsFilters,
+  AnalysisResultsResponse,
+  AnalysisTemplate,
+  AnalysisTemplateCreateRequest,
+  AnalysisTemplateDraftPreviewRequest,
+  AnalysisTemplatePreview,
+  AnalysisTemplatePreviewResults,
+  AnalysisTemplateUpdateRequest,
   ActivityFilters,
   ActivityListResponse,
   CategoryOption,
@@ -132,6 +146,205 @@ class ApiService {
 
   async getWorkspace(signal?: AbortSignal): Promise<WorkspaceResponse> {
     return this.request<WorkspaceResponse>('/api/workspace', {}, signal)
+  }
+
+  async getAnalysisTemplates(signal?: AbortSignal): Promise<AnalysisTemplate[]> {
+    return this.request<AnalysisTemplate[]>('/api/analysis/templates', {}, signal)
+  }
+
+  async getDefaultAnalysisTemplate(signal?: AbortSignal): Promise<AnalysisTemplate> {
+    return this.request<AnalysisTemplate>('/api/analysis/templates/default', {}, signal)
+  }
+
+  async createAnalysisTemplate(
+    payload: AnalysisTemplateCreateRequest,
+    signal?: AbortSignal
+  ): Promise<AnalysisTemplate> {
+    return this.request<AnalysisTemplate>(
+      '/api/analysis/templates',
+      this.withJsonBody('POST', payload),
+      signal
+    )
+  }
+
+  async duplicateAnalysisTemplate(
+    templateId: string,
+    name: string,
+    signal?: AbortSignal
+  ): Promise<AnalysisTemplate> {
+    return this.request<AnalysisTemplate>(
+      `/api/analysis/templates/${templateId}/duplicate`,
+      this.withJsonBody('POST', { name }),
+      signal
+    )
+  }
+
+  async activateAnalysisTemplate(
+    templateId: string,
+    signal?: AbortSignal
+  ): Promise<AnalysisTemplate> {
+    return this.request<AnalysisTemplate>(
+      `/api/analysis/templates/${templateId}/activate`,
+      { method: 'POST' },
+      signal
+    )
+  }
+
+  async updateAnalysisTemplate(
+    templateId: string,
+    payload: AnalysisTemplateUpdateRequest,
+    signal?: AbortSignal
+  ): Promise<AnalysisTemplate> {
+    return this.request<AnalysisTemplate>(
+      `/api/analysis/templates/${templateId}`,
+      this.withJsonBody('PATCH', payload),
+      signal
+    )
+  }
+
+  async deleteAnalysisTemplate(
+    templateId: string,
+    signal?: AbortSignal
+  ): Promise<SuccessResponse> {
+    return this.request<SuccessResponse>(
+      `/api/analysis/templates/${templateId}`,
+      { method: 'DELETE' },
+      signal
+    )
+  }
+
+  async previewAnalysisTemplate(
+    templateId: string,
+    signal?: AbortSignal
+  ): Promise<AnalysisTemplatePreview> {
+    return this.request<AnalysisTemplatePreview>(
+      `/api/analysis/templates/${templateId}/preview`,
+      {},
+      signal
+    )
+  }
+
+  async previewDraftAnalysisTemplate(
+    payload: AnalysisTemplateDraftPreviewRequest,
+    signal?: AbortSignal
+  ): Promise<AnalysisTemplatePreview> {
+    return this.request<AnalysisTemplatePreview>(
+      '/api/analysis/templates/preview',
+      this.withJsonBody('POST', payload),
+      signal
+    )
+  }
+
+  async previewDraftAnalysisTemplateResults(
+    payload: AnalysisTemplateDraftPreviewRequest,
+    signal?: AbortSignal
+  ): Promise<AnalysisTemplatePreviewResults> {
+    return this.request<AnalysisTemplatePreviewResults>(
+      '/api/analysis/templates/preview/results',
+      this.withJsonBody('POST', payload),
+      signal
+    )
+  }
+
+  async runAnalysis(signal?: AbortSignal): Promise<{ success: boolean; processed: number }> {
+    return this.request<{ success: boolean; processed: number }>(
+      '/api/analysis/run',
+      { method: 'POST' },
+      signal
+    )
+  }
+
+  async getAnalysisResults(
+    filters: AnalysisResultsFilters = {},
+    signal?: AbortSignal
+  ): Promise<AnalysisResultsResponse> {
+    return this.request<AnalysisResultsResponse>(
+      `/api/analysis/results${this.buildQueryString(filters)}`,
+      {},
+      signal
+    )
+  }
+
+  async getAnalysisResult(activityId: string, signal?: AbortSignal): Promise<ActivityDetail> {
+    return this.request<ActivityDetail>(`/api/analysis/results/${activityId}`, {}, signal)
+  }
+
+  async createAgentAnalysisJob(
+    payload: AgentAnalysisJobCreateRequest,
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisJobDetail> {
+    return this.request<AgentAnalysisJobDetail>(
+      '/api/agent-analysis/jobs',
+      this.withJsonBody('POST', payload),
+      signal
+    )
+  }
+
+  async getAgentAnalysisJobs(signal?: AbortSignal): Promise<AgentAnalysisJobListResponse> {
+    return this.request<AgentAnalysisJobListResponse>('/api/agent-analysis/jobs', {}, signal)
+  }
+
+  async getAgentAnalysisJob(jobId: string, signal?: AbortSignal): Promise<AgentAnalysisJobDetail> {
+    return this.request<AgentAnalysisJobDetail>(
+      `/api/agent-analysis/jobs/${jobId}`,
+      {},
+      signal
+    )
+  }
+
+  async getAgentAnalysisItem(
+    itemId: string,
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisJobItemDetail> {
+    return this.request<AgentAnalysisJobItemDetail>(
+      `/api/agent-analysis/items/${itemId}`,
+      {},
+      signal
+    )
+  }
+
+  async approveAgentAnalysisItem(
+    itemId: string,
+    payload: AgentAnalysisReviewRequest = {},
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisReviewResult> {
+    return this.request<AgentAnalysisReviewResult>(
+      `/api/agent-analysis/items/${itemId}/approve`,
+      this.withJsonBody('POST', payload),
+      signal
+    )
+  }
+
+  async rejectAgentAnalysisItem(
+    itemId: string,
+    payload: AgentAnalysisReviewRequest = {},
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisReviewResult> {
+    return this.request<AgentAnalysisReviewResult>(
+      `/api/agent-analysis/items/${itemId}/reject`,
+      this.withJsonBody('POST', payload),
+      signal
+    )
+  }
+
+  async approveAgentAnalysisBatch(
+    itemIds: string[],
+    payload: AgentAnalysisReviewRequest = {},
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisReviewResult[]> {
+    return Promise.all(
+      itemIds.map(itemId => this.approveAgentAnalysisItem(itemId, payload, signal))
+    )
+  }
+
+  async rejectAgentAnalysisBatch(
+    itemIds: string[],
+    payload: AgentAnalysisReviewRequest = {},
+    signal?: AbortSignal
+  ): Promise<AgentAnalysisReviewResult[]> {
+    return Promise.all(
+      itemIds.map(itemId => this.rejectAgentAnalysisItem(itemId, payload, signal))
+    )
   }
 
   async getTracking(status?: TrackingStatus, signal?: AbortSignal): Promise<TrackingItem[]> {

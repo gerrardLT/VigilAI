@@ -1,6 +1,8 @@
 export { WorkspacePage } from './WorkspacePage'
 export { ActivitiesPage } from './ActivitiesPage'
 export { ActivityDetailPage } from './ActivityDetailPage'
+export { AnalysisResultsPage } from './AnalysisResultsPage'
+export { AnalysisTemplatesPage } from './AnalysisTemplatesPage'
 export { TrackingPage } from './TrackingPage'
 export { DigestsPage } from './DigestsPage'
 export { SourcesPage } from './SourcesPage'

@@ -1,6 +1,36 @@
-import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import fc from 'fast-check'
 import type { Activity, Prize, ActivityDates } from '../types'
+import ActivityDetailPage from './ActivityDetailPage'
+
+const apiMocks = vi.hoisted(() => ({
+  getActivity: vi.fn(),
+  getAgentAnalysisJob: vi.fn(),
+  approveAgentAnalysisItem: vi.fn(),
+  rejectAgentAnalysisItem: vi.fn(),
+}))
+
+const analysisTemplateHookState = vi.hoisted(() => ({
+  current: {
+    templates: [{ id: 'tpl-1', slug: 'quick-money', name: 'Quick money' }],
+    defaultTemplate: { id: 'tpl-1', slug: 'quick-money', name: 'Quick money' },
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    duplicateTemplate: vi.fn(),
+    activateTemplate: vi.fn(),
+  },
+}))
+
+vi.mock('../services/api', () => ({
+  api: apiMocks,
+}))
+
+vi.mock('../hooks/useAnalysisTemplates', () => ({
+  useAnalysisTemplates: () => analysisTemplateHookState.current,
+}))
 
 /**
  * Property 6: 活动详情字段显示完整性
@@ -255,5 +285,141 @@ describe('Property 6: Activity Detail Field Display Completeness', () => {
       }),
       { numRuns: 100 }
     )
+  })
+})
+
+describe('ActivityDetailPage agent-analysis workbench', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.getActivity.mockResolvedValue({
+      id: 'activity-1',
+      title: 'AI Hackathon',
+      description: 'Build an AI app.',
+      full_content: 'Long description',
+      source_id: 'devpost',
+      source_name: 'Devpost',
+      url: 'https://example.com/ai-hackathon',
+      category: 'hackathon',
+      tags: ['ai'],
+      prize: null,
+      dates: null,
+      location: null,
+      organizer: null,
+      image_url: null,
+      summary: 'Recommended for AI builders',
+      score: 8.9,
+      score_reason: 'Urgent and high trust',
+      deadline_level: 'urgent',
+      trust_level: 'high',
+      updated_fields: [],
+      analysis_fields: {
+        roi_level: 'high',
+        solo_friendliness: 'solo_friendly',
+      },
+      analysis_status: 'watch',
+      analysis_failed_layer: null,
+      analysis_summary_reasons: ['Reward clarity passed'],
+      analysis_layer_results: [],
+      analysis_score_breakdown: {},
+      analysis_current_run_id: 'job-1',
+      is_tracking: false,
+      is_favorited: false,
+      is_digest_candidate: false,
+      tracking: null,
+      timeline: [],
+      related_items: [],
+      status: 'upcoming',
+      created_at: '2026-03-23T08:00:00Z',
+      updated_at: '2026-03-23T08:00:00Z',
+    })
+    apiMocks.getAgentAnalysisJob.mockResolvedValue({
+      id: 'job-1',
+      trigger_type: 'manual',
+      scope_type: 'single',
+      template_id: 'tpl-1',
+      route_policy: {},
+      budget_policy: {},
+      status: 'completed',
+      requested_by: null,
+      created_at: '2026-03-23T08:00:00Z',
+      finished_at: '2026-03-23T08:00:10Z',
+      item_count: 1,
+      items: [
+        {
+          id: 'item-1',
+          job_id: 'job-1',
+          activity_id: 'activity-1',
+          status: 'completed',
+          needs_research: true,
+          final_draft_status: 'watch',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:00:10Z',
+          activity: null,
+          draft: {
+            status: 'watch',
+            summary: 'Need manual review',
+            reasons: ['Reward cap still needs confirmation'],
+            risk_flags: ['reward_unclear'],
+            structured: {
+              should_deep_research: true,
+              confidence_band: 'medium',
+            },
+          },
+          steps: [
+            {
+              id: 'step-1',
+              job_item_id: 'item-1',
+              step_type: 'screening',
+              step_status: 'completed',
+              output_payload: {
+                status: 'watch',
+              },
+              created_at: '2026-03-23T08:00:01Z',
+            },
+          ],
+          evidence: [
+            {
+              id: 'evidence-1',
+              job_item_id: 'item-1',
+              source_type: 'web',
+              url: 'https://example.com/rules',
+              title: 'Official rules',
+              snippet: 'Reward cap is under review',
+              created_at: '2026-03-23T08:00:05Z',
+            },
+          ],
+          reviews: [],
+        },
+      ],
+    })
+    apiMocks.approveAgentAnalysisItem.mockResolvedValue({
+      review_action: 'approved',
+      item_id: 'item-1',
+      activity_id: 'activity-1',
+      review_note: 'Looks good',
+      snapshot: null,
+    })
+    apiMocks.rejectAgentAnalysisItem.mockResolvedValue({
+      review_action: 'rejected',
+      item_id: 'item-1',
+      activity_id: 'activity-1',
+      review_note: 'Needs rewrite',
+      snapshot: null,
+    })
+  })
+
+  it('shows evidence and review actions for a completed draft', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities/activity-1']}>
+        <Routes>
+          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByTestId('agent-analysis-evidence-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-analysis-review-bar')).toBeInTheDocument()
+    expect(screen.getByText('Official rules')).toBeInTheDocument()
+    expect(screen.getByText('Reward cap still needs confirmation')).toBeInTheDocument()
   })
 })

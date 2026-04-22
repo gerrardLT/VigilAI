@@ -19,7 +19,14 @@ from dataclasses import dataclass, field
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from config import SOURCES_CONFIG, PRIORITY_INTERVALS
+from analysis.run_manager import AnalysisRunManager
+from config import (
+    ANALYSIS_SCHEDULE_MAX_ITEMS,
+    ANALYSIS_SCHEDULE_STALE_HOURS,
+    ANALYSIS_SCHEDULER_ENABLED,
+    SOURCES_CONFIG,
+    PRIORITY_INTERVALS,
+)
 from data_manager import DataManager
 from models import SourceStatus
 from scrapers import (
@@ -89,6 +96,7 @@ class TaskScheduler:
         self.scheduler = AsyncIOScheduler()
         self.scrapers: Dict[str, BaseScraper] = {}
         self._running = False
+        self.analysis_run_manager = AnalysisRunManager(data_manager=data_manager)
         
         # 爬虫状态维护 (Validates: Requirements 13.5)
         self.scraper_states: Dict[str, ScraperState] = {}
@@ -488,6 +496,18 @@ class TaskScheduler:
                 logger.error(f"Failed to refresh {source_id}: {result}")
         
         logger.info("All sources refresh completed")
+
+    async def run_scheduled_agent_analysis(self):
+        """Run scheduled batch agent-analysis when the feature flag is enabled."""
+        if not ANALYSIS_SCHEDULER_ENABLED:
+            logger.info("Scheduled agent-analysis is disabled by configuration")
+            return None
+
+        return self.analysis_run_manager.run_batch_job(
+            trigger_type="scheduled",
+            max_items=ANALYSIS_SCHEDULE_MAX_ITEMS,
+            stale_before_hours=ANALYSIS_SCHEDULE_STALE_HOURS,
+        )
     
     def get_job_count(self) -> int:
         """获取已注册的任务数量"""
