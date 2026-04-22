@@ -5,6 +5,7 @@ import { SourceCard } from '../components/SourceCard'
 import { Toast } from '../components/Toast'
 import { useSources } from '../hooks/useSources'
 import { api } from '../services/api'
+import { localizeAnalysisText } from '../utils/analysisI18n'
 
 export function SourcesPage() {
   const { sources, loading, error, refetch } = useSources()
@@ -16,10 +17,10 @@ export function SourcesPage() {
     setRefreshing(sourceId)
     try {
       const result = await api.refreshSource(sourceId)
-      setToast({ type: 'success', message: result.message })
+      setToast({ type: 'success', message: localizeAnalysisText(result.message) })
       await refetch()
     } catch (err) {
-      const message = err instanceof Error ? err.message : '刷新失败'
+      const message = err instanceof Error ? localizeAnalysisText(err.message) : '刷新失败'
       setToast({ type: 'error', message })
     } finally {
       setRefreshing(null)
@@ -30,10 +31,10 @@ export function SourcesPage() {
     setRefreshingAll(true)
     try {
       const result = await api.refreshAllSources()
-      setToast({ type: 'success', message: result.message })
+      setToast({ type: 'success', message: localizeAnalysisText(result.message) })
       await refetch()
     } catch (err) {
-      const message = err instanceof Error ? err.message : '刷新失败'
+      const message = err instanceof Error ? localizeAnalysisText(err.message) : '刷新失败'
       setToast({ type: 'error', message })
     } finally {
       setRefreshingAll(false)
@@ -54,9 +55,7 @@ export function SourcesPage() {
   const totalActivities = sources.reduce((sum, source) => sum + source.activity_count, 0)
   const avgHealthScore =
     sources.length > 0
-      ? Math.round(
-          sources.reduce((sum, source) => sum + (source.health_score ?? 0), 0) / sources.length
-        )
+      ? Math.round(sources.reduce((sum, source) => sum + (source.health_score ?? 0), 0) / sources.length)
       : 0
 
   return (
@@ -66,9 +65,7 @@ export function SourcesPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">来源健康</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            监控来源可用性、刷新时效和异常来源。
-          </p>
+          <p className="mt-2 text-sm text-gray-600">监控来源可用性、刷新时效和异常来源。</p>
         </div>
 
         <button
@@ -86,7 +83,12 @@ export function SourcesPage() {
           ) : (
             <>
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
               </svg>
               <span>刷新全部</span>
             </>
@@ -132,10 +134,12 @@ export function SourcesPage() {
                 className="flex flex-col gap-3 rounded-xl border border-rose-100 bg-white p-4 md:flex-row md:items-center md:justify-between"
               >
                 <div>
-                  <div className="font-medium text-gray-900">{source.name}</div>
+                  <div className="font-medium text-gray-900">{localizeAnalysisText(source.name)}</div>
                   <div className="mt-1 text-sm text-gray-600">
                     健康分 {source.health_score ?? 0}
-                    {source.error_message ? `，异常：${source.error_message}` : `，时效：${source.freshness_level || 'unknown'}`}
+                    {source.error_message
+                      ? `，异常：${localizeAnalysisText(source.error_message)}`
+                      : `，时效：${localizeAnalysisText(source.freshness_level || 'unknown')}`}
                   </div>
                 </div>
 
@@ -155,7 +159,7 @@ export function SourcesPage() {
 
       {sources.length === 0 ? (
         <div className="py-12 text-center">
-          <div className="mb-4 text-5xl text-gray-400">◌</div>
+          <div className="mb-4 text-5xl text-gray-400">○</div>
           <p className="text-gray-500">暂无信息源</p>
         </div>
       ) : (
@@ -171,9 +175,7 @@ export function SourcesPage() {
         </div>
       )}
 
-      <div className="text-sm text-gray-500">
-        当前覆盖活动总量: {totalActivities}
-      </div>
+      <div className="text-sm text-gray-500">当前覆盖活动总量: {totalActivities}</div>
     </div>
   )
 }

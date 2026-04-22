@@ -59,6 +59,9 @@ def create_activity(
     title: str = "Ranked Opportunity",
     url: str = "https://example.com/opportunity",
     description: str = "A high-signal opportunity worth tracking.",
+    location: str | None = "Remote",
+    prize_amount: float | None = 1000,
+    category: str = "hackathon",
     created_at: datetime | None = None,
     deadline: datetime | None = None,
 ) -> Activity:
@@ -74,10 +77,11 @@ def create_activity(
         source_id=source.id,
         source_name=source.name,
         url=url,
-        category="hackathon",
+        category=category,
         tags=["ai", "automation"],
-        prize=Prize(amount=1000, currency="USD", description="Cash prize"),
+        prize=Prize(amount=prize_amount, currency="USD", description="Cash prize") if prize_amount is not None else None,
         dates=ActivityDates(deadline=deadline),
+        location=location,
         created_at=created_at,
         updated_at=created_at,
     )
@@ -251,6 +255,8 @@ def test_workspace_aggregation_has_expected_sections(data_manager):
         "trends",
         "alert_sources",
         "first_actions",
+        "analysis_overview",
+        "blocked_opportunities",
     }
     assert workspace["overview"]["total_activities"] >= 2
     assert workspace["top_opportunities"]
@@ -258,6 +264,8 @@ def test_workspace_aggregation_has_expected_sections(data_manager):
     assert workspace["trends"]
     assert workspace["alert_sources"]
     assert workspace["first_actions"]
+    assert workspace["analysis_overview"]["total"] >= 2
+    assert isinstance(workspace["blocked_opportunities"], list)
 
 
 def test_stats_endpoint_returns_normalized_contract(client, data_manager):
@@ -384,6 +392,8 @@ def test_workspace_endpoint_returns_aggregate_sections(client, data_manager):
         "trends",
         "alert_sources",
         "first_actions",
+        "analysis_overview",
+        "blocked_opportunities",
     }
 
 
@@ -419,6 +429,69 @@ def test_activity_list_supports_tracking_and_priority_filters(data_manager):
     assert urgent_only[0].id == tracked.id
     assert trusted_total == 1
     assert trusted_only[0].id == tracked.id
+
+
+def test_activity_list_supports_extended_fixed_filters(data_manager):
+    solo = create_activity(
+        data_manager,
+        url="https://example.com/filter-solo-remote",
+        title="Solo Remote Hackathon",
+        description="Individual developers can submit a small fix remotely and receive guaranteed reward payout within 7 days.",
+        location="Remote",
+        prize_amount=1500,
+    )
+    team = create_activity(
+        data_manager,
+        source_index=1,
+        url="https://example.com/filter-team-offline",
+        title="Team Offline Contest",
+        description="Team required and long-form application review cycle with monthly payout.",
+        location="Shanghai",
+        prize_amount=200,
+    )
+    data_manager.add_activity(solo)
+    data_manager.add_activity(team)
+
+    matched, total = data_manager.get_activities(
+        filters={
+            "prize_range": "500-2000",
+            "solo_friendliness": "solo_friendly",
+            "reward_clarity": "high",
+            "effort_level": "low",
+            "remote_mode": "remote",
+        }
+    )
+
+    assert total == 1
+    assert matched[0].id == solo.id
+
+
+def test_activity_list_endpoint_accepts_extended_fixed_filters(client, data_manager):
+    activity = create_activity(
+        data_manager,
+        url="https://example.com/api-fixed-filters",
+        title="Solo Remote Builder Sprint",
+        description="Individual developers can join remotely for a small fix with guaranteed reward payout within 7 days.",
+        location="Online / Remote",
+        prize_amount=1000,
+    )
+    data_manager.add_activity(activity)
+
+    response = client.get(
+        "/api/activities",
+        params={
+            "prize_range": "500-2000",
+            "solo_friendliness": "solo_friendly",
+            "reward_clarity": "high",
+            "effort_level": "low",
+            "remote_mode": "remote",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["id"] == activity.id
 
 
 def test_activity_list_endpoint_accepts_v2_filters(client, data_manager):

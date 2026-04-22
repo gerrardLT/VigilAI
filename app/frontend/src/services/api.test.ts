@@ -68,6 +68,27 @@ describe('ApiService', () => {
     expect(requestUrl.searchParams.get('page_size')).toBe('10')
   })
 
+  it('serializes extended activity filters into the activities query string', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({ total: 0, page: 1, page_size: 20, items: [] })
+    ) as typeof fetch
+
+    await api.getActivities({
+      prize_range: '500-2000',
+      solo_friendliness: 'solo_friendly',
+      reward_clarity: 'high',
+      effort_level: 'low',
+      remote_mode: 'remote',
+    })
+
+    const requestUrl = new URL((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0])
+    expect(requestUrl.searchParams.get('prize_range')).toBe('500-2000')
+    expect(requestUrl.searchParams.get('solo_friendliness')).toBe('solo_friendly')
+    expect(requestUrl.searchParams.get('reward_clarity')).toBe('high')
+    expect(requestUrl.searchParams.get('effort_level')).toBe('low')
+    expect(requestUrl.searchParams.get('remote_mode')).toBe('remote')
+  })
+
   it('requests the workspace aggregate endpoint', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -293,6 +314,35 @@ describe('ApiService', () => {
     expect(secondCall[0]).toBe('http://localhost:8000/api/analysis/results/activity-1')
     expect(results.items[0].analysis_status).toBe('passed')
     expect(detail.id).toBe('activity-1')
+  })
+
+  it('posts AI filter requests for opportunities', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        query: '只保留适合独立开发者的机会',
+        parsed_intent_summary: '筛选适合单人开发的机会',
+        candidate_count: 2,
+        matched_count: 1,
+        discarded_count: 1,
+        items: [],
+      })
+    ) as typeof fetch
+
+    const result = await api.aiFilterActivities({
+      base_filters: { category: 'hackathon', prize_range: '500-2000' },
+      query: '只保留适合独立开发者的机会',
+    })
+
+    const [requestUrl, requestInit] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(requestUrl).toBe('http://localhost:8000/api/activities/ai-filter')
+    expect(requestInit).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        base_filters: { category: 'hackathon', prize_range: '500-2000' },
+        query: '只保留适合独立开发者的机会',
+      }),
+    })
+    expect(result.matched_count).toBe(1)
   })
 
   it('creates tracking items with a JSON POST body', async () => {

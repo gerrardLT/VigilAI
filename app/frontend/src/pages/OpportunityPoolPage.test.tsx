@@ -9,6 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   createTracking: vi.fn(),
   updateTracking: vi.fn(),
   previewDraftAnalysisTemplateResults: vi.fn(),
+  aiFilterActivities: vi.fn(),
 }))
 const analysisTemplateHookState = vi.hoisted(() => ({
   current: {
@@ -190,6 +191,12 @@ vi.mock('../hooks/useActivities', () => ({
       source_id: '',
       search: '',
       deadline_level: '',
+      trust_level: '',
+      prize_range: '',
+      solo_friendliness: '',
+      reward_clarity: '',
+      effort_level: '',
+      remote_mode: '',
       tracking_state: '',
       analysis_status: '',
       sort_by: 'score',
@@ -250,6 +257,44 @@ describe('Opportunity pool page', () => {
       name: 'Adjusted quick money',
       is_default: false,
     })
+    apiMocks.aiFilterActivities.mockResolvedValue({
+      query: '只保留适合独立开发者的机会',
+      parsed_intent_summary: '筛选适合单人开发的机会',
+      candidate_count: 2,
+      matched_count: 1,
+      discarded_count: 1,
+      items: [
+        {
+          id: 'activity-1',
+          title: 'AI Hackathon',
+          description: 'Build an AI prototype.',
+          source_id: 'devpost',
+          source_name: 'Devpost',
+          url: 'https://example.com/a',
+          category: 'hackathon',
+          tags: ['ai'],
+          prize: null,
+          dates: { start_date: null, end_date: null, deadline: null },
+          location: null,
+          organizer: null,
+          summary: 'High priority',
+          score: 9.1,
+          score_reason: 'Recommended first',
+          deadline_level: 'urgent',
+          trust_level: 'high',
+          updated_fields: [],
+          analysis_status: 'passed',
+          is_tracking: false,
+          is_favorited: false,
+          status: 'upcoming',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:00:00Z',
+          ai_match_reason: '适合单人开发，奖励明确',
+          ai_match_confidence: 'high',
+          uncertainties: [],
+        },
+      ],
+    })
   })
 
   it('renders the V2 opportunity pool and supports batch tracking/favorite actions', async () => {
@@ -261,9 +306,15 @@ describe('Opportunity pool page', () => {
 
     expect(screen.getByText('机会池')).toBeInTheDocument()
     expect(screen.getByText('按推荐优先级筛选、批量处理并推进机会。')).toBeInTheDocument()
+    expect(screen.queryByTestId('opportunity-pool-rules-panel')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('batch-track-button')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '高级调整' }))
+    expect(screen.getByTestId('opportunity-pool-rules-panel')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('select-activity-1'))
     fireEvent.click(screen.getByTestId('select-activity-2'))
+    expect(screen.getByTestId('batch-track-button')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('batch-track-button'))
 
     await waitFor(() => {
@@ -307,6 +358,7 @@ describe('Opportunity pool page', () => {
     )
 
     expect(await screen.findByTestId('opportunity-pool-draft-banner')).toHaveTextContent('当前模板 快钱优先')
+    fireEvent.click(screen.getByRole('button', { name: '高级调整' }))
     expect(screen.getByText('仅限单人')).toBeInTheDocument()
     expect(screen.getByText('单人友好度 · 等于')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('opportunity-pool-condition-enabled-tpl-1-0-0'))
@@ -323,7 +375,7 @@ describe('Opportunity pool page', () => {
     expect(await screen.findByTestId('opportunity-pool-draft-banner')).toHaveTextContent('临时调整已生效')
     expect(screen.getByTestId('opportunity-pool-draft-preview')).toHaveTextContent('1')
     expect(screen.getAllByTestId('activity-card-analysis-status')[1]).toHaveTextContent('淘汰')
-    expect(screen.getByText('Solo only failed hard gate')).toBeInTheDocument()
+    expect(screen.getByText('未通过仅限单人的硬门槛')).toBeInTheDocument()
   })
 
   it('can save temporary adjustments as a new template', async () => {
@@ -335,6 +387,7 @@ describe('Opportunity pool page', () => {
       </MemoryRouter>
     )
 
+    fireEvent.click(screen.getByRole('button', { name: '高级调整' }))
     fireEvent.click(screen.getByTestId('opportunity-pool-condition-enabled-tpl-1-0-0'))
     fireEvent.click(screen.getByTestId('save-draft-as-template-button'))
 
@@ -375,5 +428,48 @@ describe('Opportunity pool page', () => {
     await waitFor(() => {
       expect(analysisTemplateHookState.current.activateTemplate).toHaveBeenCalledWith('tpl-2')
     })
+  })
+
+  it('renders the new Chinese fixed filters and applies them', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('奖金区间')).toBeInTheDocument()
+    expect(screen.getByText('独立开发者友好')).toBeInTheDocument()
+    expect(screen.getAllByText('线上/远程').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '适合单人' }))
+
+    await waitFor(() => {
+      expect(setFilters).toHaveBeenCalledWith(expect.objectContaining({
+        solo_friendliness: 'solo_friendly',
+      }))
+    })
+  })
+
+  it('applies AI filtering and only renders matched opportunities', async () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <ActivitiesPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.change(
+      screen.getByPlaceholderText('例如：只保留适合独立开发者、奖金明确、两周内截止的线上机会'),
+      { target: { value: '只保留适合独立开发者的机会' } }
+    )
+    fireEvent.click(screen.getByRole('button', { name: '开始 AI 精筛' }))
+
+    expect(await screen.findByText('当前为 AI 精筛结果，仅保留符合条件的机会')).toBeInTheDocument()
+    expect(await screen.findByText('适合单人开发，奖励明确')).toBeInTheDocument()
+    expect(screen.queryByText('Grant Program')).not.toBeInTheDocument()
+    expect(apiMocks.aiFilterActivities).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: '只保留适合独立开发者的机会',
+      })
+    )
   })
 })

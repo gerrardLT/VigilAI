@@ -22,7 +22,7 @@ export function useWorkspace(): UseWorkspaceResult {
       const data = await api.getWorkspace()
       setWorkspace(data)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load workspace'
+      const message = err instanceof Error ? err.message : '加载工作台失败'
       setError(message)
       setWorkspace(null)
     } finally {

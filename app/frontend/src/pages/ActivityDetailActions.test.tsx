@@ -123,7 +123,7 @@ describe('ActivityDetailPage tracking actions', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
+      expect(screen.getByText('AI 黑客松')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByTestId('detail-track-button'))
@@ -148,7 +148,7 @@ describe('ActivityDetailPage tracking actions', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
+      expect(screen.getByText('AI 黑客松')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByTestId('detail-digest-button'))
@@ -173,11 +173,12 @@ describe('ActivityDetailPage tracking actions', () => {
 
     expect(screen.getByTestId('activity-analysis-status')).toHaveTextContent('通过')
     expect(screen.getByTestId('activity-analysis-template-context')).toHaveTextContent('快钱优先')
-    expect(screen.getAllByText('Reward clarity passed')).toHaveLength(2)
-    expect(screen.getAllByText('ROI score passed')).toHaveLength(2)
-    expect(screen.getByTestId('activity-analysis-chain')).toHaveTextContent('Hard gate')
-    expect(screen.getByTestId('activity-analysis-chain')).toHaveTextContent('ROI')
-    expect(screen.getByTestId('activity-analysis-fields')).toHaveTextContent('solo_friendliness')
+    expect(screen.getAllByText('奖励清晰度通过')).toHaveLength(2)
+    expect(screen.getAllByText('回报评分通过')).toHaveLength(2)
+    expect(screen.getByTestId('activity-analysis-chain')).toHaveTextContent('硬门槛')
+    expect(screen.getByTestId('activity-analysis-chain')).toHaveTextContent('回报效率')
+    expect(screen.getByTestId('activity-analysis-fields')).toHaveTextContent('单人友好度')
+    expect(screen.getByTestId('activity-analysis-fields')).toHaveTextContent('适合单人')
     expect(screen.getByTestId('activity-analysis-adjust-link')).toHaveAttribute(
       'href',
       '/activities?analysis_status=passed'

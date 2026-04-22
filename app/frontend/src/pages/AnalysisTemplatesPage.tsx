@@ -628,11 +628,11 @@ export function AnalysisTemplatesPage() {
                         <div className="mt-1 text-xl font-semibold text-emerald-700">{deleteImpact.preview.passed}</div>
                       </div>
                       <div className="rounded-xl bg-white p-3">
-                        <div className="text-xs text-amber-600">观察</div>
+                        <div className="text-xs text-amber-600">待观察</div>
                         <div className="mt-1 text-xl font-semibold text-amber-700">{deleteImpact.preview.watch}</div>
                       </div>
                       <div className="rounded-xl bg-white p-3">
-                        <div className="text-xs text-rose-600">拦截</div>
+                        <div className="text-xs text-rose-600">淘汰</div>
                         <div className="mt-1 text-xl font-semibold text-rose-700">{deleteImpact.preview.rejected}</div>
                       </div>
                     </div>
@@ -893,7 +893,7 @@ export function AnalysisTemplatesPage() {
                                         })
                                       }
                                     />
-                                    硬拦截
+                                    硬性淘汰
                                   </label>
 
                                   <label className="grid gap-1 text-xs text-slate-600">
@@ -1032,11 +1032,11 @@ export function AnalysisTemplatesPage() {
                       <div className="mt-1 text-xl font-semibold text-emerald-700">{preview.passed}</div>
                     </div>
                     <div className="rounded-xl bg-white p-3">
-                      <div className="text-xs text-amber-600">观察</div>
+                      <div className="text-xs text-amber-600">待观察</div>
                       <div className="mt-1 text-xl font-semibold text-amber-700">{preview.watch}</div>
                     </div>
                     <div className="rounded-xl bg-white p-3">
-                      <div className="text-xs text-rose-600">拦截</div>
+                      <div className="text-xs text-rose-600">淘汰</div>
                       <div className="mt-1 text-xl font-semibold text-rose-700">{preview.rejected}</div>
                     </div>
                   </div>

@@ -32,7 +32,11 @@ NOISE_LINE_PATTERNS = [
 NOISE_TEXT_PATTERNS = [
     re.compile(r"!\["),
     re.compile(r"\[[^\]]+\]\(([^)]+)\)"),
+    re.compile(r"\)\]\("),
+    re.compile(r"\]\("),
     re.compile(r"%[0-9A-Fa-f]{2}"),
+    re.compile(r"\b[a-z]+=(?:[^&\s]+&){1,}[^&\s]+", re.IGNORECASE),
+    re.compile(r"\bresize=\d+x\d+\b", re.IGNORECASE),
     re.compile(r"\b\d+\(current\)\b", re.IGNORECASE),
     re.compile(r"\bHomepage recommendation\b", re.IGNORECASE),
     re.compile(r"\b下载APP\b", re.IGNORECASE),
@@ -95,14 +99,26 @@ def normalize_markdown_text(text: str, *, preserve_newlines: bool = False) -> st
 
     cleaned = html.unescape(unquote(text))
     cleaned = cleaned.replace("\\\\", " ")
+    cleaned = re.sub(r"\)\]\(|\]\(|\)\[|\]\[", " ", cleaned)
     cleaned = MARKDOWN_IMAGE_RE.sub(" ", cleaned)
     cleaned = MARKDOWN_LINK_RE.sub(r"\1", cleaned)
     cleaned = URL_RE.sub(" ", cleaned)
     cleaned = DOMAIN_FRAGMENT_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\b[a-z]+=(?:[^&\s]+&){1,}[^&\s]+", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bresize=\d+x\d+\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"(^|\s)(?:关于我们|联系我们|原文链接|更多|下载APP|回到顶部|Homepage recommendation)(?=\s|$)",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     cleaned = cleaned.replace("`", " ")
     cleaned = re.sub(r"[>#*_]+", " ", cleaned)
     cleaned = cleaned.replace("|", " ")
     cleaned = cleaned.replace("·", " ")
+    cleaned = re.sub(r"[\[\]]+", " ", cleaned)
+    cleaned = re.sub(r"(?:(?<=\s)|^)[()]+(?=\s|$)", " ", cleaned)
+    cleaned = re.sub(r"\(\s*\)", " ", cleaned)
 
     whitespace_pattern = r"[^\S\r\n]+" if preserve_newlines else r"\s+"
     cleaned = re.sub(whitespace_pattern, " ", cleaned)
@@ -130,6 +146,7 @@ def looks_like_invalid_activity_candidate(
     normalized_description = normalize_markdown_text(description or "")
     title_lower = normalized_title.lower()
     description_lower = normalized_description.lower()
+    raw_description_lower = (description or "").lower()
     url_lower = (url or "").lower()
     raw_title = title or ""
 
@@ -154,7 +171,7 @@ def looks_like_invalid_activity_candidate(
     if any(pattern.search(title_lower) for pattern in source_title_patterns):
         return True
 
-    if source_id == "zcool" and "homepage recommendation" in description_lower:
+    if source_id == "zcool" and "homepage recommendation" in raw_description_lower:
         return True
     if source_id == "behance" and ("gallery/" in url_lower and title_lower.startswith("link to project")):
         return True
@@ -202,6 +219,13 @@ def build_description_from_text(text: str | None, *, title: str | None = None, m
         return ""
 
     cleaned = normalize_markdown_text(text)
+    cleaned = re.sub(
+        r"(?:^|\s)(?:关于我们|联系我们|原文链接|更多|下载APP|回到顶部|Homepage recommendation)(?:\s|$)",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
     cleaned = _trim_listing_noise(cleaned)
     cleaned = TIME_PREFIX_RE.sub("", cleaned)
     cleaned = DATE_PREFIX_RE.sub("", cleaned)

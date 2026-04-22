@@ -18,6 +18,7 @@ from config import LOW_SIGNAL_FIRECRAWL_SOURCES, SOURCES_CONFIG  # noqa: E402
 from data_manager import DataManager  # noqa: E402
 from models import Activity  # noqa: E402
 from scrapers.universal_scraper import UniversalScraper  # noqa: E402
+from utils.content_cleaning import build_description_from_text, clean_detail_content, looks_like_noisy_scraped_text  # noqa: E402
 
 
 @pytest.fixture
@@ -85,6 +86,30 @@ def test_clean_detail_content_removes_markdown_artifacts_and_site_noise():
     assert "![封面]" not in cleaned
     assert "关于我们" not in cleaned
     assert "联系我们" not in cleaned
+
+
+def test_content_cleaning_strips_broken_markdown_tokens_and_asset_query_fragments():
+    raw_content = """
+)]( 开源生态大会暨 PostgreSQL 高峰论坛
+rmat=webp&resize=400x300
+[更多](https://example.com/more)
+官方议程已经公布，适合数据库开发者现场交流。
+"""
+
+    cleaned = clean_detail_content(raw_content)
+    description = build_description_from_text(raw_content, title="开源生态大会暨 PostgreSQL 高峰论坛")
+
+    assert looks_like_noisy_scraped_text(raw_content) is True
+    assert "开源生态大会暨 PostgreSQL 高峰论坛" in cleaned
+    assert "官方议程已经公布" in cleaned
+    assert "开源生态大会暨 PostgreSQL 高峰论坛" in description
+    assert "官方议程已经公布" in description
+    assert ")](" not in cleaned
+    assert "](" not in cleaned
+    assert "rmat=webp" not in cleaned
+    assert "resize=400x300" not in cleaned
+    assert "https://example.com/more" not in cleaned
+    assert "更多" not in description
 
 
 def test_enrich_activities_with_details_replaces_noisy_listing_description_with_detail_excerpt(monkeypatch):

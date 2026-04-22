@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useCallback, ReactNode } from 'react'
+import { useState, useEffect, createContext, useCallback, ReactNode } from 'react'
 
 type ToastType = 'success' | 'error' | 'info' | 'warning'
 
@@ -102,20 +102,6 @@ export function ToastContainer({ children }: { children: ReactNode }) {
       </div>
     </ToastContext.Provider>
   )
-}
-
-/**
- * 使用Toast的Hook
- */
-/**
- * 使用Toast的Hook
- */
-export function useToast() {
-  const context = useContext(ToastContext)
-  if (!context) {
-    throw new Error('useToast must be used within a ToastContainer')
-  }
-  return context
 }
 
 /**

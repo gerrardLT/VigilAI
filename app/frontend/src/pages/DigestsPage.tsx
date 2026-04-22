@@ -1,18 +1,43 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useDigests } from '../hooks/useDigests'
-import { Loading } from '../components/Loading'
 import { ErrorMessage } from '../components/ErrorMessage'
+import { Loading } from '../components/Loading'
 import { Toast } from '../components/Toast'
-import { formatDateTime } from '../utils/formatDate'
+import { useDigests } from '../hooks/useDigests'
 import type { DigestDetail } from '../types'
+import {
+  getDigestChannelLabel,
+  getDigestStatusLabel,
+  localizeAnalysisText,
+} from '../utils/analysisI18n'
+import { formatDateTime } from '../utils/formatDate'
+
+const DIGEST_BULLET_PATTERN = /^(\s*[-*]\s*)(.+)$/
+const DIGEST_HIGHLIGHT_PATTERN = /^[-*]\s*/
+
+function localizeDigestLine(line: string) {
+  const bulletMatch = line.match(DIGEST_BULLET_PATTERN)
+  if (bulletMatch) {
+    return `${bulletMatch[1]}${localizeAnalysisText(bulletMatch[2])}`
+  }
+
+  return localizeAnalysisText(line)
+}
+
+function localizeDigestContent(content: string) {
+  return content
+    .split('\n')
+    .map(localizeDigestLine)
+    .join('\n')
+}
 
 function getDigestHighlights(content: string) {
   return content
     .split('\n')
     .map(line => line.trim())
     .filter(Boolean)
-    .map(line => line.replace(/^[-*•]\s*/, ''))
+    .map(line => line.replace(DIGEST_HIGHLIGHT_PATTERN, ''))
+    .map(localizeAnalysisText)
     .slice(0, 3)
 }
 
@@ -20,11 +45,11 @@ function buildDigestClipboardText(digest: DigestDetail) {
   const highlights = getDigestHighlights(digest.content)
 
   return [
-    `${digest.title} (${digest.digest_date})`,
-    digest.summary || '',
+    `${localizeAnalysisText(digest.title)} (${digest.digest_date})`,
+    localizeAnalysisText(digest.summary),
     highlights.length > 0 ? `重点：${highlights.join('；')}` : '',
     '',
-    digest.content,
+    localizeDigestContent(digest.content),
   ]
     .filter(Boolean)
     .join('\n')
@@ -52,6 +77,9 @@ export function DigestsPage() {
     () => (digestToDisplay ? getDigestHighlights(digestToDisplay.content) : []),
     [digestToDisplay]
   )
+  const digestTitle = digestToDisplay ? localizeAnalysisText(digestToDisplay.title) : ''
+  const digestSummary = digestToDisplay ? localizeAnalysisText(digestToDisplay.summary) : ''
+  const digestContent = digestToDisplay ? localizeDigestContent(digestToDisplay.content) : ''
 
   async function handleGenerate() {
     setActionLoading('generate')
@@ -193,10 +221,12 @@ export function DigestsPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
-                        <div className="font-medium text-gray-900">{candidate.title}</div>
-                        <div className="text-xs text-gray-500">{candidate.source_name}</div>
+                        <div className="font-medium text-gray-900">{localizeAnalysisText(candidate.title)}</div>
+                        <div className="text-xs text-gray-500">
+                          {localizeAnalysisText(candidate.source_name)}
+                        </div>
                         <div className="text-sm text-gray-600">
-                          {candidate.summary || candidate.description || '暂无摘要'}
+                          {localizeAnalysisText(candidate.summary || candidate.description) || '暂无摘要'}
                         </div>
                       </div>
                       <button
@@ -217,7 +247,7 @@ export function DigestsPage() {
             )}
           </section>
 
-          <section className="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+          <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <div className="mb-3 text-sm font-medium text-gray-500">历史日报</div>
             {digests.length === 0 ? (
               <div className="rounded-xl border border-dashed border-gray-200 p-6 text-sm text-gray-500">
@@ -238,13 +268,17 @@ export function DigestsPage() {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="font-medium text-gray-900">{digest.title}</div>
+                        <div className="font-medium text-gray-900">{localizeAnalysisText(digest.title)}</div>
                         <div className="mt-1 text-xs text-gray-500">{digest.digest_date}</div>
                       </div>
-                      <div className="text-xs uppercase tracking-wide text-gray-500">{digest.status}</div>
+                      <div className="text-xs tracking-wide text-gray-500">
+                        {getDigestStatusLabel(digest.status)}
+                      </div>
                     </div>
                     {digest.summary && (
-                      <p className="mt-3 text-sm text-gray-600 line-clamp-2">{digest.summary}</p>
+                      <p className="mt-3 line-clamp-2 text-sm text-gray-600">
+                        {localizeAnalysisText(digest.summary)}
+                      </p>
                     )}
                   </button>
                 ))}
@@ -253,16 +287,14 @@ export function DigestsPage() {
           </section>
         </div>
 
-        <section className="rounded-2xl bg-white shadow-sm border border-gray-100 p-6">
+        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
           {digestToDisplay ? (
             <div className="space-y-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <div className="text-sm text-gray-500">{digestToDisplay.digest_date}</div>
-                  <h2 className="text-2xl font-semibold text-gray-900">{digestToDisplay.title}</h2>
-                  {digestToDisplay.summary && (
-                    <p className="mt-2 text-sm text-gray-600">{digestToDisplay.summary}</p>
-                  )}
+                  <h2 className="text-2xl font-semibold text-gray-900">{digestTitle}</h2>
+                  {digestSummary && <p className="mt-2 text-sm text-gray-600">{digestSummary}</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -288,9 +320,9 @@ export function DigestsPage() {
               <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-sky-600">1 Minute Brief</div>
+                    <div className="text-xs tracking-[0.2em] text-sky-600">1 分钟简报</div>
                     <div className="mt-2 text-base font-semibold text-slate-900">
-                      {digestToDisplay.summary || '先看三条重点，再决定今天的处理顺序。'}
+                      {digestSummary || '先看三条重点，再决定今天的处理顺序。'}
                     </div>
                   </div>
                   <Link to="/tracking" className="text-sm text-primary-700 hover:text-primary-800">
@@ -322,7 +354,9 @@ export function DigestsPage() {
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
                   <div className="text-xs text-gray-500">状态</div>
-                  <div className="mt-2 text-2xl font-semibold text-gray-900">{digestToDisplay.status}</div>
+                  <div className="mt-2 text-2xl font-semibold text-gray-900">
+                    {getDigestStatusLabel(digestToDisplay.status)}
+                  </div>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
                   <div className="text-xs text-gray-500">更新时间</div>
@@ -332,8 +366,8 @@ export function DigestsPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl bg-slate-950 text-slate-100 p-5 whitespace-pre-wrap leading-7">
-                {digestToDisplay.content}
+              <div className="whitespace-pre-wrap rounded-xl bg-slate-950 p-5 leading-7 text-slate-100">
+                {digestContent}
               </div>
 
               <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
@@ -342,7 +376,7 @@ export function DigestsPage() {
                   发送时间：
                   {digestToDisplay.last_sent_at ? formatDateTime(digestToDisplay.last_sent_at) : ' 未发送'}
                 </div>
-                <div>渠道：{digestToDisplay.send_channel || 'manual'}</div>
+                <div>渠道：{getDigestChannelLabel(digestToDisplay.send_channel || 'manual')}</div>
               </div>
             </div>
           ) : (

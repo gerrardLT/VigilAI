@@ -6,47 +6,19 @@ import { Toast } from '../components/Toast'
 import { useAnalysisTemplates } from '../hooks/useAnalysisTemplates'
 import { useWorkspace } from '../hooks/useWorkspace'
 import { api } from '../services/api'
+import type { ActivityListItem, TrackingState } from '../types'
+import { CATEGORY_LABELS } from '../types'
 import { CATEGORY_COLOR_MAP } from '../utils/constants'
 import { formatDateOnly, formatDateTime } from '../utils/formatDate'
-import type { ActivityListItem, Category, TrackingState } from '../types'
-
-const CATEGORY_LABELS: Record<Category, string> = {
-  hackathon: '黑客松',
-  data_competition: '数据竞赛',
-  coding_competition: '编程竞赛',
-  other_competition: '其他比赛',
-  airdrop: '空投',
-  bounty: '悬赏',
-  grant: '资助',
-  dev_event: '开发者活动',
-  news: '资讯',
-}
-
-function OverviewCard({
-  label,
-  value,
-  hint,
-  href,
-}: {
-  label: string
-  value: string | number
-  hint?: string
-  href?: string
-}) {
-  const content = (
-    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
-      <div className="text-sm text-gray-500">{label}</div>
-      <div className="mt-2 text-3xl font-semibold text-gray-900">{value}</div>
-      {hint && <div className="mt-2 text-xs text-gray-500">{hint}</div>}
-    </div>
-  )
-
-  if (href) {
-    return <Link to={href}>{content}</Link>
-  }
-
-  return content
-}
+import {
+  getAnalysisStatusLabel,
+  getDeadlineLevelLabel,
+  getSourceStatusLabel,
+  getTrustLevelLabel,
+  localizeAnalysisTemplate,
+  localizeAnalysisText,
+} from '../utils/analysisI18n'
+import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
 
 function countHighValueOpportunities(activities: ActivityListItem[]) {
   return activities.filter(activity => (activity.score ?? 0) >= 8 || Boolean(activity.prize?.amount)).length
@@ -56,6 +28,29 @@ function countUrgentActions(activities: ActivityListItem[]) {
   return activities.filter(
     activity => activity.deadline_level === 'urgent' || activity.deadline_level === 'soon'
   ).length
+}
+
+function formatShare(value: number, total: number) {
+  if (total <= 0) {
+    return '0%'
+  }
+
+  return `${Math.round((value / total) * 100)}%`
+}
+
+function summarizeBlockedReasons(activities: ActivityListItem[]) {
+  const counts = new Map<string, number>()
+
+  activities.forEach(activity => {
+    activity.analysis_summary_reasons?.forEach(reason => {
+      const localizedReason = localizeAnalysisText(reason)
+      counts.set(localizedReason, (counts.get(localizedReason) ?? 0) + 1)
+    })
+  })
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 3)
 }
 
 function buildWorkspaceSnapshot(args: {
@@ -86,66 +81,140 @@ function buildWorkspaceSnapshot(args: {
     segments.push('来源状态稳定')
   }
 
-  return segments.join('，') + '。'
+  return `${segments.join('，')}。`
 }
 
-function formatShare(value: number, total: number) {
+function buildTemplateDiagnosis(args: {
+  total: number
+  passed: number
+  watch: number
+  rejected: number
+  blockedReasonSummary: Array<[string, number]>
+}) {
+  const { total, passed, watch, rejected, blockedReasonSummary } = args
+  const mainReason = blockedReasonSummary[0]?.[0]
+
   if (total <= 0) {
-    return '0%'
+    return {
+      title: '当前还没有模板判断样本',
+      description: '先运行一次分析，系统才会告诉你模板是偏严还是偏宽。',
+      suggestion: '先去跑一轮模板分析',
+      tone: 'slate' as const,
+    }
   }
 
-  return `${Math.round((value / total) * 100)}%`
+  if (rejected / total >= 0.85 && passed === 0 && watch <= 1) {
+    return {
+      title: '当前模板偏严格',
+      description: '几乎所有机会都被拦掉了，说明规则把潜在机会挡在了前面。',
+      suggestion: mainReason ? `优先放宽一条硬门槛：${mainReason}` : '优先放宽一条硬门槛',
+      tone: 'rose' as const,
+    }
+  }
+
+  if (passed / total >= 0.7 && rejected <= 1 && total >= 4) {
+    return {
+      title: '当前模板偏宽松',
+      description: '放行比例偏高，建议再补一条约束，避免低质量机会混进来。',
+      suggestion: '补一条最关键的过滤条件，再跑一轮结果对比',
+      tone: 'amber' as const,
+    }
+  }
+
+  return {
+    title: '当前模板基本平衡',
+    description: '通过、观察、拦截三类结果都有，说明规则已经开始形成筛选能力。',
+    suggestion: mainReason ? `继续观察高频拦截原因：${mainReason}` : '继续观察高频拦截原因，再做小步微调',
+    tone: 'emerald' as const,
+  }
 }
 
-function summarizeBlockedReasons(activities: ActivityListItem[]) {
-  const counts = new Map<string, number>()
+function buildAlertDiagnosis(alertCount: number) {
+  if (alertCount <= 0) {
+    return {
+      title: '今天没有系统告警',
+      description: '来源抓取和更新节奏都比较稳定，你可以把精力放在机会判断上。',
+      tone: 'emerald' as const,
+    }
+  }
 
-  activities.forEach(activity => {
-    activity.analysis_summary_reasons?.forEach(reason => {
-      counts.set(reason, (counts.get(reason) ?? 0) + 1)
+  return {
+    title: alertCount === 1 ? '有 1 个来源需要排查' : `有 ${alertCount} 个来源需要排查`,
+    description: '建议先处理来源异常，避免后续判断建立在过期数据上。',
+    tone: 'rose' as const,
+  }
+}
+
+const DIGEST_NOISE_LINE_PATTERNS = [
+  /^(?:关于我们|联系我们|原文链接|更多|下载APP|回到顶部)$/i,
+  /^(?:today|yesterday)\s+\d{1,2}:\d{2}$/i,
+  /^(?:今天|昨日|昨天)\s+\d{1,2}:\d{2}$/i,
+  /^(?:follow us|share this|social media|copyright)$/i,
+]
+
+function normalizeDigestPreviewLine(text: string) {
+  return text
+    .replace(/\\\\/g, ' ')
+    .replace(/\)\]\(|\]\(|\)\[|\]\[/g, ' ')
+    .replace(/!\[[^\]]*\]\(([^)]+)\)/g, ' ')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\b(?:[\w-]+\.)+[a-z]{2,}\S*/gi, ' ')
+    .replace(/%[0-9A-Fa-f]{2}/g, ' ')
+    .replace(/\b[a-z]+=(?:[^&\s]+&){1,}[^&\s]+/gi, ' ')
+    .replace(/\bresize=\d+x\d+\b/gi, ' ')
+    .replace(/(^|\s)(?:关于我们|联系我们|原文链接|更多|下载APP|回到顶部|Homepage recommendation)(?=\s|$)/gi, ' ')
+    .replace(/[`>#*_]+/g, ' ')
+    .replace(/[|·]/g, ' ')
+    .replace(/[\[\]]+/g, ' ')
+    .replace(/(?:(?<=\s)|^)[()]+(?=\s|$)/g, ' ')
+    .replace(/\(\s*\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function buildDigestPreviewExcerpt(content: string, maxLines = 4) {
+  if (!content) {
+    return 'AI 正在整理今日日报。'
+  }
+
+  const lines: string[] = []
+  const seen = new Set<string>()
+
+  content
+    .split(/\r?\n+/)
+    .map(normalizeDigestPreviewLine)
+    .filter(line => line.length >= 4)
+    .filter(line => !DIGEST_NOISE_LINE_PATTERNS.some(pattern => pattern.test(line)))
+    .forEach(line => {
+      const localizedLine = localizeAnalysisText(line)
+      const dedupeKey = localizedLine.toLowerCase()
+      if (!localizedLine || seen.has(dedupeKey)) return
+      seen.add(dedupeKey)
+      lines.push(localizedLine)
     })
-  })
 
-  return [...counts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, 3)
+  if (lines.length === 0) {
+    return localizeAnalysisText(normalizeDigestPreviewLine(content)) || 'AI 正在整理今日日报。'
+  }
+
+  return lines.slice(0, maxLines).join('\n')
 }
 
-const quickActions = [
-  {
-    testId: 'workspace-quick-action-opportunities',
-    label: '查看机会池',
-    description: '直接进入当前机会的评分排序视图。',
-    href: '/activities?sort_by=score',
-  },
-  {
-    testId: 'workspace-quick-action-tracking',
-    label: '查看跟进列表',
-    description: '继续推进已经收藏或跟进中的机会。',
-    href: '/tracking',
-  },
-  {
-    testId: 'workspace-quick-action-analysis-results',
-    label: '查看分析结果',
-    description: '查看当前模板的通过、观察和拦截结果流。',
-    href: '/analysis/results',
-  },
-  {
-    testId: 'workspace-quick-action-digest',
-    label: '查看今日日报',
-    description: '快速检查今天的摘要和推送内容。',
-    href: '/digests',
-  },
-  {
-    testId: 'workspace-quick-action-sources',
-    label: '检查来源健康',
-    description: '优先处理需要刷新或修复的来源。',
-    href: '/sources',
-  },
-] as const
+function getToneClasses(tone: 'emerald' | 'rose' | 'amber' | 'slate') {
+  if (tone === 'emerald') return 'border-emerald-200 bg-emerald-50/70 text-emerald-950'
+  if (tone === 'rose') return 'border-rose-200 bg-rose-50/80 text-rose-950'
+  if (tone === 'amber') return 'border-amber-200 bg-amber-50/80 text-amber-950'
+  return 'border-slate-200 bg-slate-50 text-slate-900'
+}
+
+function getOpportunitySummary(activity: ActivityListItem) {
+  return buildActivityDisplayExcerpt(activity) || localizeAnalysisText(activity.score_reason) || '暂无摘要'
+}
 
 export function WorkspacePage() {
   const { defaultTemplate } = useAnalysisTemplates()
+  const localizedDefaultTemplate = defaultTemplate ? localizeAnalysisTemplate(defaultTemplate) : null
   const { workspace, loading, error, refetch } = useWorkspace()
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -161,17 +230,9 @@ export function WorkspacePage() {
     setOpportunityOverrides({})
   }, [workspaceSyncKey])
 
-  if (loading && !workspace) {
-    return <Loading text="正在加载工作台..." />
-  }
-
-  if (error && !workspace) {
-    return <ErrorMessage message={error} onRetry={refetch} />
-  }
-
-  if (!workspace) {
-    return null
-  }
+  if (loading && !workspace) return <Loading text="正在加载工作台..." />
+  if (error && !workspace) return <ErrorMessage message={error} onRetry={refetch} />
+  if (!workspace) return null
 
   const {
     overview,
@@ -184,55 +245,42 @@ export function WorkspacePage() {
     blocked_opportunities = [],
   } = workspace
 
-  const topOpportunities = top_opportunities.map(activity => ({
-    ...activity,
-    ...opportunityOverrides[activity.id],
-  }))
-
-  const firstActions = first_actions.map(activity => ({
-    ...activity,
-    ...opportunityOverrides[activity.id],
-  }))
-
+  const topOpportunities = top_opportunities.map(activity => ({ ...activity, ...opportunityOverrides[activity.id] }))
+  const firstActions = first_actions.map(activity => ({ ...activity, ...opportunityOverrides[activity.id] }))
   const highValueCount = countHighValueOpportunities(topOpportunities)
   const urgentActionCount = countUrgentActions(firstActions)
+  const blockedReasonSummary = summarizeBlockedReasons(blocked_opportunities)
+  const passRate = formatShare(analysis_overview.passed, analysis_overview.total)
+  const watchRate = formatShare(analysis_overview.watch, analysis_overview.total)
+  const rejectedRate = formatShare(analysis_overview.rejected, analysis_overview.total)
+  const digestPreviewExcerpt = digest_preview ? buildDigestPreviewExcerpt(digest_preview.content) : ''
   const workspaceSnapshot = buildWorkspaceSnapshot({
     recentActivities: overview.recent_activities,
     highValueCount,
     urgentCount: urgentActionCount,
     alertCount: alert_sources.length,
   })
-  const blockedReasonSummary = summarizeBlockedReasons(blocked_opportunities)
-  const passRate = formatShare(analysis_overview.passed, analysis_overview.total)
-  const watchRate = formatShare(analysis_overview.watch, analysis_overview.total)
-  const rejectedRate = formatShare(analysis_overview.rejected, analysis_overview.total)
+  const templateDiagnosis = buildTemplateDiagnosis({ ...analysis_overview, blockedReasonSummary })
+  const alertDiagnosis = buildAlertDiagnosis(alert_sources.length)
+  const maxTrendCount = Math.max(...trends.map(item => item.count), 1)
 
   function applyTrackingState(activityId: string, tracking: TrackingState) {
     setOpportunityOverrides(prev => ({
       ...prev,
-      [activityId]: {
-        is_tracking: true,
-        is_favorited: tracking.is_favorited,
-      },
+      [activityId]: { is_tracking: true, is_favorited: tracking.is_favorited },
     }))
   }
 
   async function handleTrack(activity: ActivityListItem) {
     setActionLoading(`track:${activity.id}`)
-
     try {
       const tracking = activity.is_tracking
         ? await api.updateTracking(activity.id, { status: 'tracking' })
         : await api.createTracking(activity.id, { status: 'tracking' })
-
       applyTrackingState(activity.id, tracking)
-      setToast({
-        type: 'success',
-        message: activity.is_tracking ? '跟进状态已更新。' : '已加入跟进。',
-      })
+      setToast({ type: 'success', message: activity.is_tracking ? '跟进状态已更新。' : '已加入跟进。' })
     } catch (err) {
-      const message = err instanceof Error ? err.message : '更新跟进失败'
-      setToast({ type: 'error', message })
+      setToast({ type: 'error', message: err instanceof Error ? err.message : '更新跟进失败' })
     } finally {
       setActionLoading(null)
     }
@@ -240,22 +288,16 @@ export function WorkspacePage() {
 
   async function handleFavorite(activity: ActivityListItem) {
     setActionLoading(`favorite:${activity.id}`)
-
     try {
       if (!activity.is_tracking) {
         const created = await api.createTracking(activity.id, { status: 'tracking' })
         applyTrackingState(activity.id, created)
       }
-
       const tracking = await api.updateTracking(activity.id, { is_favorited: !activity.is_favorited })
       applyTrackingState(activity.id, tracking)
-      setToast({
-        type: 'success',
-        message: tracking.is_favorited ? '已加入收藏。' : '已取消收藏。',
-      })
+      setToast({ type: 'success', message: tracking.is_favorited ? '已加入收藏。' : '已取消收藏。' })
     } catch (err) {
-      const message = err instanceof Error ? err.message : '更新收藏状态失败'
-      setToast({ type: 'error', message })
+      setToast({ type: 'error', message: err instanceof Error ? err.message : '更新收藏状态失败' })
     } finally {
       setActionLoading(null)
     }
@@ -265,23 +307,23 @@ export function WorkspacePage() {
     <div className="space-y-8" data-testid="workspace-page">
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
-      <section className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-sky-900 p-8 text-white shadow-xl">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      <section className="rounded-[28px] bg-gradient-to-br from-slate-950 via-slate-900 to-sky-900 p-8 text-white shadow-xl">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl space-y-4">
-            <div className="text-sm uppercase tracking-[0.2em] text-sky-200">VigilAI Workspace</div>
-            <h1 className="text-3xl font-bold">机会工作台</h1>
-            <p className="leading-7 text-slate-100" data-testid="workspace-summary-banner">
+            <div className="text-sm uppercase tracking-[0.28em] text-sky-200">AI 智能代理决策驾驶舱</div>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">机会工作台</h1>
+            <p className="max-w-2xl text-sm leading-7 text-slate-100" data-testid="workspace-summary-banner">
               {workspaceSnapshot}
             </p>
-            <p className="leading-7 text-slate-200">
-              这里不是信息清单，而是你每天进入产品后的第一张行动面板。先处理高价值机会，再检查来源健康，最后把下一步跟进推进下去。
+            <p className="max-w-2xl text-sm leading-7 text-slate-300">
+              这里不是信息总览，而是今天该先看什么、为什么值得看、下一步怎么推进的决策入口。
             </p>
-            {defaultTemplate && (
+            {localizedDefaultTemplate && (
               <div
                 data-testid="workspace-default-template"
                 className="inline-flex w-fit items-center rounded-full border border-sky-300/40 bg-white/10 px-4 py-2 text-sm text-sky-100"
               >
-                当前 AI 模板：{defaultTemplate.name}
+                当前 AI 模板：{localizedDefaultTemplate.name}
               </div>
             )}
             <div className="flex flex-wrap gap-3">
@@ -294,128 +336,135 @@ export function WorkspacePage() {
             </div>
           </div>
 
-          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-slate-100">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sky-100">最后更新</div>
-                <div className="mt-1 font-medium">
-                  {overview.last_update ? formatDateTime(overview.last_update) : '暂无数据'}
-                </div>
-              </div>
-              <button
-                type="button"
-                data-testid="workspace-refresh-button"
-                onClick={() => {
-                  void refetch()
-                }}
-                className="btn btn-secondary border-slate-300 text-white hover:bg-white/10"
-              >
-                刷新
-              </button>
+          <div className="grid w-full max-w-xl gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-sky-100">今日新增</div>
+              <div className="mt-3 text-3xl font-semibold">{overview.recent_activities}</div>
+              <div className="mt-2 text-sm text-slate-200">新增情报已进入当前判断队列。</div>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-black/10 p-3">
-                <div className="text-xs text-sky-100">今日新增</div>
-                <div className="mt-1 text-2xl font-semibold">{overview.recent_activities}</div>
-              </div>
-              <div className="rounded-xl bg-black/10 p-3">
-                <div className="text-xs text-sky-100">待处理</div>
-                <div className="mt-1 text-2xl font-semibold">{urgentActionCount}</div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-sky-100">待处理</div>
+              <div className="mt-3 text-3xl font-semibold">{urgentActionCount}</div>
+              <div className="mt-2 text-sm text-slate-200">建议先推进临近截止和高优先级机会。</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-sky-100">告警数量</div>
+              <div className="mt-3 text-3xl font-semibold">{alert_sources.length}</div>
+              <div className="mt-2 text-sm text-slate-200">来源异常会直接影响后续判断可信度。</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 sm:col-span-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-sky-100">最后更新</div>
+                  <div className="mt-2 text-base font-medium">
+                    {overview.last_update ? formatDateTime(overview.last_update) : '暂无数据'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="workspace-refresh-button"
+                  onClick={() => {
+                    void refetch()
+                  }}
+                  className="btn btn-secondary border-slate-300 text-white hover:bg-white/10"
+                >
+                  刷新
+                </button>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5" data-testid="workspace-quick-actions">
-        {quickActions.map(action => (
-          <Link
-            key={action.testId}
-            to={action.href}
-            data-testid={action.testId}
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md"
-          >
-            <div className="text-sm font-semibold text-gray-900">{action.label}</div>
-            <div className="mt-2 text-sm text-gray-500">{action.description}</div>
-          </Link>
-        ))}
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <OverviewCard label="今日新增" value={overview.recent_activities} hint="今天新进入系统的机会。" href="/activities?sort_by=created_at" />
-        <OverviewCard label="高价值机会" value={highValueCount} hint="评分高或奖励明确的机会。" href="/activities?sort_by=score" />
-        <OverviewCard label="72 小时内截止" value={urgentActionCount} hint="需要马上判断的机会。" href="/activities?deadline_level=urgent&sort_by=score" />
-        <OverviewCard label="已跟进" value={overview.tracked_count} hint={`已收藏 ${overview.favorited_count} 条`} href="/tracking" />
-        <OverviewCard label="异常来源" value={alert_sources.length} hint="需要排查或修复的抓取来源。" href="/sources" />
-      </section>
-
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_1fr]">
-        <div
-          data-testid="workspace-analysis-overview"
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          <div className="flex items-center justify-between">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_1fr_1fr]">
+        <article data-testid="workspace-priority-panel" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">当前模板表现</h2>
-              <p className="mt-1 text-sm text-gray-500">快速查看当前 AI 模板是怎么筛机会的。</p>
+              <div className="text-sm font-medium text-slate-500">今日结论</div>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950">先处理高优先级机会</h2>
             </div>
-            {defaultTemplate && (
-              <div className="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
-                {defaultTemplate.name}
+            <Link to="/activities?sort_by=score" className="text-sm font-medium text-primary-600 hover:text-primary-700">
+              进入机会池
+            </Link>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">立即处理</div>
+            <div className="mt-2 text-sm leading-6 text-slate-700">
+              当前有 {firstActions.length} 条第一步动作、{urgentActionCount} 条临近截止机会、{highValueCount} 条高价值机会。
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {firstActions.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                目前还没有需要立刻处理的动作，建议先去机会池补充判断样本。
               </div>
+            ) : (
+              firstActions.slice(0, 3).map(activity => (
+                <Link
+                  key={activity.id}
+                  to={`/activities/${activity.id}`}
+                  className="block rounded-2xl border border-slate-200 bg-slate-50/70 p-4 transition-all hover:border-sky-200 hover:bg-sky-50/40"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900">{buildActivityDisplayTitle(activity)}</div>
+                      <div className="mt-1 text-sm leading-6 text-slate-600">{getOpportunitySummary(activity)}</div>
+                    </div>
+                    <div className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                      {getDeadlineLevelLabel(activity.deadline_level || 'normal')}
+                    </div>
+                  </div>
+                </Link>
+              ))
             )}
           </div>
+        </article>
 
-          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-emerald-50 p-4">
-              <div className="text-xs uppercase tracking-wide text-emerald-700">通过</div>
-              <div className="mt-2 text-3xl font-semibold text-emerald-800">{analysis_overview.passed}</div>
+        <article
+          data-testid="workspace-template-diagnosis"
+          className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-slate-500">模板诊断</div>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">{templateDiagnosis.title}</h2>
             </div>
-            <div className="rounded-2xl bg-amber-50 p-4">
-              <div className="text-xs uppercase tracking-wide text-amber-700">观察</div>
-              <div className="mt-2 text-3xl font-semibold text-amber-800">{analysis_overview.watch}</div>
-            </div>
-            <div className="rounded-2xl bg-rose-50 p-4">
-              <div className="text-xs uppercase tracking-wide text-rose-700">拦截</div>
-              <div className="mt-2 text-3xl font-semibold text-rose-800">{analysis_overview.rejected}</div>
-            </div>
+            <Link to="/analysis/templates" className="text-sm font-medium text-primary-600 hover:text-primary-700">
+              去优化模板
+            </Link>
           </div>
 
-          <div
-            data-testid="workspace-template-performance"
-            className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4"
-          >
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">
-                  {defaultTemplate ? `${defaultTemplate.name} 当前表现` : '模板当前表现'}
-                </div>
-                <div className="mt-1 text-sm text-slate-600">
-                  已覆盖 {analysis_overview.total} 条机会，当前通过率 {passRate}。
-                </div>
-              </div>
-              <Link to="/analysis/templates" className="text-sm font-medium text-primary-600 transition hover:text-primary-700">
-                去优化模板
-              </Link>
-            </div>
+          <div className={`mt-4 rounded-2xl border p-4 ${getToneClasses(templateDiagnosis.tone)}`}>
+            <p className="text-sm leading-6">{templateDiagnosis.description}</p>
+            <p className="mt-3 text-sm font-medium">{templateDiagnosis.suggestion}</p>
+          </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div data-testid="workspace-template-performance" className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-medium text-slate-900">
+              {localizedDefaultTemplate ? `${localizedDefaultTemplate.name} 当前表现` : '模板当前表现'}
+            </div>
+            <div className="mt-2 text-sm text-slate-600">
+              已覆盖 {analysis_overview.total} 条机会，当前通过率 {passRate}。
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-3">
               <div className="rounded-2xl bg-white p-3">
-                <div className="text-xs uppercase tracking-wide text-slate-500">通过率</div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-500">通过率</div>
                 <div className="mt-2 text-2xl font-semibold text-slate-900">{passRate}</div>
               </div>
               <div className="rounded-2xl bg-white p-3">
-                <div className="text-xs uppercase tracking-wide text-slate-500">观察占比</div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-500">观察占比</div>
                 <div className="mt-2 text-2xl font-semibold text-slate-900">{watchRate}</div>
               </div>
               <div className="rounded-2xl bg-white p-3">
-                <div className="text-xs uppercase tracking-wide text-slate-500">拦截占比</div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-500">拦截占比</div>
                 <div className="mt-2 text-2xl font-semibold text-slate-900">{rejectedRate}</div>
               </div>
             </div>
 
             <div className="mt-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">高频拦截原因</div>
+              <div className="text-xs uppercase tracking-[0.16em] text-slate-500">高频拦截原因</div>
               {blockedReasonSummary.length === 0 ? (
                 <p className="mt-2 text-sm text-slate-600">当前还没有明显的拦截模式。</p>
               ) : (
@@ -432,22 +481,89 @@ export function WorkspacePage() {
               )}
             </div>
           </div>
+        </article>
+
+        <article data-testid="workspace-alert-panel" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-slate-500">系统告警</div>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">{alertDiagnosis.title}</h2>
+            </div>
+            <Link to="/sources" className="text-sm font-medium text-primary-600 hover:text-primary-700">
+              去处理
+            </Link>
+          </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${getToneClasses(alertDiagnosis.tone)}`}>
+            <p className="text-sm leading-6">{alertDiagnosis.description}</p>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {alert_sources.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">今天没有来源异常。</div>
+            ) : (
+              alert_sources.slice(0, 3).map(source => (
+                <div key={source.id} className="rounded-2xl border border-rose-100 bg-rose-50/80 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900">{localizeAnalysisText(source.name)}</div>
+                      <div className="mt-1 text-sm leading-6 text-slate-600">
+                        {localizeAnalysisText(source.error_message) || '该来源需要人工排查。'}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-xs font-medium uppercase tracking-[0.16em] text-rose-700">
+                      {getSourceStatusLabel(source.status)}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_1fr]">
+        <div data-testid="workspace-analysis-overview" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold text-slate-950">分析结果概览</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">这里保留证据层，方便你快速复核模板到底放行了什么，又拦掉了什么。</p>
+            </div>
+            <Link to="/analysis/results" className="text-sm font-medium text-primary-600 hover:text-primary-700">
+              查看结果页
+            </Link>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl bg-emerald-50 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-emerald-700">通过</div>
+              <div className="mt-2 text-3xl font-semibold text-emerald-900">{analysis_overview.passed}</div>
+            </div>
+            <div className="rounded-2xl bg-amber-50 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-amber-700">待观察</div>
+              <div className="mt-2 text-3xl font-semibold text-amber-900">{analysis_overview.watch}</div>
+            </div>
+            <div className="rounded-2xl bg-rose-50 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-rose-700">拦截</div>
+              <div className="mt-2 text-3xl font-semibold text-rose-900">{analysis_overview.rejected}</div>
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">被拦截的机会</h2>
-              <p className="mt-1 text-sm text-gray-500">适合快速复核那些被当前模板挡掉的机会。</p>
+              <h2 className="text-2xl font-semibold text-slate-950">被拦截的机会</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">适合快速回看规则是否拦得过早。</p>
             </div>
-            <Link to="/activities?analysis_status=rejected" className="text-sm text-primary-600 hover:text-primary-700">
+            <Link to="/activities?analysis_status=rejected" className="text-sm font-medium text-primary-600 hover:text-primary-700">
               查看全部
             </Link>
           </div>
 
           <div className="mt-4 space-y-3">
             {blocked_opportunities.length === 0 ? (
-              <p className="text-sm text-gray-500">当前没有被拦截的机会。</p>
+              <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">当前没有被拦截的机会。</p>
             ) : (
               blocked_opportunities.map(activity => (
                 <Link
@@ -456,24 +572,19 @@ export function WorkspacePage() {
                   className="block rounded-2xl border border-rose-100 bg-rose-50/70 p-4 transition-all hover:border-rose-200 hover:bg-rose-50"
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="font-medium text-gray-900">{activity.title}</div>
-                      <div className="mt-1 text-sm text-gray-600">
-                        {activity.summary || activity.description || '被当前模板拦截。'}
-                      </div>
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900">{buildActivityDisplayTitle(activity)}</div>
+                      <div className="mt-1 text-sm leading-6 text-slate-600">{getOpportunitySummary(activity)}</div>
                     </div>
-                    <div className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-rose-700">
-                      {activity.analysis_status || 'rejected'}
+                    <div className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-rose-700">
+                      {getAnalysisStatusLabel(activity.analysis_status || 'rejected')}
                     </div>
                   </div>
                   {activity.analysis_summary_reasons && activity.analysis_summary_reasons.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {activity.analysis_summary_reasons.slice(0, 2).map(reason => (
-                        <span
-                          key={`${activity.id}-${reason}`}
-                          className="rounded-full border border-rose-200 bg-white px-2 py-1 text-xs text-rose-700"
-                        >
-                          {reason}
+                        <span key={`${activity.id}-${reason}`} className="rounded-full border border-rose-200 bg-white px-2 py-1 text-xs text-rose-700">
+                          {localizeAnalysisText(reason)}
                         </span>
                       ))}
                     </div>
@@ -485,26 +596,26 @@ export function WorkspacePage() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.6fr_1fr]">
-        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
+        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">今天最值得先看的机会</h2>
-              <p className="mt-1 text-sm text-gray-500">综合评分、时效和可信度排序。</p>
+              <h2 className="text-2xl font-semibold text-slate-950">今日重点机会</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">结合评分、时效和可信度，优先展示今天最值得推进的机会。</p>
             </div>
-            <Link to="/activities?sort_by=score" className="text-sm text-primary-600 hover:text-primary-700">
+            <Link to="/activities?sort_by=score" className="text-sm font-medium text-primary-600 hover:text-primary-700">
               查看全部
             </Link>
           </div>
 
           {topOpportunities.length === 0 ? (
-            <p className="text-sm text-gray-500">今天还没有明显突出的机会。</p>
+            <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">今天还没有明显突出的机会。</p>
           ) : (
             <div className="space-y-4">
               {topOpportunities.map(activity => (
                 <div
                   key={activity.id}
-                  className="rounded-xl border border-gray-100 p-4 transition-all hover:border-primary-200 hover:shadow-sm"
+                  className="rounded-[24px] border border-slate-200 p-5 transition-all hover:border-primary-200 hover:shadow-sm"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span
@@ -521,33 +632,35 @@ export function WorkspacePage() {
                     )}
                     {activity.trust_level && (
                       <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                        可信度 {activity.trust_level}
+                        可信度 {getTrustLevelLabel(activity.trust_level)}
                       </span>
                     )}
                     {activity.is_tracking && (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-                        跟进中
-                      </span>
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">跟进中</span>
                     )}
                     {activity.is_favorited && (
-                      <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
-                        已收藏
-                      </span>
+                      <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">已收藏</span>
                     )}
                   </div>
 
-                  <div className="mt-3 flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{activity.title}</h3>
-                      <p className="mt-2 line-clamp-2 text-sm text-gray-600">
-                        {activity.summary || activity.description || '暂无摘要'}
-                      </p>
-                      {activity.score_reason && <p className="mt-2 text-xs text-primary-700">{activity.score_reason}</p>}
+                  <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-semibold text-slate-950">{buildActivityDisplayTitle(activity)}</h3>
+                      <p className="mt-2 text-sm leading-7 text-slate-600">{getOpportunitySummary(activity)}</p>
+                      {activity.score_reason && (
+                        <p className="mt-2 text-sm text-primary-700">{localizeAnalysisText(activity.score_reason)}</p>
+                      )}
                     </div>
-                    <div className="min-w-[96px] text-right text-xs text-gray-500">
-                      <div>{activity.source_name}</div>
-                      <div className="mt-2">
-                        {activity.dates?.deadline ? formatDateOnly(activity.dates.deadline) : '无截止时间'}
+                    <div className="grid shrink-0 gap-2 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600 sm:min-w-[180px]">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>来源</span>
+                        <span className="font-medium text-slate-900">{localizeAnalysisText(activity.source_name)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>截止</span>
+                        <span className="font-medium text-slate-900">
+                          {activity.dates?.deadline ? formatDateOnly(activity.dates.deadline) : '暂无'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -586,51 +699,56 @@ export function WorkspacePage() {
         </section>
 
         <div className="space-y-6">
-          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">今日日报预览</h2>
-              <Link to="/digests" className="text-sm text-primary-600 hover:text-primary-700">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-semibold text-slate-950">日报速览</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">先看 1 分钟摘要，再决定是否展开完整内容。</p>
+              </div>
+              <Link to="/digests" className="text-sm font-medium text-primary-600 hover:text-primary-700">
                 打开日报
               </Link>
             </div>
+
             {digest_preview ? (
               <div className="mt-4 space-y-4">
                 <div>
-                  <div className="text-sm text-gray-500">{digest_preview.digest_date}</div>
-                  <div className="text-lg font-semibold text-gray-900">{digest_preview.title}</div>
+                  <div className="text-sm text-slate-500">{digest_preview.digest_date}</div>
+                  <div className="text-lg font-semibold text-slate-900">{localizeAnalysisText(digest_preview.title)}</div>
                 </div>
-                {digest_preview.summary && <p className="text-sm text-gray-600">{digest_preview.summary}</p>}
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">1 分钟速览</div>
-                  <div className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{digest_preview.content}</div>
+                {digest_preview.summary && (
+                  <p className="text-sm leading-6 text-slate-600">{localizeAnalysisText(digest_preview.summary)}</p>
+                )}
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">1 分钟速览</div>
+                  <div data-testid="workspace-digest-excerpt" className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {digestPreviewExcerpt}
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">
-                今天的日报还没生成。
-              </div>
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">今天的日报还没生成。</div>
             )}
           </section>
 
-          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">最近 7 天趋势</h2>
-              <div className="text-xs text-gray-500">新增机会数量</div>
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div>
+              <h2 className="text-2xl font-semibold text-slate-950">最近 7 天趋势</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">观察新增机会量，帮助判断今天是该筛选还是该冲刺。</p>
             </div>
             <div className="mt-4 space-y-3">
               {trends.length === 0 ? (
-                <p className="text-sm text-gray-500">趋势数据还在积累中。</p>
+                <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">趋势数据还在积累中。</p>
               ) : (
                 trends.map(trend => {
-                  const maxCount = Math.max(...trends.map(item => item.count), 1)
-                  const width = `${Math.max((trend.count / maxCount) * 100, 8)}%`
+                  const width = `${Math.max((trend.count / maxTrendCount) * 100, 8)}%`
                   return (
                     <div key={trend.date}>
-                      <div className="flex items-center justify-between text-sm text-gray-600">
+                      <div className="flex items-center justify-between text-sm text-slate-600">
                         <span>{trend.date}</span>
                         <span>{trend.count}</span>
                       </div>
-                      <div className="mt-1 h-2 rounded-full bg-slate-100">
+                      <div className="mt-2 h-2 rounded-full bg-slate-100">
                         <div className="h-2 rounded-full bg-sky-500" style={{ width }} />
                       </div>
                     </div>
@@ -640,72 +758,6 @@ export function WorkspacePage() {
             </div>
           </section>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">异常来源</h2>
-            <Link to="/sources" className="text-sm text-primary-600 hover:text-primary-700">
-              去处理
-            </Link>
-          </div>
-          <div className="mt-4 space-y-3">
-            {alert_sources.length === 0 ? (
-              <p className="text-sm text-gray-500">今天没有来源异常。</p>
-            ) : (
-              alert_sources.map(source => (
-                <div key={source.id} className="rounded-xl border border-red-100 bg-red-50 p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="font-medium text-gray-900">{source.name}</div>
-                      <div className="mt-1 text-sm text-gray-600">
-                        {source.error_message || '该来源需要人工排查。'}
-                      </div>
-                    </div>
-                    <div className="text-xs uppercase tracking-wide text-red-700">{source.status}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">第一步动作</h2>
-            <Link to="/tracking" className="text-sm text-primary-600 hover:text-primary-700">
-              打开跟进
-            </Link>
-          </div>
-          <div className="mt-2 text-sm text-gray-500">给自己一个清晰的下一步，而不是继续停留在浏览状态。</div>
-          <div className="mt-4 space-y-3">
-            {firstActions.length === 0 ? (
-              <p className="text-sm text-gray-500">目前还没有需要立刻处理的动作。</p>
-            ) : (
-              firstActions.map(activity => (
-                <Link
-                  key={activity.id}
-                  to={`/activities/${activity.id}`}
-                  className="flex items-center justify-between gap-4 rounded-xl border border-gray-100 p-4 transition-all hover:border-primary-200 hover:bg-primary-50/30"
-                >
-                  <div>
-                    <div className="font-medium text-gray-900">{activity.title}</div>
-                    <div className="mt-1 text-sm text-gray-600">
-                      {activity.summary || activity.score_reason || '下一步先处理这条机会。'}
-                    </div>
-                  </div>
-                  <div className="text-right text-xs text-gray-500">
-                    <div>{activity.deadline_level || 'normal'}</div>
-                    <div className="mt-1">
-                      {activity.dates?.deadline ? formatDateOnly(activity.dates.deadline) : '无截止时间'}
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </section>
       </div>
     </div>
   )

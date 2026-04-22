@@ -21,6 +21,73 @@ ORDERED_VALUES = {
     "high": 3,
 }
 
+LOCALIZED_LABELS = {
+    "hard_gate": "硬门槛",
+    "trust_gate": "可信门槛",
+    "roi": "回报效率",
+    "trust": "可信度",
+    "priority": "优先级",
+    "Hard gate": "硬门槛",
+    "Trust gate": "可信门槛",
+    "ROI": "回报效率",
+    "Trust": "可信度",
+    "Priority": "优先级",
+    "reward_clarity": "奖励清晰度",
+    "reward_clarity_score": "奖励清晰度",
+    "Reward clarity": "奖励清晰度",
+    "Reward must be explicit": "奖励必须明确",
+    "solo_friendliness": "单人友好度",
+    "Solo only": "仅限单人",
+    "Must be solo-friendly": "必须适合单人",
+    "effort_level": "投入成本",
+    "Estimated effort": "投入成本",
+    "payout_speed": "回款速度",
+    "Payout speed": "回款速度",
+    "source_trust": "来源可信度",
+    "Source trust": "来源可信度",
+    "roi_level": "回报效率",
+    "roi_score": "回报效率",
+    "ROI score": "回报效率",
+    "ROI level": "回报效率",
+    "trust_score": "可信度",
+    "Trust score": "可信度",
+}
+
+PASSED_REASON_TEMPLATES = {
+    "reward_clarity": "奖励信息相对明确，可以继续评估",
+    "reward_clarity_score": "奖励信息相对明确，可以继续评估",
+    "solo_friendliness": "更适合单人推进，执行阻力较小",
+    "effort_level": "投入成本可控，适合继续推进",
+    "payout_speed": "回款节奏较快，值得优先判断",
+    "source_trust": "来源可信度达标，可以继续跟进",
+    "roi_level": "回报效率有优势，可以优先判断",
+    "roi_score": "回报效率达到预期，可以继续推进",
+    "trust_score": "可信度处于可接受范围",
+}
+
+FAILED_REASON_TEMPLATES = {
+    "reward_clarity": "奖励信息不够明确，建议先不要投入",
+    "reward_clarity_score": "奖励信息不够明确，建议先不要投入",
+    "solo_friendliness": "更像团队型机会，当前不适合单人推进",
+    "effort_level": "投入成本偏高，建议暂时不要优先处理",
+    "payout_speed": "回款周期偏长，建议降低优先级",
+    "source_trust": "来源可信度不足，建议先核实再决定",
+    "roi_level": "回报效率偏弱，建议暂缓投入",
+    "roi_score": "回报效率偏低，暂时不建议优先投入",
+    "trust_score": "可信度不足，建议人工复核后再决定",
+}
+
+BORDERLINE_REASON_TEMPLATES = {
+    "reward_clarity": "奖励信息接近门槛，建议人工复核",
+    "reward_clarity_score": "奖励信息接近门槛，建议人工复核",
+    "effort_level": "投入成本接近门槛，建议人工复核",
+    "payout_speed": "回款速度接近门槛，建议人工复核",
+    "source_trust": "来源可信度接近门槛，建议人工复核",
+    "roi_level": "回报效率接近门槛，建议人工复核",
+    "roi_score": "回报效率接近门槛，建议人工复核",
+    "trust_score": "可信度接近门槛，建议人工复核",
+}
+
 
 class LayerDecision(BaseModel):
     key: str
@@ -55,6 +122,17 @@ def _compare(actual: Any, operator: str, expected: Any) -> bool:
         return actual == expected
     if operator == "neq":
         return actual != expected
+    if operator == "in":
+        if not isinstance(expected, (list, tuple, set)):
+            return False
+        coerced_expected = {_coerce_value(item) for item in expected}
+        return actual in coerced_expected
+    if operator == "contains":
+        if actual is None:
+            return False
+        if isinstance(actual, (list, tuple, set)):
+            return expected in actual
+        return str(expected) in str(actual)
     if actual is None:
         return False
     if operator == "gte":
@@ -81,6 +159,18 @@ def _is_borderline(actual: Any, operator: str, expected: Any, strictness: str) -
     return False
 
 
+def _localized_label(label: str) -> str:
+    return LOCALIZED_LABELS.get(label, label)
+
+
+def _human_reason(*, key: str, label: str, decision: str) -> str:
+    if decision == "passed":
+        return PASSED_REASON_TEMPLATES.get(key, f"已满足“{_localized_label(label)}”")
+    if decision == "borderline":
+        return BORDERLINE_REASON_TEMPLATES.get(key, f"“{_localized_label(label)}”接近门槛，建议人工复核")
+    return FAILED_REASON_TEMPLATES.get(key, f"未满足“{_localized_label(label)}”，建议暂缓处理")
+
+
 def _evaluate_layer(layer: Dict[str, Any], analysis_fields: Dict[str, Any]) -> LayerDecision:
     reasons: List[str] = []
     borderline = False
@@ -100,20 +190,20 @@ def _evaluate_layer(layer: Dict[str, Any], analysis_fields: Dict[str, Any]) -> L
         passed = _compare(actual, operator, expected)
         if passed:
             passed_conditions += 1
-            reasons.append(f"{label} passed")
+            reasons.append(_human_reason(key=key, label=label, decision="passed"))
             continue
 
         if condition.get("hard_fail"):
             failed = True
-            reasons.append(f"{label} failed hard gate")
+            reasons.append(_human_reason(key=key, label=label, decision="failed"))
             break
 
         if _is_borderline(actual, operator, expected, condition.get("strictness", "medium")):
             borderline = True
-            reasons.append(f"{label} is borderline")
+            reasons.append(_human_reason(key=key, label=label, decision="borderline"))
         else:
             failed = True
-            reasons.append(f"{label} failed")
+            reasons.append(_human_reason(key=key, label=label, decision="failed"))
 
     if failed:
         decision = "failed"
@@ -125,7 +215,7 @@ def _evaluate_layer(layer: Dict[str, Any], analysis_fields: Dict[str, Any]) -> L
     score = 1.0 if enabled_conditions == 0 else passed_conditions / enabled_conditions
     return LayerDecision(
         key=layer["key"],
-        label=layer.get("label", layer["key"]),
+        label=_localized_label(layer.get("label", layer["key"])),
         decision=decision,
         reasons=reasons,
         score=score,

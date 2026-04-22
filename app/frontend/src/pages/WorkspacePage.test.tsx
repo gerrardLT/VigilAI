@@ -75,7 +75,7 @@ function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): Works
         digest_date: '2026-03-23',
         title: 'Daily Digest',
         summary: 'Top picks for today',
-        content: '- AI Hackathon',
+        content: ')]( \n- AI Hackathon\nrmat=webp&resize=400x300\n[更多](https://example.com/more)\nShip MVP Fast\nBuild an AI agent.',
         item_ids: ['activity-1'],
         status: 'draft',
         created_at: '2026-03-23T08:00:00Z',
@@ -103,8 +103,8 @@ function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): Works
       first_actions: [
         {
           id: 'activity-2',
-          title: 'Ship MVP Fast',
-          description: 'Fast deadline',
+          title: 'Ship MVP Fast )]( Ship MVP Fast 2026-03-24 21:00 线上活动 1(current) 2 3',
+          description: 'Fast deadline [更多](https://example.com/more)',
           source_id: 'devpost',
           source_name: 'Devpost',
           url: 'https://example.com/mvp',
@@ -136,8 +136,8 @@ function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): Works
       blocked_opportunities: [
         {
           id: 'activity-3',
-          title: 'Enterprise RFP',
-          description: 'Looks big but not solo-friendly.',
+          title: 'Enterprise RFP )]( Enterprise RFP 2026-03-30 10:00 线下活动 1(current) 2 3',
+          description: 'Looks big but not solo-friendly. [更多](https://example.com/more)',
           source_id: 'enterprise',
           source_name: 'Enterprise Feed',
           url: 'https://example.com/rfp',
@@ -249,31 +249,53 @@ describe('WorkspacePage', () => {
 
     expect(screen.getByTestId('workspace-page')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '机会工作台' })).toBeInTheDocument()
-    expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
-    expect(screen.getByText('Daily Digest')).toBeInTheDocument()
-    expect(screen.getByText('Hackathon Feed')).toBeInTheDocument()
-    expect(screen.getByText('Ship MVP Fast')).toBeInTheDocument()
-    expect(screen.getByText('Enterprise RFP')).toBeInTheDocument()
+    expect(screen.getByText('AI 智能代理决策驾驶舱')).toBeInTheDocument()
+    expect(screen.getByText('今日结论')).toBeInTheDocument()
+    expect(screen.getByText('立即处理')).toBeInTheDocument()
+    expect(screen.getByText('系统告警')).toBeInTheDocument()
+    expect(screen.getByText('模板诊断')).toBeInTheDocument()
+    expect(screen.getByText('AI 黑客松')).toBeInTheDocument()
+    expect(screen.getByText('今日日报')).toBeInTheDocument()
+    expect(screen.getByText('黑客松情报源')).toBeInTheDocument()
+    expect(screen.getByText('MVP 快速交付')).toBeInTheDocument()
+    expect(screen.getByText('企业需求征集')).toBeInTheDocument()
     expect(screen.getByTestId('workspace-analysis-overview')).toHaveTextContent('2')
-    expect(screen.getByTestId('workspace-default-template')).toHaveTextContent('Quick money')
+    expect(screen.getByTestId('workspace-default-template')).toHaveTextContent('快钱优先')
     expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('50%')
-    expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('Solo only failed hard gate')
+    expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('未通过仅限单人的硬门槛')
+    expect(screen.queryByText('VigilAI Workspace')).not.toBeInTheDocument()
   })
 
-  it('exposes quick actions and supports refreshing the workspace', () => {
+  it('renders a cleaned digest excerpt instead of raw scraped noise', () => {
     render(
       <MemoryRouter>
         <WorkspacePage />
       </MemoryRouter>
     )
 
-    expect(screen.getByTestId('workspace-quick-actions')).toBeInTheDocument()
-    expect(screen.getByTestId('workspace-quick-action-digest')).toBeInTheDocument()
-    expect(screen.getByTestId('workspace-quick-action-tracking')).toBeInTheDocument()
-    expect(screen.getByTestId('workspace-quick-action-opportunities')).toBeInTheDocument()
-    expect(screen.getByTestId('workspace-quick-action-analysis-results')).toBeInTheDocument()
-    expect(screen.getByTestId('workspace-quick-action-sources')).toBeInTheDocument()
-    expect(screen.getByText('查看分析结果')).toBeInTheDocument()
+    const excerpt = screen.getByTestId('workspace-digest-excerpt')
+
+    expect(excerpt).toHaveTextContent('- AI 黑客松')
+    expect(excerpt).toHaveTextContent('MVP 快速交付')
+    expect(excerpt).toHaveTextContent('构建一个 AI Agent。')
+    expect(excerpt).not.toHaveTextContent(')](')
+    expect(excerpt).not.toHaveTextContent('rmat=webp')
+    expect(excerpt).not.toHaveTextContent('resize=400x300')
+    expect(excerpt).not.toHaveTextContent('https://example.com/more')
+  })
+
+  it('exposes decision-first panels and supports refreshing the workspace', () => {
+    render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('workspace-priority-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-template-diagnosis')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-alert-panel')).toBeInTheDocument()
+    expect(screen.queryByTestId('workspace-quick-actions')).not.toBeInTheDocument()
+    expect(screen.getByText('先处理高优先级机会')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('workspace-refresh-button'))
 

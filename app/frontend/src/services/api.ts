@@ -16,6 +16,8 @@ import type {
   DigestDetail,
   DigestGenerateRequest,
   DigestSendRequest,
+  OpportunityAiFilterRequest,
+  OpportunityAiFilterResponse,
   RefreshResponse,
   Source,
   StatsResponse,
@@ -34,7 +36,7 @@ export class ApiError extends Error {
     public statusCode: number,
     message: string
   ) {
-    super(`API Error: ${statusCode} ${message}`)
+    super(`接口请求失败（${statusCode}）：${message}`)
     this.name = 'ApiError'
   }
 }
@@ -65,7 +67,7 @@ class ApiService {
       if (error instanceof Error) {
         throw new ApiError(0, error.message)
       }
-      throw new ApiError(0, 'Unknown error')
+      throw new ApiError(0, '未知错误')
     })
 
     if (!response.ok) {
@@ -261,6 +263,17 @@ class ApiService {
 
   async getAnalysisResult(activityId: string, signal?: AbortSignal): Promise<ActivityDetail> {
     return this.request<ActivityDetail>(`/api/analysis/results/${activityId}`, {}, signal)
+  }
+
+  async aiFilterActivities(
+    payload: OpportunityAiFilterRequest,
+    signal?: AbortSignal
+  ): Promise<OpportunityAiFilterResponse> {
+    return this.request<OpportunityAiFilterResponse>(
+      '/api/activities/ai-filter',
+      this.withJsonBody('POST', payload),
+      signal
+    )
   }
 
   async getTracking(status?: TrackingStatus, signal?: AbortSignal): Promise<TrackingItem[]> {

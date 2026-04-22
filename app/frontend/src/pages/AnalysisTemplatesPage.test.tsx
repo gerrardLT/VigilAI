@@ -9,8 +9,10 @@ const apiMocks = vi.hoisted(() => ({
   previewDraftAnalysisTemplate: vi.fn(),
 }))
 
+type AnalysisTemplateHookState = ReturnType<typeof buildAnalysisTemplateHookState>
+
 const analysisTemplateHookState = vi.hoisted(() => ({
-  current: null as any,
+  current: buildAnalysisTemplateHookState() as AnalysisTemplateHookState,
 }))
 
 function buildAnalysisTemplateHookState() {

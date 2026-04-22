@@ -42,7 +42,6 @@ export const CATEGORY_OPTIONS = [
   { value: 'bounty', label: '赏金' },
   { value: 'grant', label: '资助' },
   { value: 'dev_event', label: '开发者活动' },
-  { value: 'news', label: '科技新闻' },
 ] as const
 
 // 状态颜色映射
@@ -88,6 +87,66 @@ export const CATEGORY_ICON_MAP = {
 } as const
 
 // 应用版本
+export const DEADLINE_OPTIONS = [
+  { value: '', label: '全部时效' },
+  { value: 'urgent', label: '紧急截止' },
+  { value: 'soon', label: '即将截止' },
+  { value: 'upcoming', label: '近期开放' },
+  { value: 'later', label: '较晚截止' },
+] as const
+
+export const PRIZE_RANGE_OPTIONS = [
+  { value: '', label: '全部奖金' },
+  { value: 'unknown', label: '奖金未知' },
+  { value: '0-500', label: '0 - 500' },
+  { value: '500-2000', label: '500 - 2000' },
+  { value: '2000-10000', label: '2000 - 10000' },
+  { value: '10000+', label: '10000 以上' },
+] as const
+
+export const SOLO_FRIENDLINESS_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'solo_friendly', label: '适合单人' },
+  { value: 'team_required', label: '需要团队' },
+  { value: 'unclear', label: '暂不明确' },
+] as const
+
+export const REWARD_CLARITY_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'high', label: '奖励明确' },
+  { value: 'medium', label: '奖励一般' },
+  { value: 'low', label: '奖励不清晰' },
+] as const
+
+export const EFFORT_LEVEL_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'low', label: '低投入' },
+  { value: 'medium', label: '中投入' },
+  { value: 'high', label: '高投入' },
+] as const
+
+export const TRUST_LEVEL_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'high', label: '高可信' },
+  { value: 'medium', label: '中可信' },
+  { value: 'low', label: '低可信' },
+] as const
+
+export const REMOTE_MODE_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'remote', label: '线上/远程' },
+  { value: 'offline', label: '线下/本地' },
+  { value: 'hybrid', label: '混合' },
+  { value: 'unknown', label: '未明确' },
+] as const
+
+export const TRACKING_OPTIONS = [
+  { value: '', label: '全部状态' },
+  { value: 'tracked', label: '已追踪' },
+  { value: 'favorited', label: '已收藏' },
+  { value: 'untracked', label: '待处理' },
+] as const
+
 export const APP_VERSION = '1.0.0'
 
 // 应用名称

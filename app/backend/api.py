@@ -6,13 +6,14 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import SOURCES_CONFIG
+from analysis.opportunity_ai_filter import OpportunityAiFilterError, filter_opportunities_with_ai
+from config import AI_FILTER_MAX_CANDIDATES, SOURCES_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,11 @@ class AnalysisTemplatePreviewRequest(BaseModel):
     activity_ids: List[str] = []
 
 
+class OpportunityAiFilterRequest(BaseModel):
+    base_filters: Dict[str, Any] = {}
+    query: str
+
+
 def _serialize_model(value):
     if hasattr(value, "model_dump"):
         return value.model_dump(mode="json")
@@ -168,6 +174,11 @@ async def list_activities(
     analysis_status: Optional[str] = Query(None),
     deadline_level: Optional[str] = Query(None),
     trust_level: Optional[str] = Query(None),
+    prize_range: Optional[str] = Query(None),
+    solo_friendliness: Optional[str] = Query(None),
+    reward_clarity: Optional[str] = Query(None),
+    effort_level: Optional[str] = Query(None),
+    remote_mode: Optional[str] = Query(None),
     is_tracking: Optional[bool] = Query(None),
     is_favorited: Optional[bool] = Query(None),
     sort_by: str = Query("created_at"),
@@ -190,6 +201,16 @@ async def list_activities(
         filters["deadline_level"] = deadline_level
     if trust_level:
         filters["trust_level"] = trust_level
+    if prize_range:
+        filters["prize_range"] = prize_range
+    if solo_friendliness:
+        filters["solo_friendliness"] = solo_friendliness
+    if reward_clarity:
+        filters["reward_clarity"] = reward_clarity
+    if effort_level:
+        filters["effort_level"] = effort_level
+    if remote_mode:
+        filters["remote_mode"] = remote_mode
     if is_tracking is not None:
         filters["is_tracking"] = is_tracking
     if is_favorited is not None:
@@ -215,6 +236,68 @@ async def get_activity(request: Request, activity_id: str):
     if detail is None:
         raise HTTPException(status_code=404, detail="Activity not found")
     return detail
+
+
+@app.post("/api/activities/ai-filter")
+async def ai_filter_activities(request: Request, payload: OpportunityAiFilterRequest):
+    base_filters = dict(payload.base_filters or {})
+    query = payload.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="请输入 AI 精筛条件。")
+
+    sort_by = str(base_filters.pop("sort_by", "score"))
+    sort_order = str(base_filters.pop("sort_order", "desc"))
+    base_filters.pop("page", None)
+    base_filters.pop("page_size", None)
+
+    candidates, total = request.app.state.data_manager.get_activities(
+        filters=base_filters,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=1,
+        page_size=AI_FILTER_MAX_CANDIDATES + 1,
+    )
+
+    if total > AI_FILTER_MAX_CANDIDATES:
+        raise HTTPException(
+            status_code=400,
+            detail="当前候选机会过多，请先通过分类、截止时间、奖金区间等条件缩小范围后再进行 AI 精筛。",
+        )
+
+    try:
+        result = filter_opportunities_with_ai(candidates=candidates, query=query)
+    except ValueError as exc:
+        if "candidate limit" in str(exc):
+            raise HTTPException(
+                status_code=400,
+                detail="当前候选机会过多，请先通过分类、截止时间、奖金区间等条件缩小范围后再进行 AI 精筛。",
+            ) from exc
+        raise
+    except OpportunityAiFilterError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    candidates_by_id = {activity.id: activity for activity in candidates}
+    merged_items = []
+    for item in result["items"]:
+        activity = candidates_by_id.get(item["id"])
+        if activity is None:
+            continue
+        merged_items.append(
+            {
+                **_serialize_model(activity),
+                "ai_match_reason": item["ai_match_reason"],
+                "ai_match_confidence": item["ai_match_confidence"],
+                "uncertainties": item.get("uncertainties", []),
+            }
+        )
+
+    return {
+        **result,
+        "items": merged_items,
+        "matched_count": len(merged_items),
+        "discarded_count": max(total - len(merged_items), 0),
+        "candidate_count": total,
+    }
 
 
 @app.get("/api/sources")

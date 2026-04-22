@@ -161,6 +161,8 @@ describe('TrackingPage', () => {
 
     expect(screen.getByTestId('tracking-page')).toBeInTheDocument()
     expect(screen.getByTestId('tracking-reminder-strip')).toBeInTheDocument()
+    expect(screen.getByText('今日跟进焦点')).toBeInTheDocument()
+    expect(screen.queryByText('Today Focus')).not.toBeInTheDocument()
     expect(screen.getByTestId('tracking-summary-due-today-count')).toHaveTextContent('1')
     expect(screen.getByTestId('tracking-summary-due-soon-count')).toHaveTextContent('2')
     expect(screen.getByTestId('tracking-summary-stale-count')).toHaveTextContent('1')
@@ -181,9 +183,9 @@ describe('TrackingPage', () => {
 
     const trackingList = within(screen.getByTestId('tracking-list'))
 
-    expect(trackingList.getByText('AI Fellowship')).toBeInTheDocument()
-    expect(trackingList.getByText('Grant Sprint')).toBeInTheDocument()
-    expect(trackingList.queryByText('Quest Review')).not.toBeInTheDocument()
+    expect(trackingList.getByText('AI 驻留计划')).toBeInTheDocument()
+    expect(trackingList.getByText('资助冲刺')).toBeInTheDocument()
+    expect(trackingList.queryByText('任务复核')).not.toBeInTheDocument()
   })
 
   it('renders tracked items and allows marking one as done', () => {
@@ -193,7 +195,7 @@ describe('TrackingPage', () => {
       </MemoryRouter>
     )
 
-    expect(within(screen.getByTestId('tracking-list')).getByText('AI Fellowship')).toBeInTheDocument()
+    expect(within(screen.getByTestId('tracking-list')).getByText('AI 驻留计划')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('tracking-done-activity-1'))
 
