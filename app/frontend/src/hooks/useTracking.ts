@@ -28,7 +28,7 @@ export function useTracking(initialStatus?: TrackingStatus): UseTrackingResult {
       const data = await api.getTracking(statusFilter)
       setItems(data)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load tracking items'
+      const message = err instanceof Error ? err.message : '加载跟进列表失败'
       setError(message)
       setItems([])
     } finally {
@@ -48,7 +48,7 @@ export function useTracking(initialStatus?: TrackingStatus): UseTrackingResult {
         await fetchTracking()
         return tracking
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to create tracking item'
+        const message = err instanceof Error ? err.message : '创建跟进记录失败'
         setError(message)
         return null
       }
@@ -64,7 +64,7 @@ export function useTracking(initialStatus?: TrackingStatus): UseTrackingResult {
         await fetchTracking()
         return tracking
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to update tracking item'
+        const message = err instanceof Error ? err.message : '更新跟进记录失败'
         setError(message)
         return null
       }
@@ -80,7 +80,7 @@ export function useTracking(initialStatus?: TrackingStatus): UseTrackingResult {
         await fetchTracking()
         return result.success
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to delete tracking item'
+        const message = err instanceof Error ? err.message : '删除跟进记录失败'
         setError(message)
         return false
       }

@@ -5,6 +5,8 @@ import { Loading } from '../components/Loading'
 import { Toast } from '../components/Toast'
 import { useTracking } from '../hooks/useTracking'
 import type { TrackingItem, TrackingStatus } from '../types'
+import { getTrackingStatusLabel, localizeAnalysisText } from '../utils/analysisI18n'
+import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
 import { daysUntil, formatDateOnly, formatDateTime } from '../utils/formatDate'
 
 const FILTERS: Array<{ value: TrackingStatus | undefined; label: string }> = [
@@ -22,21 +24,7 @@ const STATUS_STYLES: Record<TrackingStatus, string> = {
   archived: 'bg-gray-100 text-gray-600',
 }
 
-const STATUS_LABELS: Record<TrackingStatus, string> = {
-  saved: '已保存',
-  tracking: '跟进中',
-  done: '已完成',
-  archived: '已归档',
-}
-
-const FOCUS_FILTERS = [
-  { value: 'all', label: '全部跟进' },
-  { value: 'due_today', label: '只看今日截止' },
-  { value: 'due_soon', label: '只看临近截止' },
-  { value: 'needs_action', label: '只看待处理' },
-] as const
-
-type FocusFilter = (typeof FOCUS_FILTERS)[number]['value']
+type FocusFilter = 'all' | 'due_today' | 'due_soon' | 'needs_action'
 
 function parseDate(dateString: string | null | undefined) {
   if (!dateString) {
@@ -122,7 +110,7 @@ function getDeadlineTone(item: TrackingItem, now: Date) {
 
   if (hoursUntil <= 72) {
     return {
-      label: '72h 内截止',
+      label: '72 小时内截止',
       className: 'bg-amber-100 text-amber-700',
     }
   }
@@ -178,12 +166,22 @@ export function TrackingPage() {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [focusFilter, setFocusFilter] = useState<FocusFilter>('all')
-  const now = new Date()
-
-  const dueTodayItems = useMemo(() => items.filter(item => isDueToday(item, now)), [items, now])
-  const dueSoonItems = useMemo(() => items.filter(item => isDueSoon(item, now)), [items, now])
-  const recentUpdatedItems = useMemo(() => items.filter(item => isRecentUpdate(item, now)), [items, now])
-  const staleItems = useMemo(() => items.filter(item => isStale(item, now)), [items, now])
+  const dueTodayItems = useMemo(() => {
+    const currentTime = new Date()
+    return items.filter(item => isDueToday(item, currentTime))
+  }, [items])
+  const dueSoonItems = useMemo(() => {
+    const currentTime = new Date()
+    return items.filter(item => isDueSoon(item, currentTime))
+  }, [items])
+  const recentUpdatedItems = useMemo(() => {
+    const currentTime = new Date()
+    return items.filter(item => isRecentUpdate(item, currentTime))
+  }, [items])
+  const staleItems = useMemo(() => {
+    const currentTime = new Date()
+    return items.filter(item => isStale(item, currentTime))
+  }, [items])
   const itemsByStatus = useMemo(
     () =>
       items.reduce<Record<string, number>>((accumulator, item) => {
@@ -194,18 +192,19 @@ export function TrackingPage() {
   )
 
   const filteredItems = useMemo(() => {
+    const currentTime = new Date()
     let nextItems = items
 
     if (focusFilter === 'due_today') {
-      nextItems = nextItems.filter(item => isDueToday(item, now))
+      nextItems = nextItems.filter(item => isDueToday(item, currentTime))
     } else if (focusFilter === 'due_soon') {
-      nextItems = nextItems.filter(item => isDueSoon(item, now))
+      nextItems = nextItems.filter(item => isDueSoon(item, currentTime))
     } else if (focusFilter === 'needs_action') {
       nextItems = nextItems.filter(isNeedsAction)
     }
 
-    return sortTrackingItems(nextItems, now)
-  }, [focusFilter, items, now])
+    return sortTrackingItems(nextItems, currentTime)
+  }, [focusFilter, items])
 
   async function handleStatusChange(activityId: string, status: TrackingStatus) {
     setActionLoading(`${activityId}:${status}`)
@@ -271,14 +270,11 @@ export function TrackingPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-4">
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">
           {FILTERS.map(filter => {
             const active = statusFilter === filter.value
-            const count =
-              filter.value === undefined
-                ? items.length
-                : itemsByStatus[filter.value] ?? 0
+            const count = filter.value === undefined ? items.length : itemsByStatus[filter.value] ?? 0
 
             return (
               <button
@@ -298,7 +294,7 @@ export function TrackingPage() {
       <section className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5" data-testid="tracking-reminder-strip">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-sky-600">Today Focus</div>
+            <div className="text-xs tracking-[0.2em] text-sky-600">今日跟进焦点</div>
             <div className="mt-2 text-lg font-semibold text-slate-900">
               今天有 {dueTodayItems.length} 条机会今日截止，{dueSoonItems.length} 条机会将在 72 小时内截止。
             </div>
@@ -315,11 +311,7 @@ export function TrackingPage() {
             >
               只看今日截止
             </button>
-            <button
-              type="button"
-              onClick={() => setFocusFilter('all')}
-              className="btn btn-secondary"
-            >
+            <button type="button" onClick={() => setFocusFilter('all')} className="btn btn-secondary">
               查看全部
             </button>
           </div>
@@ -333,7 +325,7 @@ export function TrackingPage() {
             </div>
           </div>
           <div className="rounded-xl bg-white/90 p-4">
-            <div className="text-xs text-slate-500">72h 内截止</div>
+            <div className="text-xs text-slate-500">72 小时内截止</div>
             <div className="mt-2 text-2xl font-semibold text-slate-900" data-testid="tracking-summary-due-soon-count">
               {dueSoonItems.length}
             </div>
@@ -348,7 +340,7 @@ export function TrackingPage() {
       </section>
 
       {items.length === 0 ? (
-        <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-10 text-center">
+        <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm">
           <div className="text-lg font-medium text-gray-900">你还没有加入任何跟进机会</div>
           <p className="mt-2 text-sm text-gray-500">
             从工作台或机会池中选择值得关注的机会，加入跟进后会在这里持续管理。
@@ -366,17 +358,18 @@ export function TrackingPage() {
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.6fr_320px]">
           <div className="space-y-4" data-testid="tracking-list">
             {filteredItems.length === 0 ? (
-              <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-8 text-center text-sm text-gray-500">
+              <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-500 shadow-sm">
                 当前筛选下没有匹配的跟进项，试试切回全部或查看机会池。
               </div>
             ) : (
               filteredItems.map(item => {
-                const deadlineTone = getDeadlineTone(item, now)
+                const deadlineTone = getDeadlineTone(item, new Date())
+
                 return (
                   <div
                     key={item.activity_id}
                     data-testid={`tracking-card-${item.activity_id}`}
-                    className="rounded-2xl bg-white shadow-sm border border-gray-100 p-5"
+                    className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
                   >
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-3">
@@ -385,10 +378,10 @@ export function TrackingPage() {
                             to={`/activities/${item.activity.id}`}
                             className="text-lg font-semibold text-gray-900 hover:text-primary-700"
                           >
-                            {item.activity.title}
+                            {buildActivityDisplayTitle(item.activity)}
                           </Link>
                           <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[item.status]}`}>
-                            {STATUS_LABELS[item.status]}
+                            {getTrackingStatusLabel(item.status)}
                           </span>
                           <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${deadlineTone.className}`}>
                             {deadlineTone.label}
@@ -401,18 +394,18 @@ export function TrackingPage() {
                         </div>
 
                         <div className="text-sm text-gray-600">
-                          {item.activity.summary || item.activity.description || '暂无摘要'}
+                          {buildActivityDisplayExcerpt(item.activity) || '暂无摘要'}
                         </div>
 
                         <div className="grid gap-2 text-sm text-gray-500 md:grid-cols-3">
-                          <div>来源：{item.activity.source_name}</div>
-                          <div>下一步：{item.next_action || '未填写'}</div>
+                          <div>来源：{localizeAnalysisText(item.activity.source_name)}</div>
+                          <div>下一步：{localizeAnalysisText(item.next_action) || '未填写'}</div>
                           <div>提醒：{item.remind_at ? formatDateTime(item.remind_at) : '未设置'}</div>
                         </div>
 
                         {item.notes && (
                           <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-                            {item.notes}
+                            {localizeAnalysisText(item.notes)}
                           </div>
                         )}
 
@@ -464,7 +457,7 @@ export function TrackingPage() {
           </div>
 
           <aside className="space-y-4" data-testid="tracking-alerts-panel">
-            <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-5">
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <div className="text-lg font-semibold text-gray-900">今日截止</div>
               <div className="mt-3 space-y-3">
                 {dueTodayItems.length > 0 ? (
@@ -474,7 +467,7 @@ export function TrackingPage() {
                       to={`/activities/${item.activity.id}`}
                       className="block rounded-xl border border-rose-100 bg-rose-50 p-3 text-sm"
                     >
-                      <div className="font-medium text-gray-900">{item.activity.title}</div>
+                      <div className="font-medium text-gray-900">{buildActivityDisplayTitle(item.activity)}</div>
                       <div className="mt-1 text-rose-700">
                         {item.activity.dates?.deadline ? formatDateTime(item.activity.dates.deadline) : '今天处理'}
                       </div>
@@ -486,7 +479,7 @@ export function TrackingPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-5">
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <div className="text-lg font-semibold text-gray-900">最近更新</div>
               <div className="mt-3 space-y-3">
                 {recentUpdatedItems.length > 0 ? (
@@ -496,7 +489,7 @@ export function TrackingPage() {
                       to={`/activities/${item.activity.id}`}
                       className="block rounded-xl border border-sky-100 bg-sky-50 p-3 text-sm"
                     >
-                      <div className="font-medium text-gray-900">{item.activity.title}</div>
+                      <div className="font-medium text-gray-900">{buildActivityDisplayTitle(item.activity)}</div>
                       <div className="mt-1 text-sky-700">更新于 {formatDateTime(item.updated_at)}</div>
                     </Link>
                   ))
@@ -506,7 +499,7 @@ export function TrackingPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-5">
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <div className="text-lg font-semibold text-gray-900">长时间未处理</div>
               <div className="mt-3 space-y-3">
                 {staleItems.length > 0 ? (
@@ -516,7 +509,7 @@ export function TrackingPage() {
                       to={`/activities/${item.activity.id}`}
                       className="block rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm"
                     >
-                      <div className="font-medium text-gray-900">{item.activity.title}</div>
+                      <div className="font-medium text-gray-900">{buildActivityDisplayTitle(item.activity)}</div>
                       <div className="mt-1 text-amber-700">上次更新 {formatDateTime(item.updated_at)}</div>
                     </Link>
                   ))

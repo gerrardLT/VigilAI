@@ -1,129 +1,157 @@
-# VigilAI - 开发者搞钱机会监控系统
+# VigilAI
 
-VigilAI是一个自动化监控系统，帮助开发者追踪各类赚钱机会，包括黑客松、编程竞赛、Web3空投、漏洞赏金、开源资助等。
+VigilAI 是一个面向开发者机会发现与决策的情报工作台。它不只是抓取“搞钱机会”，而是把机会采集、AI 分析、人工跟进、日报沉淀和来源治理串成一条可执行链路。
 
-## 功能特性
+## 当前定位
 
-- 多源数据采集：支持RSS、网页爬取、API等多种数据源
-- 智能去重：基于URL自动去重，避免重复信息
-- 定时更新：根据信息源优先级自动调度采集任务
-- REST API：提供完整的数据查询和管理接口
-- 分类过滤：支持按类别、来源、状态等多维度筛选
+当前项目最准确的定义是：
 
-## 支持的信息源
+开发者机会情报中台 + AI 辅助决策工作流
 
-- Devpost - 全球黑客松聚合平台
-- DoraHacks - Web3黑客松和Grant平台
-- Gitcoin - 开源项目资助平台
-- Kaggle - 数据科学竞赛平台
-- 36氪 - 科技创业媒体
-- 虎嗅 - 科技商业媒体
+它已经不是早期单纯的“活动列表”，而是围绕下面几类任务展开：
 
-## 技术栈
+- 发现机会：统一浏览多来源机会，并按推荐优先级筛选
+- 判断机会：用 AI 模板、结构化字段和分析结果辅助判断
+- 推进行动：收藏、加入跟进、记录下一步动作和提醒
+- 生成摘要：把高价值机会沉淀为今日日报
+- 治理供给：监控来源健康、刷新时效和异常来源
 
-- Python 3.11+
-- FastAPI - Web框架
-- SQLite - 数据存储
-- APScheduler - 任务调度
-- feedparser - RSS解析
-- httpx - HTTP客户端
-- BeautifulSoup4 - HTML解析
+## 当前核心功能
 
-## 快速开始
+### 1. 机会池
 
-### 环境准备
+- 聚合机会列表，支持分类、来源、关键词、截止时间、奖金区间、可信度、跟进状态等筛选
+- 支持排序、分页和批量操作
+- 支持基于当前筛选结果做 AI 精筛
+- 支持临时微调 AI 模板规则，只影响当前机会池预览
 
-```bash
-# 创建conda虚拟环境
-conda create -n vigilai python=3.11
-conda activate vigilai
+### 2. AI 分析系统
 
-# 安装依赖
-cd app/backend
-pip install -r requirements.txt
-```
+- 支持分析模板的创建、复制、编辑、激活和删除
+- 支持模板预览和重新分析全部机会
+- 为每条机会产出分析状态、分析原因、结构化字段和评分信息
+- 提供分析结果页，集中查看通过、观察和拦截样本
 
-### 启动服务
+### 3. 机会工作台
 
-```bash
-cd app/backend
-python main.py
-```
+- 聚合总览指标、优先机会、首要动作、分析概览、来源预警和日报预览
+- 把“今天先看什么、为什么值得看、下一步做什么”集中到一个入口
+- 支持直接收藏或加入跟进，不必先跳到详情页
 
-服务启动后，API将在 http://localhost:8000 可用。
+### 4. 机会详情与执行动作
 
-### API端点
+- 展示完整机会信息、AI 分析、结构化字段、时间线和相关机会
+- 支持加入跟进、收藏、加入今日日报候选
+- 支持在详情页直接维护跟进计划、备注、下一步动作和提醒时间
 
-- GET /api/activities - 获取活动列表（支持过滤、排序、分页）
-- GET /api/activities/{id} - 获取活动详情
-- GET /api/sources - 获取信息源状态
-- POST /api/sources/{id}/refresh - 刷新指定信息源
-- POST /api/sources/refresh-all - 刷新所有信息源
-- GET /api/stats - 获取统计信息
-- GET /api/categories - 获取活动类别列表
-- GET /api/health - 健康检查
+### 5. 跟进系统
 
-### 运行测试
+- 维护 saved、tracking、done、archived 等跟进状态
+- 管理备注、下一步动作和提醒
+- 提供“今日跟进焦点”和拖延项视图
 
-```bash
-cd app/backend
-python -m pytest tests/ -v
-```
+### 6. 日报系统
+
+- 先收集日报候选机会，再生成日报
+- 支持查看历史日报、复制摘要、标记已发送
+- 让机会判断结果沉淀为每天的可分享输出
+
+### 7. 来源健康治理
+
+- 查看来源状态、上次运行、上次成功时间、健康分和新鲜度
+- 支持单个来源刷新和全部刷新
+- 快速定位报错、陈旧或需要排查的来源
+
+## 前端页面
+
+- `/workspace`：机会工作台
+- `/activities`：机会池
+- `/activities/:id`：机会详情
+- `/analysis/results`：AI 分析结果
+- `/analysis/templates`：模板中心
+- `/tracking`：跟进列表
+- `/digests`：日报
+- `/sources`：来源健康
+- `/dashboard`：基础统计看板
+
+## 后端能力
+
+FastAPI 当前主要提供以下接口族：
+
+- `/api/activities`：机会列表、详情、AI 精筛
+- `/api/analysis/*`：模板管理、模板预览、分析运行、分析结果
+- `/api/tracking/*`：跟进记录管理
+- `/api/digests/*`：日报候选、日报生成、日报发送
+- `/api/sources/*`：来源状态和刷新
+- `/api/workspace`：工作台聚合数据
+- `/api/stats`：统计总览
+- `/api/categories`：分类选项
+- `/api/health`：健康检查
 
 ## 项目结构
 
-```
-app/backend/
-├── api.py              # REST API服务
-├── config.py           # 配置文件
-├── data_manager.py     # 数据管理模块
-├── main.py             # 主程序入口
-├── models.py           # 数据模型
-├── scheduler.py        # 任务调度器
-├── requirements.txt    # Python依赖
-├── data/               # 数据目录
-│   └── vigilai.db      # SQLite数据库
-├── scrapers/           # 爬虫模块
-│   ├── base.py         # 爬虫基类
-│   ├── rss_scraper.py  # RSS爬虫
-│   ├── web_scraper.py  # 网页爬虫
-│   ├── web3_scraper.py # Web3平台爬虫
-│   ├── kaggle_scraper.py    # Kaggle爬虫
-│   └── tech_media_scraper.py # 科技媒体爬虫
-└── tests/              # 测试目录
-    ├── test_models.py
-    ├── test_data_manager.py
-    └── test_rss_scraper.py
+```text
+app/
+  backend/
+    api.py
+    config.py
+    data_manager.py
+    analysis/
+    scrapers/
+    tests/
+  frontend/
+    src/
+      components/
+      hooks/
+      pages/
+      services/
+      types/
+docs/
+  当前项目核心功能梳理.md
+  当前业务逻辑与产品分析.md
+  V2*.md
 ```
 
-## 活动类别
+## 快速启动
 
-- hackathon - 黑客松
-- competition - 编程竞赛
-- airdrop - 空投活动
-- bounty - 漏洞赏金
-- grant - 开源资助
-- event - 其他活动
+### 后端
 
-## 配置说明
+```bash
+cd app/backend
+pip install -r requirements.txt
+python main.py
+```
 
-信息源配置位于 config.py 的 SOURCES_CONFIG 字典中，每个信息源包含：
+默认地址：`http://localhost:8000`
 
-- name: 显示名称
-- type: 类型（rss/web/api）
-- url: 数据源URL
-- priority: 优先级（high/medium/low）
-- enabled: 是否启用
-- category: 默认活动类别
+### 前端
 
-优先级对应的更新间隔：
-- high: 1小时
-- medium: 2小时
-- low: 6小时
+```bash
+cd app/frontend
+npm install
+npm run dev
+```
 
-## 开发计划
+默认地址：`http://localhost:5173`
 
-- 前端界面开发
-- 邮件/微信通知
-- 更多信息源支持
-- 活动推荐算法
+## 相关文档
+
+- [当前项目核心功能梳理](./docs/当前项目核心功能梳理.md)
+- [当前业务逻辑与产品分析](./docs/当前业务逻辑与产品分析.md)
+- [V2 产品信息架构与页面原型说明](./docs/V2产品信息架构与页面原型说明.md)
+
+## 当前阶段判断
+
+这个项目已经完成了从“机会采集工具”到“机会决策工作流”的跃迁，但还处在产品化中段。当前最成熟的是：
+
+- 机会浏览与筛选
+- AI 模板分析
+- 跟进和日报闭环
+- 来源健康治理
+
+仍然值得持续打磨的是：
+
+- 自动刷新与调度稳定性
+- 分类体系统一
+- 数据质量治理和跨源去重
+- 更强的个性化推荐与通知闭环

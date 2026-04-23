@@ -604,6 +604,13 @@ class DataManager:
     def _is_firecrawl_source(self, source_id: str) -> bool:
         return SOURCES_CONFIG.get(source_id, {}).get("type") == "firecrawl"
 
+    @staticmethod
+    def _category_value(category: Any) -> str:
+        return category.value if hasattr(category, "value") else str(category or "")
+
+    def _is_news_activity(self, category: Any) -> bool:
+        return self._category_value(category) == "news"
+
     def _is_hidden_activity(
         self,
         *,
@@ -633,10 +640,17 @@ class DataManager:
             full_content=row["full_content"],
         )
 
-    def _visible_activities_from_rows(self, rows: List[sqlite3.Row]) -> List[Activity]:
+    def _visible_activities_from_rows(
+        self,
+        rows: List[sqlite3.Row],
+        *,
+        include_news: bool = False,
+    ) -> List[Activity]:
         activities: List[Activity] = []
         for row in rows:
             if self._is_hidden_activity_row(row):
+                continue
+            if not include_news and self._is_news_activity(row["category"]):
                 continue
             activities.append(self._row_to_activity(row))
         return activities
@@ -727,27 +741,27 @@ class DataManager:
         age_days = (datetime.now() - activity.created_at).total_seconds() / 86400
         if age_days <= 1:
             score += 30
-            reasons.append("recent")
+            reasons.append("信息很新")
         elif age_days <= 7:
             score += 20
-            reasons.append("fresh")
+            reasons.append("近期更新")
         else:
             score += 10
         if deadline_level == "urgent":
             score += 30
-            reasons.append("urgent deadline")
+            reasons.append("截止时间紧")
         elif deadline_level == "soon":
             score += 20
-            reasons.append("near deadline")
+            reasons.append("临近截止")
         elif deadline_level == "upcoming":
             score += 10
         if activity.prize and activity.prize.amount:
             score += 20 if activity.prize.amount >= 5000 else 10
-            reasons.append("prize available")
+            reasons.append("奖励明确")
         trust_bonus = {"high": 20, "medium": 10, "low": 0}[trust_level]
         score += trust_bonus
         if trust_bonus:
-            reasons.append(f"{trust_level} trust")
+            reasons.append(f"来源可信度{ '高' if trust_level == 'high' else '中等' }")
         return min(score, 100.0), reasons
 
     def _to_iso(self, value: Optional[datetime]) -> Optional[str]:
@@ -755,6 +769,81 @@ class DataManager:
 
     def _normalize_digest_date(self, digest_date: str | None = None) -> str:
         return digest_date or date.today().isoformat()
+
+    def _matches_prize_range(self, activity: Activity, prize_range: str) -> bool:
+        amount = activity.prize.amount if activity.prize and activity.prize.amount is not None else None
+        if prize_range == "unknown":
+            return amount is None
+        if amount is None:
+            return False
+        if prize_range == "0-500":
+            return 0 <= amount <= 500
+        if prize_range == "500-2000":
+            return 500 <= amount <= 2000
+        if prize_range == "2000-10000":
+            return 2000 <= amount <= 10000
+        if prize_range == "10000+":
+            return amount >= 10000
+        return True
+
+    def _normalize_remote_mode(self, location: str | None) -> str:
+        if not location:
+            return "unknown"
+
+        normalized = location.strip().lower()
+        remote_keywords = ("remote", "online", "virtual", "global", "线上", "远程", "云端")
+        hybrid_keywords = ("hybrid", "mixed", "线上+线下", "remote + onsite", "online + offline")
+        offline_keywords = ("offline", "onsite", "in-person", "线下", "现场")
+
+        if any(keyword in normalized for keyword in hybrid_keywords):
+            return "hybrid"
+        if any(keyword in normalized for keyword in remote_keywords):
+            return "remote"
+        if any(keyword in normalized for keyword in offline_keywords):
+            return "offline"
+        return "offline"
+
+    def _matches_analysis_field(self, activity: Activity, key: str, expected: str) -> bool:
+        if not expected:
+            return True
+        actual = (activity.analysis_fields or {}).get(key)
+        return actual == expected
+
+    def _apply_extended_activity_filters(
+        self,
+        activities: List[Activity],
+        filters: Dict[str, Any],
+    ) -> List[Activity]:
+        filtered = activities
+
+        if filters.get("prize_range"):
+            filtered = [
+                activity
+                for activity in filtered
+                if self._matches_prize_range(activity, filters["prize_range"])
+            ]
+
+        analysis_field_filters = {
+            "solo_friendliness": "solo_friendliness",
+            "reward_clarity": "reward_clarity",
+            "effort_level": "effort_level",
+        }
+        for filter_key, analysis_key in analysis_field_filters.items():
+            if filters.get(filter_key):
+                filtered = [
+                    activity
+                    for activity in filtered
+                    if self._matches_analysis_field(activity, analysis_key, filters[filter_key])
+                ]
+
+        if filters.get("remote_mode"):
+            filtered = [
+                activity
+                for activity in filtered
+                if self._normalize_remote_mode(activity.location) == filters["remote_mode"]
+            ]
+
+        return filtered
 
     def _updated_fields(self, existing: sqlite3.Row | None, activity: Activity) -> List[str]:
         if existing is None:
@@ -874,7 +963,7 @@ class DataManager:
         return (
             summary,
             score,
-            ", ".join(reasons) if reasons else None,
+            "，".join(reasons) if reasons else None,
             deadline_level,
             trust_level,
             analysis_fields,
@@ -957,11 +1046,30 @@ class DataManager:
                 continue
             activity = self._row_to_activity(row)
             source_row = self._source_snapshot(conn, activity.source_id)
-            analysis_fields, analysis_result = self._analysis_result_for_activity(activity, source_row, conn)
+            (
+                summary,
+                score,
+                score_reason,
+                deadline_level,
+                trust_level,
+                analysis_fields,
+                analysis_status,
+                analysis_failed_layer,
+                analysis_summary_reasons,
+            ) = self._activity_enrichment(
+                activity,
+                source_row,
+                conn,
+            )
             conn.execute(
                 """
                 UPDATE activities
-                SET analysis_fields = ?,
+                SET summary = ?,
+                    score = ?,
+                    score_reason = ?,
+                    deadline_level = ?,
+                    trust_level = ?,
+                    analysis_fields = ?,
                     analysis_status = ?,
                     analysis_failed_layer = ?,
                     analysis_summary_reasons = ?,
@@ -969,10 +1077,15 @@ class DataManager:
                 WHERE id = ?
                 """,
                 (
+                    summary,
+                    score,
+                    score_reason,
+                    deadline_level,
+                    trust_level,
                     json.dumps(analysis_fields),
-                    analysis_result.status,
-                    analysis_result.failed_layer,
-                    json.dumps(analysis_result.folded_summary_reasons),
+                    analysis_status,
+                    analysis_failed_layer,
+                    json.dumps(analysis_summary_reasons),
                     datetime.now().isoformat(),
                     activity.id,
                 ),
@@ -1882,7 +1995,10 @@ class DataManager:
                 """,
                 (digest_date, category, activity_id, limit),
             ).fetchall()
-            return self._visible_activities_from_rows(rows)
+            return self._visible_activities_from_rows(
+                rows,
+                include_news=self._is_news_activity(category),
+            )
 
     def get_activity_detail(self, activity_id: str) -> Optional[Dict[str, Any]]:
         activity = self.get_activity_by_id(activity_id)
@@ -1964,6 +2080,9 @@ class DataManager:
         if filters.get("category"):
             conditions.append("a.category = ?")
             params.append(filters["category"])
+        else:
+            conditions.append("a.category != ?")
+            params.append("news")
         if filters.get("source_id"):
             conditions.append("a.source_id = ?")
             params.append(filters["source_id"])
@@ -2016,7 +2135,11 @@ class DataManager:
                 """,
                 params,
             ).fetchall()
-            visible = self._visible_activities_from_rows(rows)
+            visible = self._visible_activities_from_rows(
+                rows,
+                include_news=filters.get("category") == "news",
+            )
+            visible = self._apply_extended_activity_filters(visible, filters)
             total = len(visible)
             start = max(0, (page - 1) * page_size)
             end = start + page_size
@@ -2084,13 +2207,18 @@ class DataManager:
             rows = conn.execute("SELECT * FROM sources WHERE enabled = 1 ORDER BY priority, name").fetchall()
             return [self._source_from_row(row) for row in rows]
 
-    def get_stats(self) -> StatsResponse:
+    def get_stats(self, *, include_news: bool = True) -> StatsResponse:
         with self._get_connection() as conn:
             recent_threshold = (datetime.now() - timedelta(days=1)).isoformat()
             rows = conn.execute(
                 "SELECT source_id, title, description, full_content, url, category, created_at, updated_at FROM activities"
             ).fetchall()
-            visible_rows = [row for row in rows if not self._is_hidden_activity_row(row)]
+            visible_rows = [
+                row
+                for row in rows
+                if not self._is_hidden_activity_row(row)
+                and (include_news or not self._is_news_activity(row["category"]))
+            ]
             category_counts: Dict[str, int] = {}
             source_counts: Dict[str, int] = {}
             recent_activities = 0
@@ -2104,7 +2232,11 @@ class DataManager:
                     last_update = row["updated_at"]
             return StatsResponse(
                 total_activities=len(visible_rows),
-                total_sources=conn.execute("SELECT COUNT(*) AS count FROM sources").fetchone()["count"],
+                total_sources=(
+                    conn.execute("SELECT COUNT(*) AS count FROM sources").fetchone()["count"]
+                    if include_news
+                    else len(source_counts)
+                ),
                 activities_by_category=category_counts,
                 activities_by_source=source_counts,
                 recent_activities=recent_activities,
@@ -2510,7 +2642,7 @@ class DataManager:
         return digest
 
     def get_workspace(self) -> Dict[str, Any]:
-        stats = self.get_stats().model_dump()
+        stats = self.get_stats(include_news=False).model_dump()
         with self._get_connection() as conn:
             top_rows = conn.execute(
                 """
@@ -2519,17 +2651,21 @@ class DataManager:
                     COALESCE(t.is_favorited, 0) AS is_favorited
                 FROM activities a
                 LEFT JOIN tracking_items t ON t.activity_id = a.id
+                WHERE a.category != ?
                 ORDER BY COALESCE(a.score, 0) DESC, a.created_at DESC
                 LIMIT 20
                 """
+                ,
+                ("news",),
             ).fetchall()
             trend_source_rows = conn.execute(
                 """
                 SELECT source_id, title, description, full_content, url, created_at
                 FROM activities
                 WHERE created_at >= ?
+                    AND category != ?
                 """,
-                ((datetime.now() - timedelta(days=6)).isoformat(),),
+                ((datetime.now() - timedelta(days=6)).isoformat(), "news"),
             ).fetchall()
             source_rows = conn.execute(
                 """
@@ -2551,17 +2687,22 @@ class DataManager:
                     COALESCE(t.is_favorited, 0) AS is_favorited
                 FROM activities a
                 LEFT JOIN tracking_items t ON t.activity_id = a.id
-                WHERE (t.activity_id IS NULL OR t.status != ?) AND a.deadline IS NOT NULL
+                WHERE (t.activity_id IS NULL OR t.status != ?)
+                    AND a.deadline IS NOT NULL
+                    AND a.category != ?
                 ORDER BY a.deadline ASC, COALESCE(a.score, 0) DESC
                 LIMIT 20
                 """,
-                (TrackingStatus.DONE.value,),
+                (TrackingStatus.DONE.value, "news"),
             ).fetchall()
             analysis_rows = conn.execute(
                 """
                 SELECT source_id, title, description, full_content, url, analysis_status
                 FROM activities
+                WHERE category != ?
                 """
+                ,
+                ("news",),
             ).fetchall()
             blocked_rows = conn.execute(
                 """
@@ -2572,10 +2713,11 @@ class DataManager:
                 FROM activities a
                 LEFT JOIN tracking_items t ON t.activity_id = a.id
                 WHERE a.analysis_status = ?
+                    AND a.category != ?
                 ORDER BY COALESCE(a.score, 0) DESC, a.created_at DESC
                 LIMIT 20
                 """,
-                ("rejected",),
+                ("rejected", "news"),
             ).fetchall()
         digest_preview = self.get_digests(limit=1)
         tracking_items = self.get_tracking_items()

@@ -66,14 +66,14 @@ describe('ActivityDetailPage text wrapping', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
+      expect(screen.getByText('AI 黑客松')).toBeInTheDocument()
     })
 
     const summary = screen.getByTestId('activity-summary')
     const description = screen.getByTestId('activity-description')
 
-    expect(summary).toHaveTextContent(`Summary ${longToken}`)
-    expect(description).toHaveTextContent(`Short description ${longToken}`)
+    expect(summary).toHaveTextContent(`摘要 ${longToken}`)
+    expect(description).toHaveTextContent(`简要描述 ${longToken}`)
     expect(summary.className).toContain('break-words')
     expect(description.className).toContain('break-words')
   })

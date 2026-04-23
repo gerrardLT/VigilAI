@@ -40,7 +40,7 @@ export function useAnalysisTemplates(): UseAnalysisTemplatesResult {
       setTemplates(templateList)
       setDefaultTemplate(currentDefault)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load analysis templates'
+      const message = err instanceof Error ? err.message : '加载分析模板失败'
       setError(message)
       setTemplates([])
       setDefaultTemplate(null)
@@ -68,7 +68,7 @@ export function useAnalysisTemplates(): UseAnalysisTemplatesResult {
         await refresh()
         return created
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to create analysis template'
+        const message = err instanceof Error ? err.message : '创建分析模板失败'
         setError(message)
         return null
       }
@@ -84,7 +84,7 @@ export function useAnalysisTemplates(): UseAnalysisTemplatesResult {
         await refresh()
         return duplicated
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to duplicate analysis template'
+        const message = err instanceof Error ? err.message : '复制分析模板失败'
         setError(message)
         return null
       }
@@ -100,7 +100,7 @@ export function useAnalysisTemplates(): UseAnalysisTemplatesResult {
         await refresh()
         return activated
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to activate analysis template'
+        const message = err instanceof Error ? err.message : '启用分析模板失败'
         setError(message)
         return null
       }
@@ -119,7 +119,7 @@ export function useAnalysisTemplates(): UseAnalysisTemplatesResult {
         await refresh()
         return updated
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to update analysis template'
+        const message = err instanceof Error ? err.message : '更新分析模板失败'
         setError(message)
         return null
       }
@@ -131,7 +131,7 @@ export function useAnalysisTemplates(): UseAnalysisTemplatesResult {
     async (templateId: string, name: string): Promise<AnalysisTemplate | null> => {
       const updated = await updateTemplate(templateId, { name })
       if (!updated) {
-        setError(prev => prev ?? 'Failed to rename analysis template')
+        setError(prev => prev ?? '重命名分析模板失败')
       }
       return updated
     },
@@ -146,7 +146,7 @@ export function useAnalysisTemplates(): UseAnalysisTemplatesResult {
         await refresh()
         return true
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to delete analysis template'
+        const message = err instanceof Error ? err.message : '删除分析模板失败'
         setError(message)
         return false
       }

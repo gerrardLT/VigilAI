@@ -493,3 +493,42 @@ def test_analysis_result_detail_endpoint_returns_verdict_payload(client, data_ma
     assert payload["analysis_status"] in {"passed", "watch", "rejected"}
     assert payload["analysis_layer_results"]
     assert payload["analysis_score_breakdown"]
+
+
+def test_default_opportunity_flows_exclude_news_content(client, data_manager):
+    opportunity = create_activity(data_manager, url="https://example.com/opportunity-visible")
+    data_manager.add_activity(opportunity)
+
+    source = data_manager.get_sources_status()[0]
+    now = datetime.now()
+    news = Activity(
+        id=Activity.generate_id(source.id, "https://example.com/news-hidden"),
+        title="Industry funding roundup",
+        description="News summary about the funding market.",
+        source_id=source.id,
+        source_name=source.name,
+        url="https://example.com/news-hidden",
+        category=Category.NEWS,
+        created_at=now,
+        updated_at=now,
+    )
+    data_manager.add_activity(news)
+
+    activities_response = client.get("/api/activities")
+    analysis_results_response = client.get("/api/analysis/results")
+    workspace_response = client.get("/api/workspace")
+    explicit_news_response = client.get("/api/activities", params={"category": "news"})
+
+    assert activities_response.status_code == 200
+    assert [item["id"] for item in activities_response.json()["items"]] == [opportunity.id]
+
+    assert analysis_results_response.status_code == 200
+    assert [item["id"] for item in analysis_results_response.json()["items"]] == [opportunity.id]
+
+    workspace_payload = workspace_response.json()
+    assert workspace_response.status_code == 200
+    assert [item["id"] for item in workspace_payload["top_opportunities"]] == [opportunity.id]
+    assert workspace_payload["analysis_overview"]["total"] == 1
+
+    assert explicit_news_response.status_code == 200
+    assert [item["id"] for item in explicit_news_response.json()["items"]] == [news.id]

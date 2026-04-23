@@ -270,6 +270,11 @@ export interface ActivityFilters {
   analysis_status?: string
   deadline_level?: string
   trust_level?: string
+  prize_range?: string
+  solo_friendliness?: string
+  reward_clarity?: string
+  effort_level?: string
+  remote_mode?: string
   tracking_state?: string
   is_tracking?: boolean
   is_favorited?: boolean
@@ -297,6 +302,27 @@ export interface DigestSendRequest {
 
 export interface DigestCandidateRequest {
   digest_date?: string
+}
+
+export interface OpportunityAiFilterRequest {
+  base_filters?: ActivityFilters
+  query: string
+}
+
+export interface OpportunityAiFilterItem extends ActivityListItem {
+  ai_match_reason: string
+  ai_match_confidence: string
+  uncertainties?: string[]
+}
+
+export interface OpportunityAiFilterResponse {
+  query: string
+  parsed_intent_summary: string
+  reason_summary?: string
+  candidate_count: number
+  matched_count: number
+  discarded_count: number
+  items: OpportunityAiFilterItem[]
 }
 
 export const CATEGORY_LABELS: Record<Category, string> = {

@@ -59,6 +59,7 @@ export function SearchBox({
       {/* 输入框 */}
       <input
         type="text"
+        aria-label="搜索活动"
         value={inputValue}
         onChange={e => setInputValue(e.target.value)}
         placeholder={placeholder}
@@ -68,6 +69,8 @@ export function SearchBox({
       {/* 清除按钮 */}
       {inputValue && (
         <button
+          type="button"
+          aria-label="清空搜索内容"
           onClick={handleClear}
           className="absolute inset-y-0 right-0 pr-3 flex items-center"
         >

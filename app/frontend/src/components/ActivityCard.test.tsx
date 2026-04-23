@@ -223,7 +223,34 @@ describe('ActivityCard', () => {
     renderWithRouter(<ActivityCard activity={activity} />)
 
     expect(screen.getByTestId('activity-card-analysis-status')).toHaveTextContent('通过')
-    expect(screen.getByText('Reward clarity passed')).toBeInTheDocument()
-    expect(screen.getByText('ROI score passed')).toBeInTheDocument()
+    expect(screen.getByText('奖励清晰度通过')).toBeInTheDocument()
+    expect(screen.getByText('回报评分通过')).toBeInTheDocument()
+  })
+
+  it('cleans noisy scraped titles and previews before rendering', () => {
+    const activity: Activity = {
+      id: 'test-noisy',
+      title: 'Ship MVP Fast )]( Ship MVP Fast 2026-03-24 21:00 线上活动 1(current) 2 3',
+      description: 'Build an AI agent. [更多](https://example.com/more) rmat=webp&resize=400x300',
+      source_id: 'test-source',
+      source_name: 'Test Source',
+      url: 'https://example.com',
+      category: 'hackathon',
+      tags: [],
+      prize: null,
+      dates: null,
+      location: null,
+      organizer: null,
+      status: 'upcoming',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    renderWithRouter(<ActivityCard activity={activity} />)
+
+    expect(screen.getByText('MVP 快速交付')).toBeInTheDocument()
+    expect(screen.getByText('构建一个 AI Agent。')).toBeInTheDocument()
+    expect(screen.queryByText(/\)\]\(/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/resize=400x300/)).not.toBeInTheDocument()
   })
 })

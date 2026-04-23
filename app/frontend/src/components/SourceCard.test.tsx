@@ -114,7 +114,8 @@ describe('SourceCard状态显示完整性', () => {
     }
 
     render(<SourceCard source={sourceWithError} refreshing={false} onRefresh={mockOnRefresh} />)
-    expect(screen.getByText(/Connection timeout/)).toBeInTheDocument()
+    expect(screen.getByText(/连接超时/)).toBeInTheDocument()
+    expect(screen.queryByText(/Connection timeout/)).not.toBeInTheDocument()
   })
 
   it('当Source没有error_message时，不应显示错误区域', () => {

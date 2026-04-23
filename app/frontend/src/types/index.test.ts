@@ -2,10 +2,12 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   Activity,
   ActivityDetail,
+  ActivityFilters,
   AnalysisTemplate,
   Category,
   DigestDetail,
   DigestStatus,
+  OpportunityAiFilterResponse,
   SourceType,
   StatsResponse,
   TrackingItem,
@@ -205,6 +207,31 @@ const workspace: WorkspaceResponse = {
   first_actions: [activity],
 }
 
+const extendedFilters: ActivityFilters = {
+  category: 'hackathon',
+  prize_range: '500-2000',
+  solo_friendliness: 'solo_friendly',
+  reward_clarity: 'high',
+  effort_level: 'low',
+  remote_mode: 'remote',
+}
+
+const aiFilterResponse: OpportunityAiFilterResponse = {
+  query: '只保留适合独立开发者的机会',
+  parsed_intent_summary: '筛选适合单人开发的机会',
+  candidate_count: 10,
+  matched_count: 3,
+  discarded_count: 7,
+  items: [
+    {
+      ...activity,
+      ai_match_reason: '适合单人开发，奖励明确',
+      ai_match_confidence: 'high',
+      uncertainties: [],
+    },
+  ],
+}
+
 describe('frontend V2 contract types', () => {
   it('covers the backend category taxonomy', () => {
     expect(categories).toEqual([
@@ -256,5 +283,12 @@ describe('frontend V2 contract types', () => {
     expect(workspace.overview.recent_activities).toBe(7)
     expect(workspace.digest_preview?.id).toBe('digest-1')
     expect(workspace.first_actions[0].id).toBe('activity-1')
+  })
+
+  it('accepts extended opportunity filters and AI filter responses', () => {
+    expect(extendedFilters.prize_range).toBe('500-2000')
+    expect(extendedFilters.remote_mode).toBe('remote')
+    expect(aiFilterResponse.matched_count).toBe(3)
+    expect(aiFilterResponse.items[0].ai_match_reason).toContain('适合单人开发')
   })
 })

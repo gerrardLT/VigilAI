@@ -108,6 +108,21 @@ def test_rule_engine_marks_borderline_activity_as_watchlist():
     assert result.folded_summary_reasons
 
 
+def test_rule_engine_returns_human_facing_chinese_reasons():
+    result = run_analysis(
+        activity={"id": "activity-3", "title": "Unclear reward opportunity"},
+        template=build_template(),
+        analysis_fields={
+            "reward_clarity_score": 1,
+            "roi_score": 82,
+            "trust_score": 90,
+        },
+    )
+
+    assert result.layer_results[0].reasons == ["奖励信息不够明确，建议先不要投入"]
+    assert result.folded_summary_reasons == ["奖励信息不够明确，建议先不要投入"]
+
+
 @pytest.fixture
 def temp_db():
     temp_root = os.path.join(os.path.dirname(__file__), ".tmp")

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DigestsPage from './DigestsPage'
@@ -88,7 +88,9 @@ describe('DigestsPage', () => {
     )
 
     expect(screen.getByTestId('digests-page')).toBeInTheDocument()
-    expect(screen.getAllByText('Today Digest').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('今日日报').length).toBeGreaterThan(0)
+    expect(screen.getByText('1 分钟简报')).toBeInTheDocument()
+    expect(screen.queryByText('1 Minute Brief')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('generate-digest-button'))
     fireEvent.click(screen.getByTestId('digest-row-digest-1'))
@@ -107,7 +109,7 @@ describe('DigestsPage', () => {
     fireEvent.click(screen.getByTestId('digest-copy-button'))
 
     await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Today Digest'))
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('今日日报'))
     })
   })
 
@@ -118,7 +120,10 @@ describe('DigestsPage', () => {
       </MemoryRouter>
     )
 
-    expect(screen.getByTestId('digest-candidate-activity-1')).toBeInTheDocument()
+    const candidateCard = screen.getByTestId('digest-candidate-activity-1')
+
+    expect(candidateCard).toBeInTheDocument()
+    expect(within(candidateCard).getByText('AI 黑客松')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('digest-candidate-remove-activity-1'))
 

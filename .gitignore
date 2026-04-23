@@ -4,3 +4,15 @@
 .vscode/
 .worktrees/
 app/backend/test_progress.json
+
+# Local tooling state
+/.agents/
+/.superpowers/
+/.impeccable.md
+/%SystemDrive%/
+
+# Local command/test output
+/git_diff_stat.out
+/app/backend/*.out
+/app/backend/pytest-cache-files-*/
+/app/frontend/*.out

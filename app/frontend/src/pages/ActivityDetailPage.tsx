@@ -16,10 +16,14 @@ import { CATEGORY_COLOR_MAP, CATEGORY_ICON_MAP } from '../utils/constants'
 import { daysUntil, formatDateOnly, formatDateTime, isExpired } from '../utils/formatDate'
 import { CATEGORY_LABELS } from '../types'
 import {
+  getAnalysisFieldLabel,
   getAnalysisStatusLabel,
+  getTrackingStatusLabel,
   getTrustLevelLabel,
   localizeAnalysisTemplate,
+  localizeAnalysisText,
 } from '../utils/analysisI18n'
+import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
 
 const TRUST_STYLES = {
   high: 'bg-emerald-100 text-emerald-700',
@@ -55,6 +59,12 @@ const LAYER_DECISION_STYLES = {
   passed: 'bg-emerald-100 text-emerald-700',
   borderline: 'bg-amber-100 text-amber-700',
   failed: 'bg-rose-100 text-rose-700',
+} as const
+
+const LAYER_DECISION_LABELS = {
+  passed: '通过',
+  borderline: '待观察',
+  failed: '淘汰',
 } as const
 
 const FIELD_LABELS: Record<string, string> = {
@@ -101,8 +111,8 @@ function toDateTimeLocalValue(value?: string | null) {
 function buildTrackingPlanForm(tracking: TrackingState | null, isTracking: boolean): TrackingPlanForm {
   return {
     status: tracking?.status ?? (isTracking ? 'saved' : 'tracking'),
-    next_action: tracking?.next_action ?? '',
-    notes: tracking?.notes ?? '',
+    next_action: localizeAnalysisText(tracking?.next_action),
+    notes: localizeAnalysisText(tracking?.notes),
     remind_at: toDateTimeLocalValue(tracking?.remind_at),
   }
 }
@@ -418,7 +428,11 @@ export function ActivityDetailPage() {
   const expired = deadline ? isExpired(deadline) : false
   const deadlineLevel = activity.deadline_level ?? 'none'
   const analysisStatus = activity.analysis_status ?? null
-  const analysisReasons = activity.analysis_summary_reasons ?? []
+  const displayTitle = buildActivityDisplayTitle(activity)
+  const displaySourceName = localizeAnalysisText(activity.source_name)
+  const displayScoreReason = localizeAnalysisText(activity.score_reason)
+  const displaySummary = buildActivityDisplayExcerpt(activity, 280) || localizeAnalysisText(activity.full_content)
+  const analysisReasons = (activity.analysis_summary_reasons ?? []).map(reason => localizeAnalysisText(reason))
   const analysisLayerResults = activity.analysis_layer_results ?? []
   const analysisFieldEntries = Object.entries(activity.analysis_fields ?? {}).filter(([key]) => !key.startsWith('_'))
   const analysisAdjustHref = analysisStatus ? `/activities?analysis_status=${analysisStatus}` : '/activities'
@@ -428,12 +442,15 @@ export function ActivityDetailPage() {
     activity.analysis_latest_draft?.structured ??
     activity.analysis_structured ??
     {}
+  const displayNextAction = localizeAnalysisText(tracking?.next_action)
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
       <button
+        type="button"
+        aria-label="返回上一页"
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
       >
@@ -448,7 +465,8 @@ export function ActivityDetailPage() {
           <div className="relative h-72 bg-gray-100">
             <img
               src={activity.image_url}
-              alt={activity.title}
+              alt={displayTitle}
+              decoding="async"
               className="h-full w-full object-cover"
               onError={event => {
                 const container = (event.target as HTMLImageElement).parentElement
@@ -490,15 +508,16 @@ export function ActivityDetailPage() {
 
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
-              <h1 className="text-3xl font-bold text-gray-900">{activity.title}</h1>
-              <div className="text-sm text-gray-500">来自 {activity.source_name}</div>
+              <h1 className="text-3xl font-bold text-gray-900">{displayTitle}</h1>
+              <div className="text-sm text-gray-500">来自 {displaySourceName}</div>
               {activity.score_reason && (
-                <p className="text-sm text-primary-700">{activity.score_reason}</p>
+                <p className="text-sm text-primary-700">{displayScoreReason}</p>
               )}
             </div>
 
             <div className="flex flex-wrap gap-3">
               <button
+                type="button"
                 data-testid="detail-track-button"
                 onClick={handleTrack}
                 disabled={actionLoading === 'track'}
@@ -507,6 +526,7 @@ export function ActivityDetailPage() {
                 {activity.is_tracking ? '更新跟进' : '加入跟进'}
               </button>
               <button
+                type="button"
                 data-testid="detail-favorite-button"
                 onClick={handleFavorite}
                 disabled={actionLoading === 'favorite'}
@@ -515,6 +535,7 @@ export function ActivityDetailPage() {
                 {activity.is_favorited ? '取消收藏' : '加入收藏'}
               </button>
               <button
+                type="button"
                 data-testid="detail-digest-button"
                 onClick={handleDigestCandidate}
                 disabled={actionLoading === 'digest'}
@@ -541,7 +562,7 @@ export function ActivityDetailPage() {
             <section className="rounded-2xl bg-slate-50 p-6">
               <h2 className="mb-3 text-lg font-semibold text-gray-900">机会摘要</h2>
               <p data-testid="activity-summary" className="whitespace-pre-wrap break-words leading-7 text-gray-700">
-                {activity.summary || activity.full_content}
+                {displaySummary}
               </p>
             </section>
           )}
@@ -555,7 +576,7 @@ export function ActivityDetailPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">AI 分析</h2>
                   <p className="mt-1 text-sm text-gray-600">
-                    用规则结果帮助你更快判断这条机会值不值得跟进。
+                    先给你结论，再展开证据和下一步动作建议。
                   </p>
                   {localizedDefaultTemplate && (
                     <div
@@ -580,14 +601,14 @@ export function ActivityDetailPage() {
                     data-testid="activity-analysis-status"
                     className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-medium ${ANALYSIS_STATUS_STYLES[analysisStatus]}`}
                   >
-                    {getAnalysisStatusLabel(analysisStatus, { watch: '观察', rejected: '拦截' })}
+                    {getAnalysisStatusLabel(analysisStatus)}
                   </span>
                 )}
               </div>
 
               {activity.analysis_failed_layer && (
                 <p className="mt-4 text-sm text-gray-600">
-                  拦截层级: {activity.analysis_failed_layer}
+                  淘汰层级: {getAnalysisFieldLabel(activity.analysis_failed_layer)}
                 </p>
               )}
 
@@ -611,7 +632,9 @@ export function ActivityDetailPage() {
                     <div key={layer.key} className="rounded-2xl border border-sky-100 bg-white/80 p-4">
                       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                         <div>
-                          <div className="text-sm font-semibold text-slate-900">{layer.label}</div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            {getAnalysisFieldLabel(layer.key) || localizeAnalysisText(layer.label)}
+                          </div>
                           <div className="text-xs text-slate-500">{layer.key}</div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -621,7 +644,8 @@ export function ActivityDetailPage() {
                               'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            {getAnalysisStatusLabel(layer.decision, { watch: '观察', rejected: '拦截' })}
+                            {LAYER_DECISION_LABELS[layer.decision as keyof typeof LAYER_DECISION_LABELS] ||
+                              localizeAnalysisText(layer.decision)}
                           </span>
                           <span className="text-xs text-slate-500">得分 {layer.score.toFixed(2)}</span>
                         </div>
@@ -633,7 +657,7 @@ export function ActivityDetailPage() {
                               key={`${layer.key}-${reason}`}
                               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
                             >
-                              {reason}
+                              {localizeAnalysisText(reason)}
                             </span>
                           ))}
                         </div>
@@ -649,8 +673,10 @@ export function ActivityDetailPage() {
                   <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                     {analysisFieldEntries.map(([key, value]) => (
                       <div key={key} className="rounded-2xl border border-sky-100 bg-white/80 p-4">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">{key}</div>
-                        <div className="mt-2 text-sm font-medium text-slate-900">{String(value)}</div>
+                        <div className="text-xs uppercase tracking-wide text-slate-500">{getAnalysisFieldLabel(key)}</div>
+                        <div className="mt-2 text-sm font-medium text-slate-900">
+                          {localizeAnalysisText(String(value))}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -719,7 +745,7 @@ export function ActivityDetailPage() {
             <div className="rounded-2xl border border-gray-100 p-5">
               <div className="text-sm text-gray-500">当前状态</div>
               <div className="mt-2 text-xl font-semibold text-gray-900">
-                {tracking?.status || (activity.is_tracking ? 'tracking' : 'untracked')}
+                {getTrackingStatusLabel(tracking?.status || (activity.is_tracking ? 'tracking' : 'untracked'))}
               </div>
             </div>
             <div className="rounded-2xl border border-gray-100 p-5">
@@ -735,7 +761,7 @@ export function ActivityDetailPage() {
             <div className="rounded-2xl border border-gray-100 p-5">
               <div className="text-sm text-gray-500">下一步动作</div>
               <div className="mt-2 text-xl font-semibold text-gray-900">
-                {tracking?.next_action || '从这里开始判断'}
+                {displayNextAction || tracking?.next_action || '从这里开始判断'}
               </div>
               {tracking?.remind_at && (
                 <div className="mt-1 text-sm text-gray-500">提醒：{formatDateTime(tracking.remind_at)}</div>
@@ -828,7 +854,7 @@ export function ActivityDetailPage() {
             <section>
               <h2 className="mb-2 text-lg font-semibold text-gray-900">活动描述</h2>
               <p data-testid="activity-description" className="whitespace-pre-wrap break-words leading-7 text-gray-600">
-                {activity.description}
+                {localizeAnalysisText(activity.description)}
               </p>
             </section>
           )}
@@ -841,7 +867,7 @@ export function ActivityDetailPage() {
                   {activity.prize.currency} {activity.prize.amount?.toLocaleString() || '待定'}
                 </div>
                 {activity.prize.description && (
-                  <p className="mt-2 text-sm text-green-700">{activity.prize.description}</p>
+                  <p className="mt-2 text-sm text-green-700">{localizeAnalysisText(activity.prize.description)}</p>
                 )}
               </div>
             )}
@@ -877,13 +903,13 @@ export function ActivityDetailPage() {
             {activity.organizer && (
               <div className="flex items-center gap-2">
                 <span className="text-gray-500">主办方：</span>
-                <span className="text-gray-900">{activity.organizer}</span>
+                <span className="text-gray-900">{localizeAnalysisText(activity.organizer)}</span>
               </div>
             )}
             {activity.location && (
               <div className="flex items-center gap-2">
                 <span className="text-gray-500">地点：</span>
-                <span className="text-gray-900">{activity.location}</span>
+                <span className="text-gray-900">{localizeAnalysisText(activity.location)}</span>
               </div>
             )}
             {activity.tags.length > 0 && (
@@ -918,7 +944,7 @@ export function ActivityDetailPage() {
               <div className="space-y-3">
                 {activity.timeline.map(item => (
                   <div key={item.key} className="flex items-center justify-between rounded-xl border border-gray-100 p-4">
-                    <div className="font-medium text-gray-900">{item.label}</div>
+                    <div className="font-medium text-gray-900">{localizeAnalysisText(item.label)}</div>
                     <div className="text-sm text-gray-500">{formatDateTime(item.timestamp)}</div>
                   </div>
                 ))}
@@ -943,9 +969,9 @@ export function ActivityDetailPage() {
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="font-medium text-gray-900">{item.title}</div>
+                        <div className="font-medium text-gray-900">{localizeAnalysisText(item.title)}</div>
                         <div className="mt-1 text-sm text-gray-600">
-                          {item.summary || item.description || '暂无摘要'}
+                          {localizeAnalysisText(item.summary || item.description) || '暂无摘要'}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -956,7 +982,7 @@ export function ActivityDetailPage() {
                         )}
                         {item.trust_level && (
                           <span className={`rounded-full px-2 py-1 font-medium ${TRUST_STYLES[item.trust_level]}`}>
-                            {item.trust_level}
+                            {getTrustLevelLabel(item.trust_level)}
                           </span>
                         )}
                       </div>

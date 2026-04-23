@@ -44,7 +44,7 @@ export function useDigests(): UseDigestsResult {
     try {
       await Promise.all([fetchDigests(), fetchCandidates()])
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load digests'
+      const message = err instanceof Error ? err.message : '加载日报失败'
       setError(message)
       setDigests([])
       setCandidates([])
@@ -62,7 +62,7 @@ export function useDigests(): UseDigestsResult {
     try {
       return await api.getDigest(digestId)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load digest detail'
+      const message = err instanceof Error ? err.message : '加载日报详情失败'
       setError(message)
       return null
     }
@@ -76,7 +76,7 @@ export function useDigests(): UseDigestsResult {
         await refreshAll()
         return digest
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to generate digest'
+        const message = err instanceof Error ? err.message : '生成日报失败'
         setError(message)
         return null
       }
@@ -92,7 +92,7 @@ export function useDigests(): UseDigestsResult {
         await refreshAll()
         return digest
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to send digest'
+        const message = err instanceof Error ? err.message : '发送日报失败'
         setError(message)
         return null
       }
@@ -108,7 +108,7 @@ export function useDigests(): UseDigestsResult {
         await fetchCandidates(payload.digest_date)
         return result.success
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to add digest candidate'
+        const message = err instanceof Error ? err.message : '加入日报候选失败'
         setError(message)
         return false
       }
@@ -124,7 +124,7 @@ export function useDigests(): UseDigestsResult {
         await fetchCandidates(payload.digest_date)
         return result.success
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to remove digest candidate'
+        const message = err instanceof Error ? err.message : '移出日报候选失败'
         setError(message)
         return false
       }

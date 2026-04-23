@@ -3,7 +3,8 @@ import type { Activity } from '../types'
 import { formatDateOnly, daysUntil, isExpired } from '../utils/formatDate'
 import { CATEGORY_COLOR_MAP, CATEGORY_ICON_MAP } from '../utils/constants'
 import { CATEGORY_LABELS } from '../types'
-import { getAnalysisStatusLabel, getTrustLevelLabel } from '../utils/analysisI18n'
+import { getAnalysisStatusLabel, getTrustLevelLabel, localizeAnalysisText } from '../utils/analysisI18n'
+import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
 
 interface ActivityCardProps {
   activity: Activity
@@ -23,9 +24,11 @@ export function ActivityCard({ activity }: ActivityCardProps) {
   const deadline = activity.dates?.deadline
   const days = deadline ? daysUntil(deadline) : null
   const expired = deadline ? isExpired(deadline) : false
-  const previewText = activity.summary || activity.description
+  const displayTitle = buildActivityDisplayTitle(activity)
+  const displaySourceName = localizeAnalysisText(activity.source_name)
+  const previewText = buildActivityDisplayExcerpt(activity)
   const analysisStatus = activity.analysis_status ?? null
-  const analysisReasons = activity.analysis_summary_reasons ?? []
+  const analysisReasons = (activity.analysis_summary_reasons ?? []).map(reason => localizeAnalysisText(reason))
 
   return (
     <Link
@@ -37,7 +40,9 @@ export function ActivityCard({ activity }: ActivityCardProps) {
         <div className="relative h-40 -mx-4 -mt-4 mb-4 bg-gray-100">
           <img
             src={activity.image_url}
-            alt={activity.title}
+            alt={displayTitle}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none'
@@ -56,12 +61,12 @@ export function ActivityCard({ activity }: ActivityCardProps) {
           <span>{CATEGORY_ICON_MAP[activity.category]}</span>
           <span>{CATEGORY_LABELS[activity.category]}</span>
         </span>
-        <span className="text-xs text-gray-500">{activity.source_name}</span>
+        <span className="text-xs text-gray-500">{displaySourceName}</span>
       </div>
 
       {/* 标题 */}
       <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-        {activity.title}
+        {displayTitle}
       </h3>
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -93,7 +98,7 @@ export function ActivityCard({ activity }: ActivityCardProps) {
       )}
 
       {activity.score_reason && (
-        <p className="text-xs text-primary-700 mb-3 line-clamp-2">{activity.score_reason}</p>
+        <p className="text-xs text-primary-700 mb-3 line-clamp-2">{localizeAnalysisText(activity.score_reason)}</p>
       )}
 
       {/* 底部信息 */}

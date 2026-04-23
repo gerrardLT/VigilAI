@@ -86,7 +86,7 @@ describe('ActivityDetailPage planning actions', () => {
     renderDetailPage()
 
     await waitFor(() => {
-      expect(screen.getByText('AI Fellowship')).toBeInTheDocument()
+      expect(screen.getByText('AI 驻留计划')).toBeInTheDocument()
     })
 
     fireEvent.change(screen.getByLabelText('跟进状态'), { target: { value: 'tracking' } })
@@ -128,7 +128,7 @@ describe('ActivityDetailPage planning actions', () => {
     renderDetailPage()
 
     await waitFor(() => {
-      expect(screen.getByText('AI Fellowship')).toBeInTheDocument()
+      expect(screen.getByText('AI 驻留计划')).toBeInTheDocument()
     })
 
     fireEvent.change(screen.getByLabelText('下一步动作'), { target: { value: 'Draft shortlist' } })

@@ -72,6 +72,9 @@ describe('SourcesPage', () => {
     expect(screen.getAllByText('Gitcoin').length).toBeGreaterThan(0)
     expect(screen.getAllByText('健康分 28').length).toBeGreaterThan(0)
 
+    expect(screen.getAllByText(/超时/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/timeout/i)).not.toBeInTheDocument()
+
     fireEvent.click(screen.getByTestId('refresh-all-sources'))
 
     await waitFor(() => {

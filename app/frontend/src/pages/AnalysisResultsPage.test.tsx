@@ -280,11 +280,17 @@ describe('AnalysisResultsPage', () => {
 
     expect(await screen.findByTestId('analysis-results-page')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'AI 分析结果' })).toBeInTheDocument()
-    expect(screen.getByTestId('analysis-results-active-template')).toHaveTextContent('Quick money')
+    expect(screen.getByText('AI 智能代理决策记录')).toBeInTheDocument()
+    expect(screen.queryByText('Analysis Results')).not.toBeInTheDocument()
+    expect(screen.getByTestId('analysis-results-active-template')).toHaveTextContent('快钱优先')
     expect(screen.getByTestId('analysis-results-overview')).toHaveTextContent('3')
-    expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
-    expect(screen.getByText('Enterprise RFP')).toBeInTheDocument()
-    expect(screen.getByText('Solo only failed hard gate')).toBeInTheDocument()
+    expect(screen.getByTestId('analysis-results-diagnosis')).toBeInTheDocument()
+    expect(screen.getByText('AI 黑客松')).toBeInTheDocument()
+    expect(screen.getByText('企业需求征集')).toBeInTheDocument()
+    expect(screen.getByText('未通过仅限单人的硬门槛')).toBeInTheDocument()
+    expect(screen.getByText('拦截位置：硬门槛')).toBeInTheDocument()
+    expect(screen.getByText('理由条数')).toBeInTheDocument()
+    expect(screen.queryByText('失败层：硬门槛')).not.toBeInTheDocument()
   })
 
   it('filters the list by analysis status and refreshes the dataset', async () => {
@@ -295,7 +301,7 @@ describe('AnalysisResultsPage', () => {
     )
 
     await screen.findByTestId('analysis-results-page')
-    expect(screen.getByRole('button', { name: '拦截' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '淘汰' })).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('analysis-results-filter-rejected'))
 
     await waitFor(() => {
@@ -305,8 +311,68 @@ describe('AnalysisResultsPage', () => {
         page_size: 20,
       })
     })
-    expect(await screen.findByText('Enterprise RFP')).toBeInTheDocument()
-    expect(screen.queryByText('AI Hackathon')).not.toBeInTheDocument()
+    expect(await screen.findByText('企业需求征集')).toBeInTheDocument()
+    expect(screen.queryByText('AI 黑客松')).not.toBeInTheDocument()
+  })
+
+  it('shows a strict-template diagnosis when almost everything is rejected', async () => {
+    workspaceHookState.current = {
+      ...workspaceHookState.current,
+      workspace: {
+        ...workspaceHookState.current.workspace,
+        analysis_overview: {
+          total: 6,
+          passed: 0,
+          watch: 0,
+          rejected: 6,
+        },
+      },
+    }
+    apiMocks.getAnalysisResults.mockResolvedValue({
+      total: 1,
+      page: 1,
+      page_size: 20,
+      items: [
+        {
+          id: 'activity-2',
+          title: 'Enterprise RFP',
+          description: null,
+          source_id: 'enterprise',
+          source_name: 'Enterprise Feed',
+          url: 'https://example.com/rfp',
+          category: 'bounty',
+          tags: [],
+          prize: null,
+          dates: null,
+          location: null,
+          organizer: null,
+          summary: null,
+          score: 5.1,
+          score_reason: 'Low solo fit',
+          deadline_level: 'soon',
+          trust_level: 'medium',
+          updated_fields: [],
+          analysis_status: 'rejected',
+          analysis_failed_layer: 'hard_gate',
+          analysis_summary_reasons: ['Solo only failed hard gate'],
+          analysis_layer_results: [],
+          analysis_score_breakdown: { hard_gate: 0 },
+          status: 'upcoming',
+          created_at: '2026-03-23T08:00:00Z',
+          updated_at: '2026-03-23T08:00:00Z',
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <AnalysisResultsPage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByTestId('analysis-results-diagnosis')).toHaveTextContent('当前模板偏严格')
+    expect(screen.getByText('几乎所有机会都被拦掉了')).toBeInTheDocument()
+    expect(screen.getByText('优先放宽一条硬门槛')).toBeInTheDocument()
   })
 
   it('shows the job operations console with the latest agent-analysis job detail', async () => {
@@ -318,7 +384,7 @@ describe('AnalysisResultsPage', () => {
 
     expect(await screen.findByTestId('analysis-results-job-list')).toBeInTheDocument()
     expect(screen.getByTestId('agent-analysis-job-banner')).toHaveTextContent('job-batch-1')
-    expect(screen.getByText('Enterprise RFP')).toBeInTheDocument()
-    expect(screen.getByText('Solo only failed hard gate')).toBeInTheDocument()
+    expect(screen.getByText('企业需求征集')).toBeInTheDocument()
+    expect(screen.getByText('未通过仅限单人的硬门槛')).toBeInTheDocument()
   })
 })

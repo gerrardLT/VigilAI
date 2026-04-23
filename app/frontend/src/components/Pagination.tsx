@@ -14,7 +14,7 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
 
   // 生成页码数组
   const getPageNumbers = () => {
-    const pages: (number | string)[] = []
+    const pages: Array<number | '...'> = []
     const showPages = 5 // 显示的页码数量
 
     if (totalPages <= showPages) {
@@ -54,43 +54,51 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
   }
 
   return (
-    <div className="flex items-center justify-center gap-1">
+    <nav aria-label="分页导航" className="flex items-center justify-center gap-1">
       {/* 上一页 */}
       <button
+        type="button"
+        aria-label="上一页"
         onClick={() => onPageChange(page - 1)}
         disabled={page === 1}
-        className="px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+        className="min-h-[44px] rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 hover:bg-gray-100"
       >
         上一页
       </button>
 
       {/* 页码 */}
       {getPageNumbers().map((pageNum, index) => (
-        <button
-          key={index}
-          onClick={() => typeof pageNum === 'number' && onPageChange(pageNum)}
-          disabled={pageNum === '...'}
-          className={`w-10 h-10 rounded-lg text-sm font-medium ${
-            pageNum === page
-              ? 'bg-primary-600 text-white'
-              : pageNum === '...'
-              ? 'cursor-default'
-              : 'hover:bg-gray-100'
-          }`}
-        >
-          {pageNum}
-        </button>
+        pageNum === '...' ? (
+          <span key={`ellipsis-${index}`} aria-hidden="true" className="px-2 text-sm text-gray-500">
+            ...
+          </span>
+        ) : (
+          <button
+            key={pageNum}
+            type="button"
+            aria-label={`第 ${pageNum} 页`}
+            aria-current={pageNum === page ? 'page' : undefined}
+            onClick={() => onPageChange(pageNum)}
+            className={`h-11 w-11 rounded-lg text-sm font-medium ${
+              pageNum === page ? 'bg-primary-600 text-white' : 'hover:bg-gray-100'
+            }`}
+          >
+            {pageNum}
+          </button>
+        )
       ))}
 
       {/* 下一页 */}
       <button
+        type="button"
+        aria-label="下一页"
         onClick={() => onPageChange(page + 1)}
         disabled={page === totalPages}
-        className="px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+        className="min-h-[44px] rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 hover:bg-gray-100"
       >
         下一页
       </button>
-    </div>
+    </nav>
   )
 }
 
