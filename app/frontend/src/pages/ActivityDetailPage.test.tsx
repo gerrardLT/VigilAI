@@ -418,8 +418,8 @@ describe('ActivityDetailPage agent-analysis workbench', () => {
     )
 
     expect(await screen.findByTestId('agent-analysis-evidence-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('agent-analysis-review-bar')).toBeInTheDocument()
-    expect(screen.getByText('Official rules')).toBeInTheDocument()
+    expect(await screen.findByTestId('agent-analysis-review-bar')).toBeInTheDocument()
+    expect(await screen.findByText('Official rules')).toBeInTheDocument()
     expect(screen.getByText('Reward cap still needs confirmation')).toBeInTheDocument()
   })
 })

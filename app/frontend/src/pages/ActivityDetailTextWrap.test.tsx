@@ -72,7 +72,8 @@ describe('ActivityDetailPage text wrapping', () => {
     const summary = screen.getByTestId('activity-summary')
     const description = screen.getByTestId('activity-description')
 
-    expect(summary).toHaveTextContent(`摘要 ${longToken}`)
+    expect(summary).toHaveTextContent(/^摘要 VERYLONGTOKENWITHOUTSPACES/)
+    expect(summary.textContent).toContain('…')
     expect(description).toHaveTextContent(`简要描述 ${longToken}`)
     expect(summary.className).toContain('break-words')
     expect(description.className).toContain('break-words')

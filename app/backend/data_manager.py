@@ -4,6 +4,7 @@ SQLite-backed data manager for VigilAI.
 
 from __future__ import annotations
 
+from agent_platform.repository import ensure_agent_platform_tables
 from analysis.schemas import AnalysisSnapshot, ResearchEvidence
 from analysis.ai_enrichment import enrich_activity_for_analysis
 from analysis.rule_engine import run_analysis
@@ -37,6 +38,7 @@ from models import (
     TrackingState,
     TrackingStatus,
 )
+from product_selection.repository import ensure_product_selection_tables
 from utils.content_cleaning import (
     build_description_from_text,
     clean_detail_content,
@@ -236,6 +238,8 @@ class DataManager:
                 },
             )
             self._init_agent_analysis_tables(conn)
+            ensure_agent_platform_tables(conn)
+            ensure_product_selection_tables(conn)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_source_id ON activities(source_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_category ON activities(category)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_created_at ON activities(created_at)")

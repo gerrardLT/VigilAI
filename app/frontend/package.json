@@ -8,8 +8,8 @@
     "build": "tsc -b && vite build --configLoader native",
     "lint": "eslint .",
     "preview": "vite preview --configLoader native",
-    "test": "node --require ./scripts/vitest-windows-patch.cjs ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs --configLoader runner",
-    "test:watch": "node --require ./scripts/vitest-windows-patch.cjs ./node_modules/vitest/vitest.mjs --config vitest.config.mjs --configLoader runner"
+    "test": "node --require ./scripts/vitest-windows-patch.cjs ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs",
+    "test:watch": "node --require ./scripts/vitest-windows-patch.cjs ./node_modules/vitest/vitest.mjs --config vitest.config.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

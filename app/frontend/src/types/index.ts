@@ -35,6 +35,40 @@ export type {
   AgentAnalysisStep,
 } from './agentAnalysis'
 
+export type {
+  AgentArtifact,
+  AgentDomainType,
+  AgentSession,
+  AgentSessionCreateRequest,
+  AgentToolCall,
+  AgentTurn,
+  AgentTurnCreateRequest,
+  AgentTurnReply,
+  AgentTurnRole,
+} from './agentPlatform'
+
+export type {
+  ProductSelectionJobStatus,
+  ProductSelectionOpportunity,
+  ProductSelectionOpportunityDetail,
+  ProductSelectionOpportunityFilters,
+  ProductSelectionOpportunityListResponse,
+  ProductSelectionPlatformScope,
+  ProductSelectionPriceBand,
+  ProductSelectionQueryType,
+  ProductSelectionResearchJob,
+  ProductSelectionResearchJobCreateRequest,
+  ProductSelectionResearchJobResponse,
+  ProductSelectionSignal,
+  ProductSelectionSortBy,
+  ProductSelectionTrackingItem,
+  ProductSelectionTrackingState,
+  ProductSelectionTrackingStatus,
+  ProductSelectionTrackingUpsertRequest,
+  ProductSelectionWorkspacePlatformBreakdown,
+  ProductSelectionWorkspaceResponse,
+} from './productSelection'
+
 export type Category =
   | 'hackathon'
   | 'data_competition'

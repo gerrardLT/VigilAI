@@ -8,6 +8,10 @@ from datetime import datetime
 import logging
 from typing import Any, Dict, List, Literal, Optional
 
+from agent_platform.artifact_service import ArtifactService
+from agent_platform.conversation_engine import ConversationEngine
+from agent_platform.repository import AgentPlatformRepository
+from agent_platform.tool_router import ToolRouter, build_default_registry
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -21,6 +25,8 @@ from config import (
     ANALYSIS_SCHEDULE_STALE_HOURS,
     SOURCES_CONFIG,
 )
+from product_selection.repository import ProductSelectionRepository
+from product_selection.service import ProductSelectionService
 
 logger = logging.getLogger(__name__)
 
@@ -151,10 +157,103 @@ class OpportunityAiFilterRequest(BaseModel):
     query: str
 
 
+class AgentSessionCreateRequest(BaseModel):
+    domain_type: str
+    entry_mode: str = "chat"
+    title: Optional[str] = None
+
+
+class AgentTurnCreateRequest(BaseModel):
+    content: str
+
+
+class ProductSelectionResearchJobCreateRequest(BaseModel):
+    query_type: Literal["keyword", "category", "listing_url"] = "keyword"
+    query_text: str
+    platform_scope: Literal["taobao", "xianyu", "both"] = "both"
+
+
+class ProductSelectionTrackingUpsertRequest(BaseModel):
+    is_favorited: Optional[bool] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    next_action: Optional[str] = None
+    remind_at: Optional[str] = None
+
+
 def _serialize_model(value):
     if hasattr(value, "model_dump"):
         return value.model_dump(mode="json")
     return value
+
+
+def _get_agent_repository(request: Request) -> AgentPlatformRepository:
+    repository = getattr(request.app.state, "agent_platform_repository", None)
+    data_manager = getattr(request.app.state, "data_manager", None)
+    if data_manager is None:
+        raise RuntimeError("Data manager is not initialized")
+
+    if repository is None or getattr(repository, "db_path", None) != data_manager.db_path:
+        repository = AgentPlatformRepository(data_manager.db_path)
+        request.app.state.agent_platform_repository = repository
+
+    return repository
+
+
+def _get_tool_router(request: Request) -> ToolRouter:
+    tool_router = getattr(request.app.state, "agent_tool_router", None)
+    data_manager = getattr(request.app.state, "data_manager", None)
+    if data_manager is None:
+        raise RuntimeError("Data manager is not initialized")
+
+    registry_key = getattr(data_manager, "db_path", None)
+    if tool_router is None or getattr(tool_router, "registry_key", None) != registry_key:
+        tool_router = ToolRouter(
+            tool_registry=build_default_registry(data_manager=data_manager),
+            registry_key=registry_key,
+        )
+        request.app.state.agent_tool_router = tool_router
+    return tool_router
+
+
+def _get_conversation_engine(request: Request) -> ConversationEngine:
+    tool_router = _get_tool_router(request)
+    engine = getattr(request.app.state, "agent_conversation_engine", None)
+    if engine is None or getattr(engine, "tool_router", None) is not tool_router:
+        engine = ConversationEngine(tool_router=tool_router)
+        request.app.state.agent_conversation_engine = engine
+    return engine
+
+
+def _get_artifact_service(request: Request) -> ArtifactService:
+    artifact_service = getattr(request.app.state, "agent_artifact_service", None)
+    repository = _get_agent_repository(request)
+    if artifact_service is None or getattr(artifact_service, "repository", None) is not repository:
+        artifact_service = ArtifactService(repository=repository)
+        request.app.state.agent_artifact_service = artifact_service
+    return artifact_service
+
+
+def _get_product_selection_repository(request: Request) -> ProductSelectionRepository:
+    repository = getattr(request.app.state, "product_selection_repository", None)
+    data_manager = getattr(request.app.state, "data_manager", None)
+    if data_manager is None:
+        raise RuntimeError("Data manager is not initialized")
+
+    if repository is None or getattr(repository, "db_path", None) != data_manager.db_path:
+        repository = ProductSelectionRepository(data_manager.db_path)
+        request.app.state.product_selection_repository = repository
+
+    return repository
+
+
+def _get_product_selection_service(request: Request) -> ProductSelectionService:
+    repository = _get_product_selection_repository(request)
+    service = getattr(request.app.state, "product_selection_service", None)
+    if service is None or getattr(service, "repository", None) is not repository:
+        service = ProductSelectionService(repository=repository)
+        request.app.state.product_selection_service = service
+    return service
 
 
 def _source_health_snapshot(source) -> dict:
@@ -192,6 +291,180 @@ def _source_health_snapshot(source) -> dict:
         "last_success_age_hours": last_success_age_hours,
         "needs_attention": needs_attention,
     }
+
+
+@app.post("/api/agent/sessions")
+async def create_agent_session(request: Request, payload: AgentSessionCreateRequest):
+    repository = _get_agent_repository(request)
+    session = repository.create_session(
+        domain_type=payload.domain_type,
+        entry_mode=payload.entry_mode,
+        title=payload.title,
+    )
+    return _serialize_model(session)
+
+
+@app.get("/api/agent/sessions/{session_id}")
+async def get_agent_session(request: Request, session_id: str):
+    repository = _get_agent_repository(request)
+    session = repository.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Agent session not found")
+    return _serialize_model(session)
+
+
+@app.post("/api/agent/sessions/{session_id}/turns")
+async def post_agent_turn(request: Request, session_id: str, payload: AgentTurnCreateRequest):
+    repository = _get_agent_repository(request)
+    session = repository.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Agent session not found")
+
+    user_turn = repository.append_turn(session_id, role="user", content=payload.content)
+    reply = _get_conversation_engine(request).reply(session=session, user_turn=user_turn)
+    assistant_turn = repository.append_turn(session_id, role="assistant", content=reply.assistant_turn)
+    artifacts = _get_artifact_service(request).persist(session_id, reply.artifacts)
+
+    if reply.next_state != session.status:
+        session = repository.update_session_status(session_id, status=reply.next_state)
+    else:
+        session = repository.get_session(session_id) or session
+
+    turns = repository.list_turns(session_id)
+    return {
+        "session": _serialize_model(session),
+        "user_turn": _serialize_model(user_turn),
+        "assistant_turn": _serialize_model(assistant_turn),
+        "artifacts": [_serialize_model(artifact) for artifact in artifacts],
+        "tool_calls": reply.tool_calls,
+        "turns": [_serialize_model(turn) for turn in turns],
+    }
+
+
+@app.get("/api/agent/sessions/{session_id}/turns")
+async def list_agent_turns(request: Request, session_id: str):
+    repository = _get_agent_repository(request)
+    session = repository.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Agent session not found")
+    return [_serialize_model(turn) for turn in repository.list_turns(session_id)]
+
+
+@app.get("/api/agent/sessions/{session_id}/artifacts")
+async def list_agent_artifacts(request: Request, session_id: str):
+    repository = _get_agent_repository(request)
+    session = repository.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Agent session not found")
+    return [
+        _serialize_model(artifact)
+        for artifact in _get_artifact_service(request).list_for_session(session_id)
+    ]
+
+
+@app.post("/api/product-selection/research-jobs")
+async def create_product_selection_research_job(
+    request: Request,
+    payload: ProductSelectionResearchJobCreateRequest,
+):
+    service = _get_product_selection_service(request)
+    try:
+        service.validate_query_payload(payload.query_type, payload.platform_scope, payload.query_text)
+        return service.start_research_job(
+            query_type=payload.query_type,
+            query_text=payload.query_text,
+            platform_scope=payload.platform_scope,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/product-selection/research-jobs/{job_id}")
+async def get_product_selection_research_job(request: Request, job_id: str):
+    try:
+        return _get_product_selection_service(request).get_research_job(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/product-selection/opportunities")
+async def list_product_selection_opportunities(
+    request: Request,
+    query_id: Optional[str] = Query(None),
+    platform: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    risk_tag: Optional[str] = Query(None),
+    sort_by: str = Query("opportunity_score"),
+    sort_order: str = Query("desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    return _get_product_selection_service(request).list_opportunities(
+        query_id=query_id,
+        platform=platform,
+        search=search,
+        risk_tag=risk_tag.lower() if risk_tag else None,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@app.get("/api/product-selection/opportunities/{opportunity_id}")
+async def get_product_selection_opportunity(request: Request, opportunity_id: str):
+    detail = _get_product_selection_service(request).get_opportunity_detail(opportunity_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Product selection opportunity not found")
+    return detail
+
+
+@app.get("/api/product-selection/tracking")
+async def list_product_selection_tracking(request: Request, status: Optional[str] = Query(None)):
+    return _get_product_selection_repository(request).list_tracking(status=status)
+
+
+@app.post("/api/product-selection/tracking/{opportunity_id}")
+async def create_product_selection_tracking(
+    request: Request,
+    opportunity_id: str,
+    payload: ProductSelectionTrackingUpsertRequest,
+):
+    try:
+        return _get_product_selection_repository(request).upsert_tracking(
+            opportunity_id,
+            payload.model_dump(exclude_none=True),
+        ).model_dump()
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.patch("/api/product-selection/tracking/{opportunity_id}")
+async def update_product_selection_tracking(
+    request: Request,
+    opportunity_id: str,
+    payload: ProductSelectionTrackingUpsertRequest,
+):
+    try:
+        return _get_product_selection_repository(request).upsert_tracking(
+            opportunity_id,
+            payload.model_dump(exclude_none=True),
+        ).model_dump()
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/product-selection/tracking/{opportunity_id}")
+async def delete_product_selection_tracking(request: Request, opportunity_id: str):
+    deleted = _get_product_selection_repository(request).delete_tracking(opportunity_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Product selection tracking item not found")
+    return {"success": True}
+
+
+@app.get("/api/product-selection/workspace")
+async def get_product_selection_workspace(request: Request):
+    return _get_product_selection_service(request).get_workspace()
 
 
 @app.get("/api/activities")

@@ -3,34 +3,40 @@ import { Link, useLocation } from 'react-router-dom'
 import { APP_NAME } from '../utils/constants'
 
 const navLinks = [
-  { path: '/', label: '工作台' },
-  { path: '/activities', label: '机会池' },
-  { path: '/analysis/results', label: '分析结果' },
-  { path: '/analysis/templates', label: '模板中心' },
-  { path: '/tracking', label: '跟进' },
-  { path: '/digests', label: '日报' },
-  { path: '/sources', label: '来源' },
+  { path: '/agent', label: 'Agent' },
+  { path: '/selection/workspace', label: 'Selection' },
+  { path: '/', label: 'Workspace' },
+  { path: '/activities', label: 'Opportunities' },
+  { path: '/analysis/results', label: 'Analysis' },
+  { path: '/analysis/templates', label: 'Templates' },
+  { path: '/tracking', label: 'Tracking' },
+  { path: '/digests', label: 'Digests' },
+  { path: '/sources', label: 'Sources' },
 ]
 
-export function Header() {
+function useIsActivePath() {
   const location = useLocation()
 
-  const isActive = (path: string) => {
+  return (path: string) => {
     if (path === '/') {
       return location.pathname === '/' || location.pathname === '/workspace'
     }
     return location.pathname.startsWith(path)
   }
+}
+
+export function Header() {
+  const isActive = useIsActivePath()
 
   return (
     <header className="border-b border-gray-200 bg-white shadow-sm">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link to="/" aria-label={`${APP_NAME} 首页`} className="flex items-center gap-2">
+        <Link to="/" aria-label={`${APP_NAME} home`} className="flex items-center gap-2">
           <span className="text-2xl">V</span>
           <span className="text-xl font-bold text-gray-900">{APP_NAME}</span>
         </Link>
 
-        <nav aria-label="主导航" className="hidden items-center gap-1 md:flex">
+        <nav aria-label="Primary navigation" className="hidden items-center gap-1 md:flex">
           {navLinks.map(link => (
             <Link
               key={link.path}
@@ -56,16 +62,10 @@ export function Header() {
 }
 
 function MobileMenu() {
+  const isActive = useIsActivePath()
   const location = useLocation()
   const [isOpen, setIsOpen] = useState(false)
   const menuId = useId()
-
-  const isActive = (path: string) => {
-    if (path === '/') {
-      return location.pathname === '/' || location.pathname === '/workspace'
-    }
-    return location.pathname.startsWith(path)
-  }
 
   useEffect(() => {
     setIsOpen(false)
@@ -75,7 +75,7 @@ function MobileMenu() {
     <div className="relative">
       <button
         type="button"
-        aria-label={isOpen ? '收起导航菜单' : '打开导航菜单'}
+        aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
         aria-expanded={isOpen}
         aria-controls={menuId}
         onClick={() => setIsOpen(current => !current)}
@@ -88,8 +88,8 @@ function MobileMenu() {
       {isOpen ? (
         <nav
           id={menuId}
-          aria-label="移动端导航菜单"
-          className="absolute right-0 top-full z-20 mt-2 w-48 rounded-lg border border-gray-200 bg-white py-2 shadow-lg"
+          aria-label="Mobile navigation"
+          className="absolute right-0 top-full z-20 mt-2 w-52 rounded-lg border border-gray-200 bg-white py-2 shadow-lg"
         >
           {navLinks.map(link => (
             <Link
