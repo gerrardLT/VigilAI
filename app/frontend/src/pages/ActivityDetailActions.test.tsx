@@ -255,7 +255,7 @@ describe('ActivityDetailPage tracking actions', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('AI Hackathon')).toBeInTheDocument()
+      expect(screen.getByText('AI 黑客松')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: /deep analysis/i }))

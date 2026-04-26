@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import WorkspacePage from './pages/WorkspacePage'
+import AgentWorkspacePage from './pages/AgentWorkspacePage'
 import ActivitiesPage from './pages/ActivitiesPage'
 import ActivityDetailPage from './pages/ActivityDetailPage'
 import TrackingPage from './pages/TrackingPage'
@@ -11,6 +12,11 @@ import DashboardPage from './pages/DashboardPage'
 import AnalysisTemplatesPage from './pages/AnalysisTemplatesPage'
 import AnalysisResultsPage from './pages/AnalysisResultsPage'
 import NotFoundPage from './pages/NotFoundPage'
+import SelectionWorkspacePage from './pages/selection/SelectionWorkspacePage'
+import SelectionOpportunitiesPage from './pages/selection/SelectionOpportunitiesPage'
+import SelectionOpportunityDetailPage from './pages/selection/SelectionOpportunityDetailPage'
+import SelectionComparePage from './pages/selection/SelectionComparePage'
+import SelectionTrackingPage from './pages/selection/SelectionTrackingPage'
 
 function App() {
   return (
@@ -20,6 +26,7 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<WorkspacePage />} />
             <Route path="workspace" element={<WorkspacePage />} />
+            <Route path="agent" element={<AgentWorkspacePage />} />
             <Route path="activities" element={<ActivitiesPage />} />
             <Route path="activities/:id" element={<ActivityDetailPage />} />
             <Route path="analysis/results" element={<AnalysisResultsPage />} />
@@ -28,6 +35,11 @@ function App() {
             <Route path="digests" element={<DigestsPage />} />
             <Route path="sources" element={<SourcesPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="selection/workspace" element={<SelectionWorkspacePage />} />
+            <Route path="selection/opportunities" element={<SelectionOpportunitiesPage />} />
+            <Route path="selection/opportunities/:id" element={<SelectionOpportunityDetailPage />} />
+            <Route path="selection/compare" element={<SelectionComparePage />} />
+            <Route path="selection/tracking" element={<SelectionTrackingPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

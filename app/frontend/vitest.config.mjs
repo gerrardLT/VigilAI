@@ -51,8 +51,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    pool: 'threads',
-    maxWorkers: 1,
+    pool: 'forks',
+    fileParallelism: false,
   },
   resolve: {
     alias: {

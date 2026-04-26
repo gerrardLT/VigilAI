@@ -12,6 +12,10 @@ from datetime import datetime
 
 import uvicorn
 
+from agent_platform.artifact_service import ArtifactService
+from agent_platform.conversation_engine import ConversationEngine
+from agent_platform.repository import AgentPlatformRepository
+from agent_platform.tool_router import ToolRouter, build_default_registry
 from api import app
 from config import API_HOST, API_PORT, DATA_DIR, LOG_LEVEL, LOG_FORMAT
 from data_manager import DataManager
@@ -62,6 +66,13 @@ class VigilAI:
         # 注入依赖到FastAPI
         app.state.data_manager = self.data_manager
         app.state.scheduler = self.scheduler
+        app.state.agent_platform_repository = AgentPlatformRepository(self.data_manager.db_path)
+        app.state.agent_tool_router = ToolRouter(
+            tool_registry=build_default_registry(data_manager=self.data_manager),
+            registry_key=self.data_manager.db_path,
+        )
+        app.state.agent_conversation_engine = ConversationEngine(app.state.agent_tool_router)
+        app.state.agent_artifact_service = ArtifactService(app.state.agent_platform_repository)
         
         # 暂时禁用定时任务调度器，仅支持手动刷新
         # logger.info("Starting scheduler...")

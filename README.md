@@ -1,120 +1,87 @@
 # VigilAI
 
-VigilAI 是一个面向开发者机会发现与决策的情报工作台。它不只是抓取“搞钱机会”，而是把机会采集、AI 分析、人工跟进、日报沉淀和来源治理串成一条可执行链路。
+VigilAI is now structured as a shared agent platform with two bounded contexts:
 
-## 当前定位
+- `opportunity`: developer opportunity discovery, analysis, and follow-up
+- `product_selection`: Taobao / Xianyu product research, shortlist, compare, and tracking
 
-当前项目最准确的定义是：
+The system keeps the legacy opportunity workbench intact while introducing a unified `/agent` entry that can route work into either domain.
 
-开发者机会情报中台 + AI 辅助决策工作流
+## Architecture Summary
 
-它已经不是早期单纯的“活动列表”，而是围绕下面几类任务展开：
+### Backend
 
-- 发现机会：统一浏览多来源机会，并按推荐优先级筛选
-- 判断机会：用 AI 模板、结构化字段和分析结果辅助判断
-- 推进行动：收藏、加入跟进、记录下一步动作和提醒
-- 生成摘要：把高价值机会沉淀为今日日报
-- 治理供给：监控来源健康、刷新时效和异常来源
+- `app/backend/agent_platform/`
+  - shared session, turn, artifact, job, and tool-routing primitives
+  - conversation engine for `/api/agent/*`
+- `app/backend/opportunity_domain/`
+  - wraps existing activity data and tracking flows as agent tools
+- `app/backend/product_selection/`
+  - isolated bounded context for platform-selection research, scoring, tracking, and compare
+- `app/backend/api.py`
+  - legacy APIs remain available
+  - new shared agent endpoints and product-selection endpoints are additive
 
-## 当前核心功能
+### Frontend
 
-### 1. 机会池
+- `/agent`
+  - shared agent workspace
+  - domain switch between `opportunity` and `product_selection`
+- `/selection/*`
+  - structured workbench for product-selection research
+- existing `/workspace`, `/activities`, `/tracking`, `/digests`, `/sources`, `/analysis/*`
+  - remain supported
 
-- 聚合机会列表，支持分类、来源、关键词、截止时间、奖金区间、可信度、跟进状态等筛选
-- 支持排序、分页和批量操作
-- 支持基于当前筛选结果做 AI 精筛
-- 支持临时微调 AI 模板规则，只影响当前机会池预览
+## Compatibility Rules
 
-### 2. AI 分析系统
+- Old routes remain supported. The new agent platform is additive.
+- Old tables remain readable. Existing opportunity data stays in place.
+- New platform tables are additive:
+  - `agent_sessions`
+  - `agent_turns`
+  - `agent_artifacts`
+  - `agent_jobs_v2`
+  - `selection_queries`
+  - `selection_opportunities`
+  - `selection_opportunity_signals`
+  - `selection_tracking_items`
+- `product_selection` is isolated from `Activity` and does not reuse the legacy opportunity tables as its primary store.
 
-- 支持分析模板的创建、复制、编辑、激活和删除
-- 支持模板预览和重新分析全部机会
-- 为每条机会产出分析状态、分析原因、结构化字段和评分信息
-- 提供分析结果页，集中查看通过、观察和拦截样本
+## Key API Surfaces
 
-### 3. 机会工作台
+### Shared agent platform
 
-- 聚合总览指标、优先机会、首要动作、分析概览、来源预警和日报预览
-- 把“今天先看什么、为什么值得看、下一步做什么”集中到一个入口
-- 支持直接收藏或加入跟进，不必先跳到详情页
+- `POST /api/agent/sessions`
+- `GET /api/agent/sessions/{id}`
+- `POST /api/agent/sessions/{id}/turns`
+- `GET /api/agent/sessions/{id}/turns`
+- `GET /api/agent/sessions/{id}/artifacts`
 
-### 4. 机会详情与执行动作
+### Opportunity domain
 
-- 展示完整机会信息、AI 分析、结构化字段、时间线和相关机会
-- 支持加入跟进、收藏、加入今日日报候选
-- 支持在详情页直接维护跟进计划、备注、下一步动作和提醒时间
+- `GET /api/activities`
+- `GET /api/activities/{activity_id}`
+- `POST /api/activities/ai-filter`
+- `GET /api/tracking`
+- `POST /api/tracking/{activity_id}`
+- `PATCH /api/tracking/{activity_id}`
+- `DELETE /api/tracking/{activity_id}`
 
-### 5. 跟进系统
+### Product selection domain
 
-- 维护 saved、tracking、done、archived 等跟进状态
-- 管理备注、下一步动作和提醒
-- 提供“今日跟进焦点”和拖延项视图
+- `POST /api/product-selection/research-jobs`
+- `GET /api/product-selection/research-jobs/{job_id}`
+- `GET /api/product-selection/opportunities`
+- `GET /api/product-selection/opportunities/{id}`
+- `GET /api/product-selection/tracking`
+- `POST /api/product-selection/tracking/{id}`
+- `PATCH /api/product-selection/tracking/{id}`
+- `DELETE /api/product-selection/tracking/{id}`
+- `GET /api/product-selection/workspace`
 
-### 6. 日报系统
+## Local Development
 
-- 先收集日报候选机会，再生成日报
-- 支持查看历史日报、复制摘要、标记已发送
-- 让机会判断结果沉淀为每天的可分享输出
-
-### 7. 来源健康治理
-
-- 查看来源状态、上次运行、上次成功时间、健康分和新鲜度
-- 支持单个来源刷新和全部刷新
-- 快速定位报错、陈旧或需要排查的来源
-
-## 前端页面
-
-- `/workspace`：机会工作台
-- `/activities`：机会池
-- `/activities/:id`：机会详情
-- `/analysis/results`：AI 分析结果
-- `/analysis/templates`：模板中心
-- `/tracking`：跟进列表
-- `/digests`：日报
-- `/sources`：来源健康
-- `/dashboard`：基础统计看板
-
-## 后端能力
-
-FastAPI 当前主要提供以下接口族：
-
-- `/api/activities`：机会列表、详情、AI 精筛
-- `/api/analysis/*`：模板管理、模板预览、分析运行、分析结果
-- `/api/tracking/*`：跟进记录管理
-- `/api/digests/*`：日报候选、日报生成、日报发送
-- `/api/sources/*`：来源状态和刷新
-- `/api/workspace`：工作台聚合数据
-- `/api/stats`：统计总览
-- `/api/categories`：分类选项
-- `/api/health`：健康检查
-
-## 项目结构
-
-```text
-app/
-  backend/
-    api.py
-    config.py
-    data_manager.py
-    analysis/
-    scrapers/
-    tests/
-  frontend/
-    src/
-      components/
-      hooks/
-      pages/
-      services/
-      types/
-docs/
-  当前项目核心功能梳理.md
-  当前业务逻辑与产品分析.md
-  V2*.md
-```
-
-## 快速启动
-
-### 后端
+### Backend
 
 ```bash
 cd app/backend
@@ -122,9 +89,9 @@ pip install -r requirements.txt
 python main.py
 ```
 
-默认地址：`http://localhost:8000`
+Backend default: `http://localhost:8000`
 
-### 前端
+### Frontend
 
 ```bash
 cd app/frontend
@@ -132,26 +99,21 @@ npm install
 npm run dev
 ```
 
-默认地址：`http://localhost:5173`
+Frontend default: `http://localhost:5173`
 
-## 相关文档
+## Verification
 
-- [当前项目核心功能梳理](./docs/当前项目核心功能梳理.md)
-- [当前业务逻辑与产品分析](./docs/当前业务逻辑与产品分析.md)
-- [V2 产品信息架构与页面原型说明](./docs/V2产品信息架构与页面原型说明.md)
+### Backend
 
-## 当前阶段判断
+```bash
+cd app/backend
+pytest tests/test_agent_platform_repository.py tests/test_agent_platform_api.py tests/test_opportunity_agent_tools.py tests/test_product_selection_repository.py tests/test_product_selection_api.py tests/test_product_selection_agent_tools.py tests/test_agent_platform_smoke.py -v
+```
 
-这个项目已经完成了从“机会采集工具”到“机会决策工作流”的跃迁，但还处在产品化中段。当前最成熟的是：
+### Frontend
 
-- 机会浏览与筛选
-- AI 模板分析
-- 跟进和日报闭环
-- 来源健康治理
-
-仍然值得持续打磨的是：
-
-- 自动刷新与调度稳定性
-- 分类体系统一
-- 数据质量治理和跨源去重
-- 更强的个性化推荐与通知闭环
+```bash
+cd app/frontend
+npm test -- AgentWorkspacePage.test.tsx SelectionOpportunitiesPage.test.tsx
+npm run build
+```

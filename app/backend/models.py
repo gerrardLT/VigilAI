@@ -12,6 +12,8 @@ from typing import Any, List, Optional
 from analysis.schemas import AnalysisSnapshot
 from pydantic import BaseModel, Field
 
+from agent_platform.models import AgentArtifact, AgentJob, AgentSession, AgentTurn
+
 
 class Category(str, Enum):
     HACKATHON = "hackathon"
