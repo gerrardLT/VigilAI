@@ -78,9 +78,12 @@ class AnalysisTemplatePreviewResultsResponse(AnalysisTemplatePreviewResponse):
 class TrackingUpsertRequest(BaseModel):
     is_favorited: Optional[bool] = None
     status: Optional[str] = None
+    stage: Optional[str] = None
     notes: Optional[str] = None
     next_action: Optional[str] = None
     remind_at: Optional[str] = None
+    block_reason: Optional[str] = None
+    abandon_reason: Optional[str] = None
 
 
 class DigestGenerateRequest(BaseModel):
@@ -171,6 +174,10 @@ class ProductSelectionResearchJobCreateRequest(BaseModel):
     query_type: Literal["keyword", "category", "listing_url"] = "keyword"
     query_text: str
     platform_scope: Literal["taobao", "xianyu", "both"] = "both"
+    rendered_snapshot_html: Optional[str] = None
+    rendered_snapshot_path: Optional[str] = None
+    detail_snapshot_htmls: List[str] = []
+    detail_snapshot_manifest_path: Optional[str] = None
 
 
 class ProductSelectionTrackingUpsertRequest(BaseModel):
@@ -304,6 +311,16 @@ async def create_agent_session(request: Request, payload: AgentSessionCreateRequ
     return _serialize_model(session)
 
 
+@app.get("/api/agent/sessions")
+async def list_agent_sessions(
+    request: Request,
+    domain_type: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    repository = _get_agent_repository(request)
+    return repository.list_sessions(domain_type=domain_type, limit=limit)
+
+
 @app.get("/api/agent/sessions/{session_id}")
 async def get_agent_session(request: Request, session_id: str):
     repository = _get_agent_repository(request)
@@ -374,6 +391,10 @@ async def create_product_selection_research_job(
             query_type=payload.query_type,
             query_text=payload.query_text,
             platform_scope=payload.platform_scope,
+            rendered_snapshot_html=payload.rendered_snapshot_html,
+            rendered_snapshot_path=payload.rendered_snapshot_path,
+            detail_snapshot_htmls=payload.detail_snapshot_htmls,
+            detail_snapshot_manifest_path=payload.detail_snapshot_manifest_path,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -394,6 +415,8 @@ async def list_product_selection_opportunities(
     platform: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     risk_tag: Optional[str] = Query(None),
+    source_mode: Optional[str] = Query(None),
+    fallback_reason: Optional[str] = Query(None),
     sort_by: str = Query("opportunity_score"),
     sort_order: str = Query("desc"),
     page: int = Query(1, ge=1),
@@ -404,6 +427,8 @@ async def list_product_selection_opportunities(
         platform=platform,
         search=search,
         risk_tag=risk_tag.lower() if risk_tag else None,
+        source_mode=source_mode.lower() if source_mode else None,
+        fallback_reason=fallback_reason.lower() if fallback_reason else None,
         sort_by=sort_by,
         sort_order=sort_order,
         page=page,
@@ -420,8 +445,17 @@ async def get_product_selection_opportunity(request: Request, opportunity_id: st
 
 
 @app.get("/api/product-selection/tracking")
-async def list_product_selection_tracking(request: Request, status: Optional[str] = Query(None)):
-    return _get_product_selection_repository(request).list_tracking(status=status)
+async def list_product_selection_tracking(
+    request: Request,
+    status: Optional[str] = Query(None),
+    source_mode: Optional[str] = Query(None),
+    fallback_reason: Optional[str] = Query(None),
+):
+    return _get_product_selection_repository(request).list_tracking(
+        status=status,
+        source_mode=source_mode.lower() if source_mode else None,
+        fallback_reason=fallback_reason.lower() if fallback_reason else None,
+    )
 
 
 @app.post("/api/product-selection/tracking/{opportunity_id}")

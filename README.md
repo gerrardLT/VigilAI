@@ -52,6 +52,7 @@ The system keeps the legacy opportunity workbench intact while introducing a uni
 ### Shared agent platform
 
 - `POST /api/agent/sessions`
+- `GET /api/agent/sessions`
 - `GET /api/agent/sessions/{id}`
 - `POST /api/agent/sessions/{id}/turns`
 - `GET /api/agent/sessions/{id}/turns`
@@ -78,6 +79,24 @@ The system keeps the legacy opportunity workbench intact while introducing a uni
 - `PATCH /api/product-selection/tracking/{id}`
 - `DELETE /api/product-selection/tracking/{id}`
 - `GET /api/product-selection/workspace`
+
+## Current Behavior Notes
+
+- `/agent` now supports recent-session history and session restore per domain, not only new-session chat.
+- `data_manager.py` has been split into `app/backend/data_manager_components/` mixins while keeping the external `DataManager` bootstrap surface stable.
+- Product-selection opportunities and tracking items expose provenance fields such as `source_mode`, `source_summary`, and `fallback_reason`.
+- The Taobao / Xianyu integration is truth-first:
+  - the backend attempts live extraction where possible
+  - when a page is shell-heavy, weak, or otherwise unreliable, the result is marked as `fallback`
+  - `fallback` means the item should be read as a conservative estimate, not as verified live marketplace data
+
+### Logged-in marketplace fixtures
+
+- Real marketplace regression work should prefer logged-in rendered DOM fixtures over public shell HTML.
+- Operator workflow: [docs/product_selection_logged_in_fixture_workflow.md](docs/product_selection_logged_in_fixture_workflow.md)
+- The live adapter can consume:
+  - direct HTTP fetches with cookie JSON
+  - rendered DOM snapshots via `rendered_snapshot_html`
 
 ## Local Development
 

@@ -5,12 +5,15 @@ import type {
   ProductSelectionOpportunityFilters,
   ProductSelectionResearchJobCreateRequest,
   ProductSelectionResearchJobResponse,
+  ProductSelectionSourceSummary,
 } from '../types'
 
 const DEFAULT_FILTERS: ProductSelectionOpportunityFilters = {
   platform: '',
   search: '',
   risk_tag: '',
+  source_mode: '',
+  fallback_reason: '',
   sort_by: 'opportunity_score',
   sort_order: 'desc',
   page: 1,
@@ -26,6 +29,7 @@ interface UseProductSelectionResult {
   loading: boolean
   error: string | null
   latestJob: ProductSelectionResearchJobResponse | null
+  sourceSummary: ProductSelectionSourceSummary | null
   setFilters: (nextFilters: Partial<ProductSelectionOpportunityFilters>) => void
   setPage: (page: number) => void
   refetch: () => Promise<void>
@@ -46,6 +50,7 @@ export function useProductSelection(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [latestJob, setLatestJob] = useState<ProductSelectionResearchJobResponse | null>(null)
+  const [sourceSummary, setSourceSummary] = useState<ProductSelectionSourceSummary | null>(null)
 
   const fetchOpportunities = useCallback(async () => {
     setLoading(true)
@@ -55,11 +60,13 @@ export function useProductSelection(
       const response = await productSelectionApi.getOpportunities(filters)
       setOpportunities(response.items)
       setTotal(response.total)
+      setSourceSummary(response.source_summary)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load selection opportunities'
+      const message = err instanceof Error ? err.message : '加载选品机会失败'
       setError(message)
       setOpportunities([])
       setTotal(0)
+      setSourceSummary(null)
     } finally {
       setLoading(false)
     }
@@ -98,9 +105,10 @@ export function useProductSelection(
         }))
         setOpportunities(job.items)
         setTotal(job.total)
+        setSourceSummary(job.source_summary)
         return job
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to create research job'
+        const message = err instanceof Error ? err.message : '创建研究任务失败'
         setError(message)
         return null
       } finally {
@@ -119,6 +127,7 @@ export function useProductSelection(
     loading,
     error,
     latestJob,
+    sourceSummary,
     setFilters,
     setPage,
     refetch: fetchOpportunities,

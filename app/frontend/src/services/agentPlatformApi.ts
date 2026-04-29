@@ -2,6 +2,7 @@ import { ApiError } from './api'
 import type {
   AgentArtifact,
   AgentSession,
+  AgentSessionSummary,
   AgentSessionCreateRequest,
   AgentTurn,
   AgentTurnCreateRequest,
@@ -42,6 +43,15 @@ class AgentPlatformApiService {
 
   getSession(sessionId: string): Promise<AgentSession> {
     return this.request<AgentSession>(`/api/agent/sessions/${sessionId}`)
+  }
+
+  listSessions(domainType?: string, limit = 20): Promise<AgentSessionSummary[]> {
+    const params = new URLSearchParams()
+    if (domainType) {
+      params.set('domain_type', domainType)
+    }
+    params.set('limit', String(limit))
+    return this.request<AgentSessionSummary[]>(`/api/agent/sessions?${params.toString()}`)
   }
 
   postTurn(sessionId: string, payload: AgentTurnCreateRequest): Promise<AgentTurnReply> {

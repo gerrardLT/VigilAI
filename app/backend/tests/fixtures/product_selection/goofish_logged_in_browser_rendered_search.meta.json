@@ -1,0 +1,7 @@
+{
+  "label": "goofish_logged_in_browser_rendered_search",
+  "capture_mode": "rendered_browser",
+  "url": "https://www.goofish.com/search?keyword=%E9%9C%B2%E8%90%A5%E6%A1%8C",
+  "wait_ms": 6000,
+  "cookie_file": "d:\\5个项目\\VigilAI\\.tmp\\vigilai-goofish-cookies.json"
+}

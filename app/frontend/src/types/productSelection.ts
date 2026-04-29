@@ -2,6 +2,7 @@ export type ProductSelectionQueryType = 'keyword' | 'category' | 'listing_url'
 export type ProductSelectionPlatformScope = 'taobao' | 'xianyu' | 'both'
 export type ProductSelectionJobStatus = 'running' | 'completed' | 'failed'
 export type ProductSelectionTrackingStatus = 'saved' | 'tracking' | 'done' | 'archived'
+export type ProductSelectionSourceMode = 'live' | 'fallback' | 'mixed' | 'failed'
 export type ProductSelectionSortBy =
   | 'opportunity_score'
   | 'confidence_score'
@@ -36,6 +37,10 @@ export interface ProductSelectionOpportunity {
   price_low: number | null
   price_mid: number | null
   price_high: number | null
+  sales_volume: number | null
+  seller_count: number | null
+  seller_type: string | null
+  seller_name: string | null
   demand_score: number
   competition_score: number
   price_fit_score: number
@@ -47,6 +52,8 @@ export interface ProductSelectionOpportunity {
   reason_blocks: string[]
   recommended_action: string | null
   source_urls: string[]
+  source_mode: ProductSelectionSourceMode
+  source_diagnostics: Record<string, unknown>
   snapshot_at: string
   created_at: string
   updated_at: string
@@ -81,16 +88,58 @@ export interface ProductSelectionTrackingItem extends ProductSelectionTrackingSt
   opportunity: ProductSelectionOpportunity
 }
 
+export interface ProductSelectionTrackingFilters {
+  status?: ProductSelectionTrackingStatus
+  source_mode?: Exclude<ProductSelectionSourceMode, 'mixed'> | ''
+  fallback_reason?: string
+}
+
 export interface ProductSelectionOpportunityDetail extends ProductSelectionOpportunity {
   signals: ProductSelectionSignal[]
   tracking: ProductSelectionTrackingState | null
   query: ProductSelectionResearchJob | null
+  source_summary?: ProductSelectionSourceSummary
+}
+
+export interface ProductSelectionSourceSummary {
+  overall_mode: ProductSelectionSourceMode
+  mode_counts: {
+    live: number
+    fallback: number
+  }
+  fallback_used: boolean
+  fallback_reasons: string[]
+  adapter_runs: Array<{
+    platform: string
+    mode: ProductSelectionSourceMode
+    diagnostics: Record<string, unknown>
+    item_count: number
+  }>
+  extraction_stats_summary: {
+    http_candidates_seen: number
+    platform_candidates_seen: number
+    accepted_candidates: number
+    accepted_with_price: number
+    accepted_without_price: number
+    rejected_non_listing_url: number
+    rejected_noise_title: number
+    rejected_query_miss: number
+    rejected_duplicate_url: number
+  }
+  seller_mix: {
+    enterprise: number
+    personal: number
+    unknown: number
+    with_sales_volume: number
+    with_seller_count: number
+  }
 }
 
 export interface ProductSelectionResearchJobResponse {
   job: ProductSelectionResearchJob
   total: number
   items: ProductSelectionOpportunity[]
+  source_summary: ProductSelectionSourceSummary
 }
 
 export interface ProductSelectionOpportunityListResponse {
@@ -98,6 +147,7 @@ export interface ProductSelectionOpportunityListResponse {
   page: number
   page_size: number
   items: ProductSelectionOpportunity[]
+  source_summary: ProductSelectionSourceSummary
 }
 
 export interface ProductSelectionWorkspaceOverview {
@@ -118,12 +168,19 @@ export interface ProductSelectionWorkspaceResponse {
   top_opportunities: ProductSelectionOpportunity[]
   tracking_queue: ProductSelectionTrackingItem[]
   platform_breakdown: ProductSelectionWorkspacePlatformBreakdown[]
+  source_summary: ProductSelectionSourceSummary
+  top_opportunities_source_summary: ProductSelectionSourceSummary
+  tracking_queue_source_summary: ProductSelectionSourceSummary
 }
 
 export interface ProductSelectionResearchJobCreateRequest {
   query_type: ProductSelectionQueryType
   query_text: string
   platform_scope: ProductSelectionPlatformScope
+  rendered_snapshot_html?: string
+  rendered_snapshot_path?: string
+  detail_snapshot_htmls?: string[]
+  detail_snapshot_manifest_path?: string
 }
 
 export interface ProductSelectionOpportunityFilters {
@@ -131,6 +188,8 @@ export interface ProductSelectionOpportunityFilters {
   platform?: string
   search?: string
   risk_tag?: string
+  source_mode?: Exclude<ProductSelectionSourceMode, 'mixed'> | ''
+  fallback_reason?: string
   sort_by?: ProductSelectionSortBy
   sort_order?: 'asc' | 'desc'
   page?: number

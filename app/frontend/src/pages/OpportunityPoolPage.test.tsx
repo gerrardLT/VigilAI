@@ -398,8 +398,8 @@ describe('Opportunity pool page', () => {
       </MemoryRouter>
     )
 
-    expect(screen.getByText('机会池')).toBeInTheDocument()
-    expect(screen.getByText('按推荐优先级筛选、批量处理并推进机会。')).toBeInTheDocument()
+    expect(screen.getByText('机会池工作台')).toBeInTheDocument()
+    expect(screen.getByText('先筛出值得投入的机会，再批量推进')).toBeInTheDocument()
     expect(screen.queryByTestId('opportunity-pool-rules-panel')).not.toBeInTheDocument()
     expect(screen.queryByTestId('batch-track-button')).not.toBeInTheDocument()
 
@@ -412,9 +412,9 @@ describe('Opportunity pool page', () => {
     fireEvent.click(screen.getByTestId('batch-track-button'))
 
     await waitFor(() => {
-      expect(apiMocks.createTracking).toHaveBeenCalledWith('activity-1', { status: 'tracking' })
+      expect(apiMocks.createTracking).toHaveBeenCalledWith('activity-1', { status: 'saved' })
     })
-    expect(apiMocks.updateTracking).toHaveBeenCalledWith('activity-2', { status: 'tracking' })
+    expect(apiMocks.updateTracking).toHaveBeenCalledWith('activity-2', { status: 'saved' })
     expect(refetch).toHaveBeenCalled()
 
     fireEvent.click(screen.getByTestId('batch-favorite-button'))
@@ -550,7 +550,7 @@ describe('Opportunity pool page', () => {
     await waitFor(() => {
       expect(apiMocks.approveAgentAnalysisBatch).toHaveBeenCalledWith(
         ['job-item-1', 'job-item-2'],
-        { review_note: 'Batch approved from opportunity pool' }
+        { review_note: '机会池批量通过' }
       )
     })
   })
@@ -590,7 +590,7 @@ describe('Opportunity pool page', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '开始 AI 精筛' }))
 
-    expect(await screen.findByText('当前为 AI 精筛结果，仅保留符合条件的机会')).toBeInTheDocument()
+    expect(await screen.findByText('当前为 AI 精筛结果，仅保留符合条件的机会。')).toBeInTheDocument()
     expect(await screen.findByText('适合单人开发，奖励明确')).toBeInTheDocument()
     expect(screen.queryByText('Grant Program')).not.toBeInTheDocument()
     expect(apiMocks.aiFilterActivities).toHaveBeenCalledWith(

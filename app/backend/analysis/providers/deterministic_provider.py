@@ -1,5 +1,5 @@
 """
-Deterministic provider implementation used in tests and local fallback flows.
+Deterministic provider implementation used in tests and explicit local dry runs.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from typing import Any
 from analysis.providers.base import ProviderResponse
 
 
-class MockAnalysisProvider:
+class DeterministicTestAnalysisProvider:
     def __init__(
         self,
         *,
@@ -40,7 +40,7 @@ class MockAnalysisProvider:
         return ProviderResponse(
             task_type=task_type,
             schema_name=schema_name,
-            model_name=model or f"mock-{task_type}",
+            model_name=model or f"test-{task_type}",
             output=payload,
             raw_output={"prompt": prompt, "tools": tools or []},
             tool_results=[],

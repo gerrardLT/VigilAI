@@ -78,7 +78,7 @@ def test_post_turn_returns_assistant_reply_and_turns(client):
     assert response.status_code == 200
     payload = response.json()
     assert payload["assistant_turn"]["role"] == "assistant"
-    assert "reward size, deadline, or solo execution" in payload["assistant_turn"]["content"]
+    assert "奖励规模、截止时间，还是个人可执行性" in payload["assistant_turn"]["content"]
     assert len(payload["turns"]) == 2
     assert payload["turns"][0]["role"] == "user"
     assert payload["turns"][1]["role"] == "assistant"
@@ -101,3 +101,29 @@ def test_get_turns_and_artifacts_for_session(client):
     assert len(turns_response.json()) == 2
     assert artifacts_response.status_code == 200
     assert artifacts_response.json()[0]["artifact_type"] == "checklist"
+
+
+def test_list_sessions_returns_recent_history_for_domain(client):
+    first = client.post(
+        "/api/agent/sessions",
+        json={"domain_type": "opportunity", "entry_mode": "chat"},
+    ).json()
+    second = client.post(
+        "/api/agent/sessions",
+        json={"domain_type": "product_selection", "entry_mode": "chat"},
+    ).json()
+    client.post(
+        f"/api/agent/sessions/{first['id']}/turns",
+        json={"content": "Find solo-friendly grants worth following up"},
+    )
+
+    response = client.get("/api/agent/sessions", params={"domain_type": "opportunity", "limit": 10})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["id"] == first["id"]
+    assert payload[0]["title"] == "Find solo-friendly grants worth following up"
+    assert payload[0]["turn_count"] == 2
+    assert "奖励规模" in payload[0]["last_turn_preview"]
+    assert all(item["id"] != second["id"] for item in payload)

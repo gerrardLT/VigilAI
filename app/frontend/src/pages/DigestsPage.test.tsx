@@ -113,6 +113,18 @@ describe('DigestsPage', () => {
     })
   })
 
+
+  it('renders the fixed action-oriented digest structure', () => {
+    render(
+      <MemoryRouter>
+        <DigestsPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('digest-action-sections')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(5)
+  })
+
   it('shows digest candidates and supports removing one', async () => {
     render(
       <MemoryRouter>

@@ -12,6 +12,11 @@ export interface AgentSession {
   last_turn_at: string | null
 }
 
+export interface AgentSessionSummary extends AgentSession {
+  turn_count: number
+  last_turn_preview: string | null
+}
+
 export interface AgentTurn {
   id: string
   session_id: string
@@ -41,6 +46,7 @@ export interface AgentToolCall {
 export interface AgentSessionCreateRequest {
   domain_type: AgentDomainType
   entry_mode: string
+  title?: string
 }
 
 export interface AgentTurnCreateRequest {

@@ -39,6 +39,7 @@ export type {
   AgentArtifact,
   AgentDomainType,
   AgentSession,
+  AgentSessionSummary,
   AgentSessionCreateRequest,
   AgentToolCall,
   AgentTurn,
@@ -61,7 +62,10 @@ export type {
   ProductSelectionResearchJobResponse,
   ProductSelectionSignal,
   ProductSelectionSortBy,
+  ProductSelectionSourceMode,
+  ProductSelectionSourceSummary,
   ProductSelectionTrackingItem,
+  ProductSelectionTrackingFilters,
   ProductSelectionTrackingState,
   ProductSelectionTrackingStatus,
   ProductSelectionTrackingUpsertRequest,
@@ -102,6 +106,7 @@ export type SourceType =
 export type SourceStatus = 'idle' | 'running' | 'success' | 'error'
 export type SourceFreshnessLevel = 'fresh' | 'aging' | 'stale' | 'critical' | 'never'
 export type TrackingStatus = 'saved' | 'tracking' | 'done' | 'archived'
+export type TrackingStageValue = 'to_decide' | 'watching' | 'preparing' | 'submitted' | 'dropped'
 export type DigestStatus = 'draft' | 'sent'
 export type DeadlineLevel = 'urgent' | 'soon' | 'upcoming' | 'later' | 'none' | 'expired'
 export type TrustLevel = 'high' | 'medium' | 'low'
@@ -174,9 +179,12 @@ export interface TrackingState {
   activity_id: string
   is_favorited: boolean
   status: TrackingStatus
+  stage?: TrackingStageValue | null
   notes: string | null
   next_action: string | null
   remind_at: string | null
+  block_reason?: string | null
+  abandon_reason?: string | null
   created_at: string
   updated_at: string
 }
@@ -321,9 +329,12 @@ export interface ActivityFilters {
 export interface TrackingUpsertRequest {
   is_favorited?: boolean
   status?: TrackingStatus
+  stage?: TrackingStageValue | null
   notes?: string | null
   next_action?: string | null
   remind_at?: string | null
+  block_reason?: string | null
+  abandon_reason?: string | null
 }
 
 export interface DigestGenerateRequest {

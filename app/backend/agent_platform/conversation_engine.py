@@ -99,23 +99,23 @@ class ConversationEngine:
         if domain_type == "product_selection":
             return ArtifactDraft(
                 artifact_type="checklist",
-                title="Selection Intake Checklist",
-                content="Add target platform, budget range, sourcing model, and expected margin.",
+                title="选品输入清单",
+                content="补充目标平台、预算区间、货源模式和预期利润。",
                 payload={"domain_type": domain_type},
             )
 
         if domain_type == "opportunity":
             return ArtifactDraft(
                 artifact_type="checklist",
-                title="Opportunity Intake Checklist",
-                content="Add budget, time window, target category, and execution constraints.",
+                title="机会输入清单",
+                content="补充预算、时间窗口、目标类别和执行约束。",
                 payload={"domain_type": domain_type},
             )
 
         return ArtifactDraft(
             artifact_type="checklist",
-            title="Conversation Intake Checklist",
-            content="Add the goal, hard constraints, timing, and expected output format.",
+            title="对话输入清单",
+            content="补充目标、硬性限制、时间要求和输出格式。",
             payload={"domain_type": domain_type},
         )
 
@@ -141,7 +141,7 @@ class ConversationEngine:
             artifacts.append(
                 ArtifactDraft(
                     artifact_type="shortlist",
-                    title="Opportunity Shortlist",
+                    title="机会候选清单",
                     content=self._format_opportunity_shortlist(search_result["items"]),
                     payload=search_result,
                 )
@@ -152,7 +152,7 @@ class ConversationEngine:
             artifacts.append(
                 ArtifactDraft(
                     artifact_type="explanation",
-                    title="Opportunity Assessment",
+                    title="机会评估",
                     content=self._format_opportunity_explanation(explain_result),
                     payload=explain_result,
                 )
@@ -163,7 +163,7 @@ class ConversationEngine:
             artifacts.append(
                 ArtifactDraft(
                     artifact_type="next_action",
-                    title="Recommended Next Action",
+                    title="建议下一步动作",
                     content=self._format_opportunity_next_action(next_action_result),
                     payload=next_action_result,
                 )
@@ -181,7 +181,7 @@ class ConversationEngine:
             artifacts.append(
                 ArtifactDraft(
                     artifact_type="shortlist",
-                    title="Selection Shortlist",
+                    title="选品候选清单",
                     content=self._format_selection_shortlist(shortlist_result["shortlist"]),
                     payload=shortlist_result,
                 )
@@ -192,7 +192,7 @@ class ConversationEngine:
             artifacts.append(
                 ArtifactDraft(
                     artifact_type="comparison",
-                    title="Cross-Platform Comparison",
+                    title="跨平台对比",
                     content=self._format_selection_comparison(compare_result["compare_rows"]),
                     payload=compare_result,
                 )
@@ -209,21 +209,21 @@ class ConversationEngine:
             return self._build_product_selection_text(tool_results)
         if domain_type == "opportunity":
             return self._build_opportunity_text(tool_results)
-        return "I can help scope this decision. Tell me the goal, constraints, and expected output."
+        return "我可以帮你梳理这项决策。请告诉我目标、限制条件和期望输出。"
 
     def _build_opportunity_text(self, tool_results: dict[str, dict[str, Any]]) -> str:
         parts = [
-            "I scoped an initial opportunity pass. Tell me whether you care most about reward size, deadline, or solo execution."
+            "我已经先做了一轮机会筛选。告诉我你更看重奖励规模、截止时间，还是个人可执行性。"
         ]
 
         search_result = tool_results.get("opportunity_search")
         if search_result:
             items = search_result.get("items") or []
             if items:
-                parts.append("First shortlist:\n" + self._format_opportunity_shortlist(items))
+                parts.append("第一批候选如下：\n" + self._format_opportunity_shortlist(items))
             else:
                 parts.append(
-                    "I did not find a strong direct match yet. Add a tighter category, reward size, or deadline filter."
+                    "我暂时还没找到足够强的直接匹配结果。你可以补充更严格的类别、奖励规模或截止时间条件。"
                 )
 
         explain_result = tool_results.get("opportunity_explain")
@@ -238,17 +238,17 @@ class ConversationEngine:
 
     def _build_product_selection_text(self, tool_results: dict[str, dict[str, Any]]) -> str:
         parts = [
-            "I started a product-selection pass. Tell me whether margin, sell-through speed, or after-sales risk matters most."
+            "我已经开始做一轮选品筛选。告诉我你更看重利润空间、出单速度，还是售后风险。"
         ]
 
         shortlist_result = tool_results.get("selection_query") or tool_results.get("selection_compare")
         if shortlist_result:
             shortlist = shortlist_result.get("shortlist") or []
             if shortlist:
-                parts.append("First shortlist:\n" + self._format_selection_shortlist(shortlist))
+                parts.append("第一批候选如下：\n" + self._format_selection_shortlist(shortlist))
             else:
                 parts.append(
-                    "I did not find a strong shortlist yet. Add a tighter keyword, platform scope, or price band."
+                    "我暂时还没有筛出足够强的候选清单。你可以补充更具体的关键词、平台范围或价格带。"
                 )
 
         compare_result = tool_results.get("selection_compare")
@@ -262,50 +262,50 @@ class ConversationEngine:
         for index, item in enumerate(items, start=1):
             fragments = [f"{index}. {item['title']}"]
             if item.get("category"):
-                fragments.append(f"Category {item['category']}")
+                fragments.append(f"类别 {item['category']}")
             if item.get("score") is not None:
-                fragments.append(f"Score {item['score']}")
+                fragments.append(f"分数 {item['score']}")
             deadline = self._format_deadline(item.get("deadline"))
             if deadline:
-                fragments.append(f"Deadline {deadline}")
+                fragments.append(f"截止 {deadline}")
             prize = self._format_prize(item.get("prize"))
             if prize:
-                fragments.append(f"Prize {prize}")
+                fragments.append(f"奖励 {prize}")
             lines.append(" | ".join(fragments))
         return "\n".join(lines)
 
     def _format_opportunity_explanation(self, explain_result: dict[str, Any]) -> str:
         activity = explain_result.get("activity") or {}
         analysis = explain_result.get("analysis") or {}
-        lines = [f"Opportunity assessment: {activity.get('title', '')}".strip()]
+        lines = [f"机会评估：{activity.get('title', '')}".strip()]
         if analysis.get("summary"):
             lines.append(str(analysis["summary"]))
         reasons = analysis.get("reasons") or []
         if reasons:
-            lines.append("Reasons: " + "; ".join(str(reason) for reason in reasons[:3]))
+            lines.append("原因： " + "；".join(str(reason) for reason in reasons[:3]))
         risk_flags = analysis.get("risk_flags") or []
         if risk_flags:
-            lines.append("Risks: " + "; ".join(str(flag) for flag in risk_flags[:3]))
+            lines.append("风险： " + "；".join(str(flag) for flag in risk_flags[:3]))
         if analysis.get("recommended_action"):
-            lines.append("Recommended action: " + str(analysis["recommended_action"]))
+            lines.append("建议动作： " + str(analysis["recommended_action"]))
         return "\n".join(lines)
 
     def _format_opportunity_next_action(self, next_action_result: dict[str, Any]) -> str:
         lines = [
-            f"Recommended next action: {next_action_result.get('next_action', '')}".strip(),
+            f"建议下一步：{next_action_result.get('next_action', '')}".strip(),
             (
-                f"Urgency: {next_action_result.get('urgency', 'medium')} | "
-                f"Tracking: {next_action_result.get('tracking_status', 'saved')}"
+                f"紧急度：{next_action_result.get('urgency', 'medium')} | "
+                f"跟进状态：{next_action_result.get('tracking_status', 'saved')}"
             ),
         ]
         deadline = self._format_deadline(next_action_result.get("deadline"))
         if deadline:
-            lines.append(f"Deadline: {deadline}")
+            lines.append(f"截止时间：{deadline}")
         if next_action_result.get("notes"):
-            lines.append("Notes: " + str(next_action_result["notes"]))
+            lines.append("备注： " + str(next_action_result["notes"]))
         reasons = next_action_result.get("analysis_reasons") or []
         if reasons:
-            lines.append("Basis: " + "; ".join(str(reason) for reason in reasons[:2]))
+            lines.append("依据： " + "；".join(str(reason) for reason in reasons[:2]))
         return "\n".join(lines)
 
     def _format_selection_shortlist(self, items: list[dict[str, Any]]) -> str:
@@ -313,22 +313,22 @@ class ConversationEngine:
         for index, item in enumerate(items, start=1):
             fragments = [
                 f"{index}. {item['title']}",
-                f"Platform {item.get('platform')}",
-                f"Opportunity {item.get('opportunity_score')}",
-                f"Confidence {item.get('confidence_score')}",
+                f"平台 {item.get('platform')}",
+                f"机会分 {item.get('opportunity_score')}",
+                f"置信度 {item.get('confidence_score')}",
             ]
             if item.get("recommended_action"):
-                fragments.append(f"Recommended {item['recommended_action']}")
+                fragments.append(f"建议 {item['recommended_action']}")
             lines.append(" | ".join(str(fragment) for fragment in fragments))
         return "\n".join(lines)
 
     def _format_selection_comparison(self, compare_rows: list[dict[str, Any]]) -> str:
-        lines = ["Cross-platform comparison:"]
+        lines = ["跨平台对比如下："]
         for row in compare_rows:
             lines.append(
                 " - "
-                + f"{row['platform']}: {row['title']} | Opportunity {row['opportunity_score']} | "
-                + f"Confidence {row['confidence_score']} | Recommended {row.get('recommended_action') or 'N/A'}"
+                + f"{row['platform']}：{row['title']} | 机会分 {row['opportunity_score']} | "
+                + f"置信度 {row['confidence_score']} | 建议 {row.get('recommended_action') or '暂无'}"
             )
         return "\n".join(lines)
 

@@ -26,6 +26,7 @@ import type {
   OpportunityAiFilterResponse,
 } from '../types'
 import { DEFAULT_SORT_BY, DEFAULT_SORT_ORDER } from '../utils/constants'
+import { mapTrackingStageToStatus } from '../utils/trackingStage'
 import {
   getAnalysisFieldLabel,
   getAnalysisOperatorLabel,
@@ -53,22 +54,26 @@ function buildTrackingFilters(
   return { tracking_state: '', is_tracking: undefined, is_favorited: undefined }
 }
 
-async function runBatchTrackingAction(activities: Activity[]) {
-  await Promise.all(
-    activities.map(activity =>
-      activity.is_tracking
-        ? api.updateTracking(activity.id, { status: 'tracking' })
-        : api.createTracking(activity.id, { status: 'tracking' })
-    )
-  )
-}
+type BatchTrackingAction = 'to_decide' | 'watching' | 'favorite'
 
-async function runBatchFavoriteAction(activities: Activity[]) {
+async function runBatchTrackingAction(activities: Activity[], action: BatchTrackingAction) {
+  if (action === 'favorite') {
+    await Promise.all(
+      activities.map(activity =>
+        activity.is_tracking
+          ? api.updateTracking(activity.id, { is_favorited: true })
+          : api.createTracking(activity.id, { status: 'saved', is_favorited: true })
+      )
+    )
+    return
+  }
+
+  const status = mapTrackingStageToStatus(action)
   await Promise.all(
     activities.map(activity =>
       activity.is_tracking
-        ? api.updateTracking(activity.id, { is_favorited: true })
-        : api.createTracking(activity.id, { status: 'saved', is_favorited: true })
+        ? api.updateTracking(activity.id, { status })
+        : api.createTracking(activity.id, { status })
     )
   )
 }
@@ -510,18 +515,14 @@ export function ActivitiesPage() {
   }, [])
 
   const applyBatchAction = useCallback(
-    async (action: 'track' | 'favorite') => {
+    async (action: BatchTrackingAction) => {
       if (selectedActivities.length === 0) {
         return
       }
 
       setIsApplyingBatch(true)
       try {
-        if (action === 'track') {
-          await runBatchTrackingAction(selectedActivities)
-        } else {
-          await runBatchFavoriteAction(selectedActivities)
-        }
+        await runBatchTrackingAction(selectedActivities, action)
         await refetch()
       } catch (batchError) {
         console.error(batchError)
@@ -735,7 +736,7 @@ export function ActivitiesPage() {
     setIsReviewingBatch(true)
     try {
       await api.approveAgentAnalysisBatch(selectedAgentItemIds, {
-        review_note: 'Batch approved from opportunity pool',
+        review_note: '机会池批量通过',
       })
       await Promise.all([refetch(), refetchAgentJobs()])
       if (latestBatchJobSummary) {
@@ -756,7 +757,7 @@ export function ActivitiesPage() {
     setIsReviewingBatch(true)
     try {
       await api.rejectAgentAnalysisBatch(selectedAgentItemIds, {
-        review_note: 'Batch rejected from opportunity pool',
+        review_note: '机会池批量拒绝',
       })
       await Promise.all([refetch(), refetchAgentJobs()])
       if (latestBatchJobSummary) {
@@ -837,7 +838,7 @@ export function ActivitiesPage() {
     ? 'AI 精筛后没有找到符合条件的机会'
     : '当前筛选条件下还没有机会'
   const emptyStateDescription = aiFilterApplied
-    ? '可以调整描述后重新精筛，或先清除 AI 条件返回固定筛选结果。'
+    ? '可以调整描述后重新精筛，或先清除 AI 条件回到固定筛选结果。'
     : '可以调整固定筛选条件，继续缩小或放宽范围。'
   const emptyStateActionLabel = aiFilterApplied ? '清除 AI 条件' : '清除筛选'
   const handleEmptyStateClear = aiFilterApplied ? handleClearAiFilter : handleClearFilters
@@ -847,9 +848,9 @@ export function ActivitiesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="text-xs font-medium uppercase tracking-[0.24em] text-sky-700">AI 智能代理决策池</div>
-          <h1 className="text-3xl font-bold text-gray-900">机会池</h1>
-          <p className="mt-2 text-sm text-gray-600">按推荐优先级筛选、批量处理并推进机会。</p>
+          <div className="text-xs font-medium uppercase tracking-[0.24em] text-sky-700">机会池工作台</div>
+          <h1 className="text-3xl font-bold text-gray-900">先筛出值得投入的机会，再批量推进</h1>
+          <p className="mt-2 text-sm text-gray-600">这里不是信息广场，而是你的机会决策台。先筛、再判、再批量推进。</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
           <span>{total} 个机会</span>
@@ -876,9 +877,9 @@ export function ActivitiesPage() {
           >
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">高级调整</div>
-              <h2 className="mt-2 text-lg font-semibold text-slate-900">边调规则边看结果</h2>
+              <h2 className="mt-2 text-lg font-semibold text-slate-900">边调规则，边看结果</h2>
               <p className="mt-2 text-sm text-slate-600">
-                这里只影响当前机会池预览，不会直接修改默认模板。
+                这里只影响当前机会池预览，不会直接覆盖默认模板。
               </p>
             </div>
 
@@ -947,7 +948,7 @@ export function ActivitiesPage() {
         <div className="space-y-6">
           <div className="space-y-4 rounded-xl bg-white p-4 shadow">
             {latestBatchBannerJob ? (
-              <JobStatusBanner job={latestBatchBannerJob} title="Latest batch review run" />
+              <JobStatusBanner job={latestBatchBannerJob} title="最近一轮批量复核" />
             ) : null}
 
             {latestBatchBannerJob ? (
@@ -1006,8 +1007,8 @@ export function ActivitiesPage() {
                   </div>
                   <div className="mt-1 text-xs">
                     {draftDirty
-                      ? '规则调整只影响当前机会池预览，适合先试后存。'
-                      : '打开高级调整，可以临时微调硬门槛和筛选条件，不会直接覆盖模板。'}
+                      ? '规则调整只影响当前机会池预览，确认有效后再另存为新模板。'
+                      : '打开高级调整后，可以临时微调硬门槛和筛选条件，不会直接覆盖模板。'}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1090,29 +1091,40 @@ export function ActivitiesPage() {
                       : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
                   }`}
                 >
-                  {draftOnlyFilter ? 'Draft only on' : 'Draft only'}
+                  {draftOnlyFilter ? '只看草稿判断：已开启' : '只看草稿判断'}
                 </button>
 
                 {selectedIds.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2">
-                    <span className="text-sm text-sky-800">已选中 {selectedIds.length} 条，开始批量处理</span>
+                    <span className="text-sm text-sky-800">已选中 {selectedIds.length} 条，直接推进到下一步</span>
                     <button
                       type="button"
                       data-testid="batch-track-button"
                       disabled={isApplyingBatch}
-                      onClick={() => void applyBatchAction('track')}
+                      onClick={() => void applyBatchAction('to_decide')}
                       className="rounded-full bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-gray-300"
                     >
-                      批量加入跟进
+                      批量加入待判断
+
                     </button>
                     <button
                       type="button"
                       data-testid="batch-favorite-button"
                       disabled={isApplyingBatch}
                       onClick={() => void applyBatchAction('favorite')}
-                      className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                      className="rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
                     >
                       批量收藏
+
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isApplyingBatch}
+                      onClick={() => void applyBatchAction('watching')}
+                      className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                    >
+                      批量标记重点
+
                     </button>
                   </div>
                 ) : null}
@@ -1177,7 +1189,7 @@ export function ActivitiesPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-            {aiFilterApplied ? '当前为 AI 精筛结果，仅保留符合条件的机会' : '当前为固定筛选结果'}
+            {aiFilterApplied ? '当前为 AI 精筛结果，仅保留符合条件的机会。' : '当前为固定筛选结果。'}
           </div>
 
           {loading ? (
@@ -1186,7 +1198,7 @@ export function ActivitiesPage() {
             <ErrorMessage message={error} onRetry={refetch} />
           ) : displayedActivities.length === 0 ? (
             <div className="rounded-xl bg-white py-14 text-center shadow">
-              <div className="mb-4 text-5xl text-gray-300">◌</div>
+              <div className="mb-4 text-4xl text-slate-300">◌</div>
               <p className="text-gray-700">{emptyStateTitle}</p>
               <p className="mt-2 text-sm text-gray-500">{emptyStateDescription}</p>
               {canClearEmptyState ? (

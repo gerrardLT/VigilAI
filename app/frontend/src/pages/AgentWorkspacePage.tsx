@@ -18,13 +18,13 @@ const DOMAIN_OPTIONS: Array<{
 }> = [
   {
     value: 'opportunity',
-    label: 'Opportunity',
-    summary: 'Search, explain, and plan follow-up for grants, bounties, and similar opportunities.',
+    label: '机会研判',
+    summary: '搜索、解释并规划 grant、bounty 等机会的后续动作。',
   },
   {
     value: 'product_selection',
-    label: 'Product Selection',
-    summary: 'Research Taobao and Xianyu product ideas, shortlist candidates, and compare platforms.',
+    label: '商品选品',
+    summary: '研究淘宝和闲鱼的商品机会，生成候选清单并进行平台对比。',
   },
 ]
 
@@ -40,22 +40,20 @@ const DOMAIN_COPY: Record<
   }
 > = {
   opportunity: {
-    badge: 'Opportunity Toolset',
-    description:
-      'Run the shared agent shell against the opportunity domain for search, explanation, and next-action support.',
-    inputLabel: 'Opportunity Prompt',
-    placeholder: 'Example: Find solo-friendly grants with clear rewards this month',
-    emptyState: 'No conversation yet. Send a message to start an agent session.',
-    helper: 'This mode uses the opportunity toolset behind /api/agent/*.',
+    badge: '机会工具集',
+    description: '在机会域中使用共享智能助手，完成搜索、解释与下一步行动建议。',
+    inputLabel: '机会输入',
+    placeholder: '例如：帮我找本月适合个人参与、奖励明确的 grant',
+    emptyState: '还没有对话，发送一条消息开始本次智能会话。',
+    helper: '当前模式会调用 `/api/agent/*` 背后的机会工具。',
   },
   product_selection: {
-    badge: 'Selection Toolset',
-    description:
-      'Run the same shared session shell against the product-selection domain for shortlist and comparison workflows.',
-    inputLabel: 'Selection Prompt',
-    placeholder: 'Example: Compare Taobao and Xianyu pet water fountain opportunities',
-    emptyState: 'No conversation yet. Switch domains at any time to start a fresh session.',
-    helper: 'This mode uses the product-selection toolset behind /api/agent/*.',
+    badge: '选品工具集',
+    description: '在商品选品域中使用同一套共享会话，完成候选清单与对比分析。',
+    inputLabel: '选品输入',
+    placeholder: '例如：对比淘宝和闲鱼上的宠物饮水机机会',
+    emptyState: '还没有对话，你可以随时切换领域开始新的会话。',
+    helper: '当前模式会调用 `/api/agent/*` 背后的选品工具。',
   },
 }
 
@@ -83,17 +81,17 @@ function getArtifactLinks(
 
   if (jobId) {
     links.push({
-      label: 'Open shortlist',
+      label: '打开候选清单',
       to: `/selection/opportunities?query_id=${encodeURIComponent(jobId)}`,
     })
   } else if ((payload.shortlist || []).length > 0) {
-    links.push({ label: 'Open selection pool', to: '/selection/opportunities' })
+    links.push({ label: '打开选品池', to: '/selection/opportunities' })
   }
 
   if (compareIds.length >= 2) {
     const query = compareIds.map(id => `ids=${encodeURIComponent(id)}`).join('&')
     links.push({
-      label: 'Open compare view',
+      label: '打开对比视图',
       to: `/selection/compare?${query}`,
     })
   }
@@ -104,7 +102,8 @@ function getArtifactLinks(
 export function AgentWorkspacePage() {
   const [domainType, setDomainType] = useState<AgentDomainType>('opportunity')
   const [draft, setDraft] = useState('')
-  const { session, turns, artifacts, loading, sending, error, sendTurn } = useAgentSession(domainType)
+  const { session, sessions, turns, artifacts, loading, sending, error, restoreSession, sendTurn } =
+    useAgentSession(domainType)
   const copy = DOMAIN_COPY[domainType]
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -131,14 +130,14 @@ export function AgentWorkspacePage() {
               {copy.badge}
             </span>
             <div>
-              <h1 className="text-3xl font-bold text-slate-900">Agent Workspace</h1>
+              <h1 className="text-3xl font-bold text-slate-900">智能助手工作台</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{copy.description}</p>
             </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            <div>Domain: {domainType}</div>
-            <div>Session: {session?.id ?? 'Not created yet'}</div>
+            <div>当前领域：{domainType === 'opportunity' ? '机会研判' : '商品选品'}</div>
+            <div>会话：{session?.id ?? '尚未创建'}</div>
           </div>
         </div>
 
@@ -171,10 +170,10 @@ export function AgentWorkspacePage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Conversation</h2>
+              <h2 className="text-lg font-semibold text-slate-900">对话</h2>
               <p className="mt-1 text-sm text-slate-500">{copy.helper}</p>
             </div>
-            {(loading || sending) && <span className="text-sm text-sky-700">Working...</span>}
+            {(loading || sending) && <span className="text-sm text-sky-700">处理中...</span>}
           </div>
 
           <div className="space-y-3" aria-live="polite">
@@ -184,12 +183,9 @@ export function AgentWorkspacePage() {
               </div>
             ) : (
               turns.map(turn => (
-                <article
-                  key={turn.id}
-                  className={`rounded-2xl border px-4 py-4 ${getTurnTone(turn.role)}`}
-                >
+                <article key={turn.id} className={`rounded-2xl border px-4 py-4 ${getTurnTone(turn.role)}`}>
                   <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {turn.role === 'assistant' ? 'Assistant' : 'User'}
+                    {turn.role === 'assistant' ? '助手' : '用户'}
                   </div>
                   <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
                     {turn.content}
@@ -212,9 +208,9 @@ export function AgentWorkspacePage() {
               />
             </label>
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-slate-500">Switching domains starts a fresh shared agent session.</p>
+              <p className="text-xs text-slate-500">切换领域会开启一段新的共享智能会话。</p>
               <button type="submit" className="btn btn-primary" disabled={sending || !draft.trim()}>
-                {sending ? 'Sending...' : 'Send'}
+                {sending ? '发送中...' : '发送'}
               </button>
             </div>
           </form>
@@ -222,15 +218,59 @@ export function AgentWorkspacePage() {
 
         <aside className="space-y-6">
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Artifacts</h2>
+            <h2 className="text-lg font-semibold text-slate-900">历史会话</h2>
+            <p className="mt-1 text-sm text-slate-500">恢复当前领域下最近的会话记录。</p>
+
+            <div className="mt-4 space-y-3">
+              {sessions.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                  还没有已保存的会话。
+                </div>
+              ) : (
+                sessions.map(item => {
+                  const isActive = item.id === session?.id
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => void restoreSession(item.id)}
+                      className={`block w-full rounded-2xl border px-4 py-4 text-left transition ${
+                        isActive
+                          ? 'border-sky-300 bg-sky-50 shadow-sm'
+                          : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-slate-900">
+                            {item.title || '未命名会话'}
+                          </div>
+                          <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                            {item.last_turn_preview || '还没有对话内容。'}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right text-xs text-slate-500">
+                          <div>{item.turn_count} 条消息</div>
+                          <div>{new Date(item.updated_at).toLocaleDateString()}</div>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">产出物</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Shared agent sessions persist intermediate outputs as reusable artifacts.
+              共享智能会话会把中间结果沉淀为可复用的产出物。
             </p>
 
             <div className="mt-4 space-y-3">
               {artifacts.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                  No artifacts yet.
+                  还没有产出物。
                 </div>
               ) : (
                 artifacts.map(artifact => {

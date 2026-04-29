@@ -49,7 +49,7 @@ export function useAgentAnalysisItem(itemId?: string | null): UseAgentAnalysisIt
       const detail = await api.getAgentAnalysisItem(resolvedItemId)
       setItem(detail)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load agent analysis item'
+      const message = err instanceof Error ? err.message : '加载 Agent 分析条目失败'
       setError(message)
       setItem(null)
     } finally {
@@ -64,7 +64,7 @@ export function useAgentAnalysisItem(itemId?: string | null): UseAgentAnalysisIt
   const rerunItem = useCallback(
     async (options: AgentAnalysisRerunOptions = {}): Promise<AgentAnalysisJobDetail | null> => {
       if (!item) {
-        setError('No agent analysis item is loaded')
+        setError('当前没有已加载的 Agent 分析条目')
         return null
       }
 
@@ -85,7 +85,7 @@ export function useAgentAnalysisItem(itemId?: string | null): UseAgentAnalysisIt
         }
         return created
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to rerun agent analysis item'
+        const message = err instanceof Error ? err.message : '重新运行 Agent 分析条目失败'
         setError(message)
         return null
       }

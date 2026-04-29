@@ -31,16 +31,13 @@ export function AgentVerdictCard({ snapshot, onRun, running = false }: AgentVerd
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h3 className="text-base font-semibold text-slate-900">AI Agent Verdict</h3>
-          <p className="mt-1 text-sm text-slate-500">运行深度分析，拿到可复核的 draft、evidence 和执行轨迹。</p>
+          <h3 className="text-base font-semibold text-slate-900">AI 判断结果</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            运行深度分析后，这里会展示可复核的草稿结论、证据和执行轨迹。
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={onRun}
-          disabled={running}
-          className="btn btn-primary"
-        >
-          {running ? 'Running...' : 'Deep Analysis'}
+        <button type="button" onClick={onRun} disabled={running} className="btn btn-primary">
+          {running ? '分析中...' : '深度分析'}
         </button>
       </div>
 
@@ -55,7 +52,7 @@ export function AgentVerdictCard({ snapshot, onRun, running = false }: AgentVerd
       </div>
 
       <div className="mt-4 text-sm leading-6 text-slate-700">
-        {snapshot?.summary ?? '还没有 agent draft。点击 Deep Analysis 开始一次可审查的深度分析。'}
+        {snapshot?.summary ?? '还没有 AI 分析草稿。点击“深度分析”开始一次可审查的深入分析。'}
       </div>
 
       {reasons.length > 0 && (
@@ -73,7 +70,7 @@ export function AgentVerdictCard({ snapshot, onRun, running = false }: AgentVerd
 
       {snapshot?.risk_flags && snapshot.risk_flags.length > 0 && (
         <div className="mt-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Risk Flags</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">风险标记</div>
           <div className="mt-2 flex flex-wrap gap-2">
             {snapshot.risk_flags.map(flag => (
               <span

@@ -7,7 +7,7 @@ export const DEFAULT_PAGE_SIZE = 20
 export const MAX_PAGE_SIZE = 100
 
 // 自动刷新间隔（毫秒）
-export const STATS_REFRESH_INTERVAL = 60000 // 60秒
+export const STATS_REFRESH_INTERVAL = 60000
 
 // 搜索防抖延迟（毫秒）
 export const SEARCH_DEBOUNCE_DELAY = 300
@@ -31,7 +31,7 @@ export const SORT_ORDERS = [
 export const DEFAULT_SORT_BY = 'score'
 export const DEFAULT_SORT_ORDER = 'desc'
 
-// 类别选项（中文标签）
+// 类别选项
 export const CATEGORY_OPTIONS = [
   { value: '', label: '全部类别' },
   { value: 'hackathon', label: '黑客松' },
@@ -73,20 +73,19 @@ export const CATEGORY_COLOR_MAP = {
   news: 'bg-gray-100 text-gray-800',
 } as const
 
-// 类别图标映射（可选，使用emoji）
+// 类别图标映射
 export const CATEGORY_ICON_MAP = {
-  hackathon: '🏆',
+  hackathon: '🏁',
   data_competition: '📊',
   coding_competition: '💻',
   other_competition: '🎯',
   airdrop: '🪂',
   bounty: '💰',
-  grant: '🎁',
+  grant: '🏦',
   dev_event: '📅',
   news: '📰',
 } as const
 
-// 应用版本
 export const DEADLINE_OPTIONS = [
   { value: '', label: '全部时效' },
   { value: 'urgent', label: '紧急截止' },

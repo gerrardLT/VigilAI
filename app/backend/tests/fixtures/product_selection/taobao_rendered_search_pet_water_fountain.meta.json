@@ -1,0 +1,6 @@
+{
+  "label": "taobao_rendered_search_pet_water_fountain",
+  "capture_mode": "rendered_browser",
+  "url": "https://s.taobao.com/search?q=%E5%AE%A0%E7%89%A9%E9%A5%AE%E6%B0%B4%E6%9C%BA",
+  "wait_ms": 7000
+}

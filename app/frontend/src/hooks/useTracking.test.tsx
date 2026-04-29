@@ -99,4 +99,35 @@ describe('useTracking', () => {
     expect(apiMocks.deleteTracking).toHaveBeenCalledWith('activity-1')
     expect(apiMocks.getTracking).toHaveBeenCalledTimes(2)
   })
+
+  it('refetches when tracking data changes elsewhere in the app', async () => {
+    apiMocks.getTracking
+      .mockResolvedValueOnce([trackingItem])
+      .mockResolvedValueOnce([
+        trackingItem,
+        {
+          ...trackingItem,
+          activity_id: 'activity-2',
+          activity: {
+            ...trackingItem.activity,
+            id: 'activity-2',
+            title: 'Grant Sprint',
+          },
+        },
+      ])
+
+    const { result } = renderHook(() => useTracking())
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1)
+    })
+
+    window.dispatchEvent(new CustomEvent('vigilai:tracking-updated'))
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(2)
+    })
+
+    expect(apiMocks.getTracking).toHaveBeenCalledTimes(2)
+  })
 })

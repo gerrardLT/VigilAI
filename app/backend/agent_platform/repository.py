@@ -227,6 +227,55 @@ class AgentPlatformRepository:
 
         return self._row_to_session(row)
 
+    def list_sessions(
+        self,
+        *,
+        domain_type: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                s.id,
+                s.domain_type,
+                s.entry_mode,
+                s.status,
+                s.title,
+                s.created_at,
+                s.updated_at,
+                s.last_turn_at,
+                COUNT(t.id) AS turn_count,
+                (
+                    SELECT tt.content
+                    FROM agent_turns tt
+                    WHERE tt.session_id = s.id
+                    ORDER BY tt.sequence_no DESC, tt.created_at DESC
+                    LIMIT 1
+                ) AS last_turn_preview
+            FROM agent_sessions s
+            LEFT JOIN agent_turns t ON t.session_id = s.id
+        """
+        params: list[Any] = []
+        if domain_type:
+            query += " WHERE s.domain_type = ?"
+            params.append(domain_type)
+        query += """
+            GROUP BY s.id
+            ORDER BY COALESCE(s.last_turn_at, s.updated_at, s.created_at) DESC
+            LIMIT ?
+        """
+        params.append(max(1, limit))
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        sessions: list[dict[str, Any]] = []
+        for row in rows:
+            session = self._row_to_session(row).model_dump(mode="json")
+            session["turn_count"] = int(row["turn_count"] or 0)
+            session["last_turn_preview"] = row["last_turn_preview"]
+            sessions.append(session)
+        return sessions
+
     def update_session_status(self, session_id: str, *, status: str) -> AgentSession:
         with self._get_connection() as conn:
             row = conn.execute(
@@ -308,13 +357,27 @@ class AgentPlatformRepository:
             conn.execute(
                 """
                 UPDATE agent_sessions
-                SET updated_at = ?, last_turn_at = ?
+                SET updated_at = ?, last_turn_at = ?, title = COALESCE(title, ?)
                 WHERE id = ?
                 """,
-                (created_at.isoformat(), created_at.isoformat(), session_id),
+                (
+                    created_at.isoformat(),
+                    created_at.isoformat(),
+                    self._suggest_session_title(role=role, content=content),
+                    session_id,
+                ),
             )
 
         return turn
+
+    @staticmethod
+    def _suggest_session_title(*, role: str, content: str) -> str | None:
+        if role != "user":
+            return None
+        normalized = " ".join((content or "").strip().split())
+        if not normalized:
+            return None
+        return normalized[:80]
 
     def list_turns(self, session_id: str) -> list[AgentTurn]:
         with self._get_connection() as conn:

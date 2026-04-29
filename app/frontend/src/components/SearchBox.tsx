@@ -9,8 +9,7 @@ interface SearchBoxProps {
 }
 
 /**
- * 搜索框组件
- * 支持防抖搜索
+ * Search input with debounced updates.
  */
 export function SearchBox({
   value,
@@ -20,12 +19,12 @@ export function SearchBox({
   const [inputValue, setInputValue] = useState(value)
   const debouncedValue = useDebounce(inputValue, SEARCH_DEBOUNCE_DELAY)
 
-  // 同步外部value变化
+  // Keep local input in sync when the parent value changes.
   useEffect(() => {
     setInputValue(value)
   }, [value])
 
-  // 防抖后触发onChange
+  // Emit changes after the debounce window.
   useEffect(() => {
     if (debouncedValue !== value) {
       onChange(debouncedValue)
@@ -39,7 +38,7 @@ export function SearchBox({
 
   return (
     <div className="relative">
-      {/* 搜索图标 */}
+      {/* Search icon */}
       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
         <svg
           className="w-5 h-5 text-gray-400"
@@ -56,7 +55,7 @@ export function SearchBox({
         </svg>
       </div>
 
-      {/* 输入框 */}
+      {/* Input */}
       <input
         type="text"
         aria-label="搜索活动"
@@ -66,7 +65,7 @@ export function SearchBox({
         className="input pl-10 pr-10"
       />
 
-      {/* 清除按钮 */}
+      {/* Clear button */}
       {inputValue && (
         <button
           type="button"

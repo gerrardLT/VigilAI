@@ -29,6 +29,13 @@ class ResearchJobStatus(str, Enum):
     FAILED = "failed"
 
 
+class ProductSourceMode(str, Enum):
+    LIVE = "live"
+    FALLBACK = "fallback"
+    MIXED = "mixed"
+    FAILED = "failed"
+
+
 class ProductTrackingStatus(str, Enum):
     SAVED = "saved"
     TRACKING = "tracking"
@@ -57,6 +64,10 @@ class ProductOpportunity(BaseModel):
     price_low: Optional[float] = None
     price_mid: Optional[float] = None
     price_high: Optional[float] = None
+    sales_volume: Optional[int] = None
+    seller_count: Optional[int] = None
+    seller_type: Optional[str] = None
+    seller_name: Optional[str] = None
     demand_score: float = 0
     competition_score: float = 0
     price_fit_score: float = 0
@@ -68,6 +79,8 @@ class ProductOpportunity(BaseModel):
     reason_blocks: list[str] = Field(default_factory=list)
     recommended_action: Optional[str] = None
     source_urls: list[str] = Field(default_factory=list)
+    source_mode: ProductSourceMode = ProductSourceMode.LIVE
+    source_diagnostics: dict[str, Any] = Field(default_factory=dict)
     snapshot_at: datetime
     created_at: datetime
     updated_at: datetime

@@ -56,4 +56,56 @@ describe('useWorkspace', () => {
     expect(result.current.workspace).toBeNull()
     expect(result.current.loading).toBe(false)
   })
+
+  it('refetches when tracking data changes elsewhere in the app', async () => {
+    apiMocks.getWorkspace
+      .mockResolvedValueOnce({
+        overview: {
+          total_activities: 12,
+          total_sources: 3,
+          activities_by_category: {},
+          activities_by_source: {},
+          recent_activities: 4,
+          last_update: '2026-03-23T08:00:00Z',
+          tracked_count: 2,
+          favorited_count: 1,
+        },
+        top_opportunities: [],
+        digest_preview: null,
+        trends: [],
+        alert_sources: [],
+        first_actions: [],
+      })
+      .mockResolvedValueOnce({
+        overview: {
+          total_activities: 12,
+          total_sources: 3,
+          activities_by_category: {},
+          activities_by_source: {},
+          recent_activities: 4,
+          last_update: '2026-03-23T08:05:00Z',
+          tracked_count: 3,
+          favorited_count: 1,
+        },
+        top_opportunities: [],
+        digest_preview: null,
+        trends: [],
+        alert_sources: [],
+        first_actions: [],
+      })
+
+    const { result } = renderHook(() => useWorkspace())
+
+    await waitFor(() => {
+      expect(result.current.workspace?.overview.tracked_count).toBe(2)
+    })
+
+    window.dispatchEvent(new CustomEvent('vigilai:tracking-updated'))
+
+    await waitFor(() => {
+      expect(result.current.workspace?.overview.tracked_count).toBe(3)
+    })
+
+    expect(apiMocks.getWorkspace).toHaveBeenCalledTimes(2)
+  })
 })

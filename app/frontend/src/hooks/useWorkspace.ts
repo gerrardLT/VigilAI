@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../services/api'
 import type { WorkspaceResponse } from '../types'
+import { TRACKING_UPDATED_EVENT } from '../utils/trackingSync'
 
 interface UseWorkspaceResult {
   workspace: WorkspaceResponse | null
@@ -32,6 +33,22 @@ export function useWorkspace(): UseWorkspaceResult {
 
   useEffect(() => {
     fetchWorkspace()
+  }, [fetchWorkspace])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    const handleTrackingUpdated = () => {
+      void fetchWorkspace()
+    }
+
+    window.addEventListener(TRACKING_UPDATED_EVENT, handleTrackingUpdated)
+
+    return () => {
+      window.removeEventListener(TRACKING_UPDATED_EVENT, handleTrackingUpdated)
+    }
   }, [fetchWorkspace])
 
   return {

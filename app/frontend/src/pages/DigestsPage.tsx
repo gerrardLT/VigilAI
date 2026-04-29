@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Loading } from '../components/Loading'
@@ -317,7 +317,7 @@ export function DigestsPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5">
+              <div data-testid="digest-action-sections" className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <div className="text-xs tracking-[0.2em] text-sky-600">1 分钟简报</div>
@@ -345,6 +345,29 @@ export function DigestsPage() {
                     ? '这份日报已经发送，可以作为今天的归档记录。'
                     : '这份日报还未发送，适合复核后作为今天的共享摘要。'}
                 </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="text-base font-semibold text-slate-900">先看重点</h3>
+                  <p className="mt-2 text-sm text-slate-600">用三条要点快速判断今天先推什么。</p>
+                </section>
+                <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="text-base font-semibold text-slate-900">再排顺序</h3>
+                  <p className="mt-2 text-sm text-slate-600">把高价值和临近截止的机会先放前面。</p>
+                </section>
+                <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="text-base font-semibold text-slate-900">转进推进</h3>
+                  <p className="mt-2 text-sm text-slate-600">值得做的机会要尽快进入跟进清单。</p>
+                </section>
+                <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="text-base font-semibold text-slate-900">同步团队</h3>
+                  <p className="mt-2 text-sm text-slate-600">复制摘要后就可以发给团队做每日同步。</p>
+                </section>
+                <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="text-base font-semibold text-slate-900">沉淀归档</h3>
+                  <p className="mt-2 text-sm text-slate-600">已发送日报会作为当天决策的归档快照。</p>
+                </section>
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">

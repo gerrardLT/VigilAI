@@ -227,6 +227,32 @@ describe('ActivityCard', () => {
     expect(screen.getByText('回报评分通过')).toBeInTheDocument()
   })
 
+  it('renders tracking stage when the opportunity is already in progress', () => {
+    const activity: Activity = {
+      id: 'test-tracking-stage',
+      title: 'Tracked Opportunity',
+      description: 'Already being followed.',
+      source_id: 'test-source',
+      source_name: 'Test Source',
+      url: 'https://example.com',
+      category: 'grant',
+      tags: [],
+      prize: null,
+      dates: null,
+      location: null,
+      organizer: null,
+      is_tracking: true,
+      is_favorited: false,
+      status: 'upcoming',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    renderWithRouter(<ActivityCard activity={activity} />)
+
+    expect(screen.getByTestId('activity-card-tracking-stage')).toHaveTextContent('已关注')
+  })
+
   it('cleans noisy scraped titles and previews before rendering', () => {
     const activity: Activity = {
       id: 'test-noisy',

@@ -5,6 +5,7 @@ Product-selection tool registry for the shared agent platform.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .service import ProductSelectionService
@@ -32,6 +33,10 @@ _NOISE_PATTERNS = (
     "please",
     "help me",
 )
+_PATH_TOKEN_RE = re.compile(
+    r"([A-Za-z]:\\[^\s\"']+\.(?:html|json)|[./\\][^\s\"']+\.(?:html|json)|app/[^\s\"']+\.(?:html|json)|docs/[^\s\"']+\.(?:html|json))",
+    re.IGNORECASE,
+)
 
 
 def _infer_platform_scope(user_message: str) -> str:
@@ -49,11 +54,44 @@ def _infer_platform_scope(user_message: str) -> str:
 
 def _extract_query_text(user_message: str) -> str:
     normalized = (user_message or "").strip()
-    cleaned = normalized
+    cleaned = _PATH_TOKEN_RE.sub(" ", normalized)
     for noise in _NOISE_PATTERNS:
         cleaned = re.sub(re.escape(noise), " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" ，。,:;!?")
     return cleaned or normalized or "selection opportunity"
+
+def _extract_local_inputs(user_message: str) -> dict[str, str | None]:
+    rendered_snapshot_path: str | None = None
+    detail_snapshot_manifest_path: str | None = None
+    for raw_token in _PATH_TOKEN_RE.findall(user_message or ""):
+        path = _resolve_existing_path(raw_token)
+        if path is None:
+            continue
+        if path.suffix.lower() == ".html" and rendered_snapshot_path is None:
+            rendered_snapshot_path = str(path)
+        elif path.suffix.lower() == ".json" and detail_snapshot_manifest_path is None:
+            detail_snapshot_manifest_path = str(path)
+    return {
+        "rendered_snapshot_path": rendered_snapshot_path,
+        "detail_snapshot_manifest_path": detail_snapshot_manifest_path,
+    }
+
+
+def _resolve_existing_path(raw_token: str) -> Path | None:
+    token = raw_token.strip().strip("'\"")
+    direct = Path(token)
+    if direct.exists():
+        return direct.resolve()
+    repo_relative = Path.cwd() / token
+    if repo_relative.exists():
+        return repo_relative.resolve()
+    return None
+
+
+def _read_optional_html(path_value: str | None) -> str | None:
+    if not path_value:
+        return None
+    return Path(path_value).read_text(encoding="utf-8", errors="ignore")
 
 
 class SelectionQueryTool:
@@ -65,15 +103,19 @@ class SelectionQueryTool:
     def run(self, *, session: AgentSession, user_message: str) -> dict[str, Any]:
         query_text = _extract_query_text(user_message)
         platform_scope = _infer_platform_scope(user_message)
+        local_inputs = _extract_local_inputs(user_message)
         result = self.service.start_research_job(
             query_type="keyword",
             query_text=query_text,
             platform_scope=platform_scope,
+            rendered_snapshot_html=_read_optional_html(local_inputs["rendered_snapshot_path"]),
+            detail_snapshot_manifest_path=local_inputs["detail_snapshot_manifest_path"],
         )
         return {
             **result,
             "query_text": query_text,
             "platform_scope": platform_scope,
+            "local_inputs": local_inputs,
             "shortlist": result["items"][:5],
         }
 
@@ -86,10 +128,13 @@ class SelectionCompareTool:
 
     def run(self, *, session: AgentSession, user_message: str) -> dict[str, Any]:
         query_text = _extract_query_text(user_message)
+        local_inputs = _extract_local_inputs(user_message)
         result = self.service.start_research_job(
             query_type="keyword",
             query_text=query_text,
             platform_scope="both",
+            rendered_snapshot_html=_read_optional_html(local_inputs["rendered_snapshot_path"]),
+            detail_snapshot_manifest_path=local_inputs["detail_snapshot_manifest_path"],
         )
 
         compare_rows: list[dict[str, Any]] = []
@@ -114,6 +159,7 @@ class SelectionCompareTool:
             **result,
             "query_text": query_text,
             "platform_scope": "both",
+            "local_inputs": local_inputs,
             "shortlist": result["items"][:5],
             "compare_rows": compare_rows,
         }

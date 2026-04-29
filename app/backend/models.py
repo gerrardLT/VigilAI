@@ -92,9 +92,12 @@ class TrackingState(BaseModel):
     activity_id: str
     is_favorited: bool = False
     status: TrackingStatus = TrackingStatus.SAVED
+    stage: Optional[str] = None
     notes: Optional[str] = None
     next_action: Optional[str] = None
     remind_at: Optional[str] = None
+    block_reason: Optional[str] = None
+    abandon_reason: Optional[str] = None
     created_at: str
     updated_at: str
 

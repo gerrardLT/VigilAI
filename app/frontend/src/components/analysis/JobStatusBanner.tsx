@@ -25,7 +25,7 @@ const STATUS_STYLES: Record<string, string> = {
   failed: 'bg-rose-100 text-rose-700',
 }
 
-export function JobStatusBanner({ job, title = 'Latest agent-analysis batch' }: JobStatusBannerProps) {
+export function JobStatusBanner({ job, title = '最近一轮 AI 批量分析' }: JobStatusBannerProps) {
   if (!job) {
     return null
   }
@@ -52,26 +52,26 @@ export function JobStatusBanner({ job, title = 'Latest agent-analysis batch' }: 
             </span>
           </div>
           <p className="mt-2 text-sm text-slate-600">
-            Created {formatDateTime(job.created_at)}
-            {job.finished_at ? ` · Finished ${formatDateTime(job.finished_at)}` : ''}
+            创建于 {formatDateTime(job.created_at)}
+            {job.finished_at ? ` · 完成于 ${formatDateTime(job.finished_at)}` : ''}
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl bg-white px-3 py-2">
-            <div className="text-xs text-slate-500">Items</div>
+            <div className="text-xs text-slate-500">条目数</div>
             <div className="mt-1 text-base font-semibold text-slate-900">{job.item_count}</div>
           </div>
           <div className="rounded-xl bg-white px-3 py-2">
-            <div className="text-xs text-slate-500">Completed</div>
+            <div className="text-xs text-slate-500">已完成</div>
             <div className="mt-1 text-base font-semibold text-slate-900">{job.completed_items ?? '--'}</div>
           </div>
           <div className="rounded-xl bg-white px-3 py-2">
-            <div className="text-xs text-slate-500">Failed</div>
+            <div className="text-xs text-slate-500">失败</div>
             <div className="mt-1 text-base font-semibold text-slate-900">{job.failed_items ?? '--'}</div>
           </div>
           <div className="rounded-xl bg-white px-3 py-2">
-            <div className="text-xs text-slate-500">Research</div>
+            <div className="text-xs text-slate-500">需调研</div>
             <div className="mt-1 text-base font-semibold text-slate-900">{job.needs_research_count ?? '--'}</div>
           </div>
         </div>

@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analysis.context_builder import build_analysis_context  # noqa: E402
-from analysis.providers.mock_provider import MockAnalysisProvider  # noqa: E402
+from analysis.providers.deterministic_provider import DeterministicTestAnalysisProvider  # noqa: E402
 from analysis.providers.router import AnalysisModelRouter  # noqa: E402
 from analysis.schemas import AnalysisSnapshot  # noqa: E402
 from analysis.screening_agent import ScreeningAgent  # noqa: E402
@@ -112,7 +112,7 @@ def test_screening_agent_returns_structured_first_pass_without_research(temp_db)
     context = build_analysis_context(activity, source_row, current_snapshot=None)
 
     agent = ScreeningAgent(
-        provider=MockAnalysisProvider(
+        provider=DeterministicTestAnalysisProvider(
             screening_payload={
                 "status": "pass",
                 "summary": "High-signal solo bounty with clear rewards.",

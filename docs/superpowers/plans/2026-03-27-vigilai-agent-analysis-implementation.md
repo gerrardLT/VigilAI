@@ -52,8 +52,8 @@ This spec spans backend orchestration, persistence, APIs, and UI, but they are a
   Responsibility: choose provider/model by task type and budget tier, with explicit downgrade logging.
 - Create: `app/backend/analysis/providers/openai_provider.py`
   Responsibility: real model implementation for structured outputs and tool-backed research calls.
-- Create: `app/backend/analysis/providers/mock_provider.py`
-  Responsibility: deterministic provider used by tests and local fallback paths.
+- Create: `app/backend/analysis/providers/deterministic_provider.py`
+  Responsibility: deterministic provider used by tests and explicit local dry runs.
 - Create: `app/backend/analysis/screening_agent.py`
   Responsibility: low-cost first-pass structured analysis using stored content only.
 - Create: `app/backend/analysis/research_fetcher.py`
@@ -286,7 +286,7 @@ git commit -m "feat: compile business analysis templates into policies"
 - Create: `app/backend/analysis/providers/base.py`
 - Create: `app/backend/analysis/providers/router.py`
 - Create: `app/backend/analysis/providers/openai_provider.py`
-- Create: `app/backend/analysis/providers/mock_provider.py`
+- Create: `app/backend/analysis/providers/deterministic_provider.py`
 - Modify: `app/backend/config.py`
 - Modify: `app/backend/.env.example`
 
@@ -307,8 +307,8 @@ def test_model_router_selects_models_by_task_type_and_budget():
     assert route.task_type == "screening"
 
 
-def test_mock_provider_returns_structured_payload_for_contract_tests():
-    provider = MockAnalysisProvider(
+def test_deterministic_test_provider_returns_structured_payload_for_contract_tests():
+    provider = DeterministicTestProvider(
         screening_payload={"status": "pass", "confidence": 0.83}
     )
 
@@ -338,7 +338,7 @@ class AnalysisProvider(Protocol):
 
 Implement:
 - provider protocol and response types
-- provider registry with `mock` and `openai`
+- provider registry with `test`/compat `mock` and `openai`
 - explicit downgrade logging in the router
 - env config for `ANALYSIS_PROVIDER`, `ANALYSIS_SCREENING_MODEL`, `ANALYSIS_RESEARCH_MODEL`, `ANALYSIS_VERDICT_MODEL`, backup models, and budget caps
 
@@ -350,7 +350,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/backend/config.py app/backend/.env.example app/backend/analysis/providers/__init__.py app/backend/analysis/providers/base.py app/backend/analysis/providers/router.py app/backend/analysis/providers/openai_provider.py app/backend/analysis/providers/mock_provider.py app/backend/tests/test_agent_analysis_provider_router.py
+git add app/backend/config.py app/backend/.env.example app/backend/analysis/providers/__init__.py app/backend/analysis/providers/base.py app/backend/analysis/providers/router.py app/backend/analysis/providers/openai_provider.py app/backend/analysis/providers/deterministic_provider.py app/backend/tests/test_agent_analysis_provider_router.py
 git commit -m "feat: add agent analysis provider routing"
 ```
 
@@ -980,7 +980,7 @@ def replay_eval_set(cases: list[dict[str, Any]]) -> dict[str, float]:
 
 Implement:
 - small human-reviewed eval fixture
-- replay test that exercises screening, research, verdict, and safety paths with the mock provider
+- replay test that exercises screening, research, verdict, and safety paths with the deterministic test provider
 - docs cleanup so the old rule-only design is clearly marked as superseded
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1049,7 +1049,7 @@ git commit -m "chore: finalize agent analysis verification fixes"
 - Approved snapshots are the only data shown as activity truth on list/detail pages; latest drafts stay separate and must remain reviewable.
 - Never persist raw hidden reasoning or full chain-of-thought in `analysis_item_steps`; store only prompts/outputs that are safe to audit.
 - Research must default off for screening and must never silently claim success when budgets or network access block it.
-- Use the mock provider in automated tests so replay coverage is deterministic and cheap.
+- Use the deterministic test provider in automated tests so replay coverage is deterministic and cheap.
 - This repository can be dirty while implementation is in progress, so never use `git add .` or broad cleanup commands during execution. Stage only the files touched by the current task.
 
 ## Suggested Execution Order

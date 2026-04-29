@@ -17,6 +17,7 @@ from .models import (
     ProductOpportunity,
     ProductOpportunitySignal,
     ProductResearchQuery,
+    ProductSourceMode,
     ProductTrackingState,
     ProductTrackingStatus,
     QueryType,
@@ -71,6 +72,10 @@ def ensure_product_selection_tables(conn: sqlite3.Connection) -> None:
             price_low REAL,
             price_mid REAL,
             price_high REAL,
+            sales_volume INTEGER,
+            seller_count INTEGER,
+            seller_type TEXT,
+            seller_name TEXT,
             demand_score REAL,
             competition_score REAL,
             price_fit_score REAL,
@@ -102,6 +107,10 @@ def ensure_product_selection_tables(conn: sqlite3.Connection) -> None:
             "price_low": "REAL",
             "price_mid": "REAL",
             "price_high": "REAL",
+            "sales_volume": "INTEGER",
+            "seller_count": "INTEGER",
+            "seller_type": "TEXT",
+            "seller_name": "TEXT",
             "demand_score": "REAL",
             "competition_score": "REAL",
             "price_fit_score": "REAL",
@@ -113,6 +122,8 @@ def ensure_product_selection_tables(conn: sqlite3.Connection) -> None:
             "reason_blocks": "TEXT",
             "recommended_action": "TEXT",
             "source_urls": "TEXT",
+            "source_mode": "TEXT",
+            "source_diagnostics": "TEXT",
             "snapshot_at": "TEXT",
             "created_at": "TEXT",
             "updated_at": "TEXT",
@@ -289,6 +300,10 @@ class ProductSelectionRepository:
         price_low: float | None = None,
         price_mid: float | None = None,
         price_high: float | None = None,
+        sales_volume: int | None = None,
+        seller_count: int | None = None,
+        seller_type: str | None = None,
+        seller_name: str | None = None,
         demand_score: float = 0,
         competition_score: float = 0,
         price_fit_score: float = 0,
@@ -300,6 +315,8 @@ class ProductSelectionRepository:
         reason_blocks: list[str] | None = None,
         recommended_action: str | None = None,
         source_urls: list[str] | None = None,
+        source_mode: str = ProductSourceMode.FALLBACK.value,
+        source_diagnostics: dict[str, Any] | None = None,
         snapshot_at: datetime | None = None,
     ) -> ProductOpportunity:
         now = datetime.now(UTC)
@@ -314,6 +331,10 @@ class ProductSelectionRepository:
             price_low=price_low,
             price_mid=price_mid,
             price_high=price_high,
+            sales_volume=sales_volume,
+            seller_count=seller_count,
+            seller_type=seller_type,
+            seller_name=seller_name,
             demand_score=demand_score,
             competition_score=competition_score,
             price_fit_score=price_fit_score,
@@ -325,6 +346,8 @@ class ProductSelectionRepository:
             reason_blocks=reason_blocks or [],
             recommended_action=recommended_action,
             source_urls=source_urls or [],
+            source_mode=source_mode,
+            source_diagnostics=source_diagnostics or {},
             snapshot_at=snapshot_at or now,
             created_at=now,
             updated_at=now,
@@ -336,10 +359,12 @@ class ProductSelectionRepository:
                 """
                 INSERT OR REPLACE INTO selection_opportunities (
                     id, query_id, platform, platform_item_id, title, image_url, category_path,
-                    price_low, price_mid, price_high, demand_score, competition_score, price_fit_score,
+                    price_low, price_mid, price_high, sales_volume, seller_count, seller_type, seller_name,
+                    demand_score, competition_score, price_fit_score,
                     risk_score, cross_platform_signal_score, opportunity_score, confidence_score,
                     risk_tags, reason_blocks, recommended_action, source_urls, snapshot_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    , source_mode, source_diagnostics
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     opportunity.id,
@@ -352,6 +377,10 @@ class ProductSelectionRepository:
                     opportunity.price_low,
                     opportunity.price_mid,
                     opportunity.price_high,
+                    opportunity.sales_volume,
+                    opportunity.seller_count,
+                    opportunity.seller_type,
+                    opportunity.seller_name,
                     opportunity.demand_score,
                     opportunity.competition_score,
                     opportunity.price_fit_score,
@@ -366,6 +395,8 @@ class ProductSelectionRepository:
                     opportunity.snapshot_at.isoformat(),
                     opportunity.created_at.isoformat(),
                     opportunity.updated_at.isoformat(),
+                    opportunity.source_mode,
+                    json.dumps(opportunity.source_diagnostics, ensure_ascii=False),
                 ),
             )
         return opportunity
@@ -377,6 +408,8 @@ class ProductSelectionRepository:
         platform: str | None = None,
         search: str | None = None,
         risk_tag: str | None = None,
+        source_mode: str | None = None,
+        fallback_reason: str | None = None,
         sort_by: str = "opportunity_score",
         sort_order: str = "desc",
         page: int = 1,
@@ -394,6 +427,9 @@ class ProductSelectionRepository:
             conditions.append("(o.title LIKE ? OR o.category_path LIKE ?)")
             term = f"%{search}%"
             params.extend([term, term])
+        if source_mode:
+            conditions.append("LOWER(o.source_mode) = ?")
+            params.append(source_mode.lower())
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         order_map = {
@@ -424,6 +460,12 @@ class ProductSelectionRepository:
         if risk_tag:
             opportunities = [
                 item for item in opportunities if risk_tag in {tag.lower() for tag in item.risk_tags}
+            ]
+        if fallback_reason:
+            opportunities = [
+                item
+                for item in opportunities
+                if str(item.source_diagnostics.get("fallback_reason") or "").lower() == fallback_reason
             ]
         total = len(opportunities)
         start = max(0, (page - 1) * page_size)
@@ -546,9 +588,22 @@ class ProductSelectionRepository:
             ).fetchone()
         return self._row_to_tracking(row) if row else None
 
-    def list_tracking(self, status: str | None = None) -> list[dict[str, Any]]:
-        where = "WHERE t.status = ?" if status else ""
-        params = [status] if status else []
+    def list_tracking(
+        self,
+        status: str | None = None,
+        source_mode: str | None = None,
+        fallback_reason: str | None = None,
+    ) -> list[dict[str, Any]]:
+        conditions: list[str] = []
+        params: list[Any] = []
+        if status:
+            conditions.append("t.status = ?")
+            params.append(status)
+        if source_mode:
+            conditions.append("LOWER(o.source_mode) = ?")
+            params.append(source_mode.lower())
+
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         with self._get_connection() as conn:
             rows = conn.execute(
                 f"""
@@ -562,13 +617,22 @@ class ProductSelectionRepository:
                 """,
                 params,
             ).fetchall()
-        return [
+        items = [
             {
                 "opportunity": self._row_to_opportunity(row).model_dump(mode="json"),
                 **self._row_to_tracking(row).model_dump(),
             }
             for row in rows
         ]
+        if fallback_reason:
+            lowered_reason = fallback_reason.lower()
+            items = [
+                item
+                for item in items
+                if str(item["opportunity"]["source_diagnostics"].get("fallback_reason") or "").lower()
+                == lowered_reason
+            ]
+        return items
 
     def delete_tracking(self, opportunity_id: str) -> bool:
         with self._get_connection() as conn:
@@ -603,6 +667,10 @@ class ProductSelectionRepository:
             price_low=row["price_low"],
             price_mid=row["price_mid"],
             price_high=row["price_high"],
+            sales_volume=row["sales_volume"],
+            seller_count=row["seller_count"],
+            seller_type=row["seller_type"],
+            seller_name=row["seller_name"],
             demand_score=row["demand_score"] or 0,
             competition_score=row["competition_score"] or 0,
             price_fit_score=row["price_fit_score"] or 0,
@@ -614,6 +682,8 @@ class ProductSelectionRepository:
             reason_blocks=json.loads(row["reason_blocks"]) if row["reason_blocks"] else [],
             recommended_action=row["recommended_action"],
             source_urls=json.loads(row["source_urls"]) if row["source_urls"] else [],
+            source_mode=(row["source_mode"] or ProductSourceMode.FALLBACK.value),
+            source_diagnostics=json.loads(row["source_diagnostics"]) if row["source_diagnostics"] else {},
             snapshot_at=datetime.fromisoformat(row["snapshot_at"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),

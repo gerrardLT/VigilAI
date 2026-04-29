@@ -1493,7 +1493,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 # Agent analysis provider configuration
-ANALYSIS_PROVIDER = os.getenv("ANALYSIS_PROVIDER", "mock").strip().lower()
+ANALYSIS_PROVIDER = os.getenv("ANALYSIS_PROVIDER", "disabled").strip().lower()
 ANALYSIS_OPENAI_API_KEY = os.getenv("ANALYSIS_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY", "")
 
 ANALYSIS_SCREENING_MODEL = os.getenv("ANALYSIS_SCREENING_MODEL", "gpt-4o-mini")
@@ -1543,3 +1543,17 @@ ANALYSIS_RESEARCH_TIMEOUT_SECONDS = _env_int("ANALYSIS_RESEARCH_TIMEOUT_SECONDS"
 ANALYSIS_SCHEDULER_ENABLED = _env_flag("ANALYSIS_SCHEDULER_ENABLED", "false")
 ANALYSIS_SCHEDULE_MAX_ITEMS = _env_int("ANALYSIS_SCHEDULE_MAX_ITEMS", 25)
 ANALYSIS_SCHEDULE_STALE_HOURS = _env_int("ANALYSIS_SCHEDULE_STALE_HOURS", 72)
+
+# Product-selection live marketplace configuration
+PRODUCT_SELECTION_LIVE_ENABLED = _env_flag(
+    "PRODUCT_SELECTION_LIVE_ENABLED",
+    "true" if FIRECRAWL_ENABLED else "false",
+)
+PRODUCT_SELECTION_LIVE_RESULT_LIMIT = _env_int("PRODUCT_SELECTION_LIVE_RESULT_LIMIT", 6)
+PRODUCT_SELECTION_LIVE_TIMEOUT_SECONDS = _env_int("PRODUCT_SELECTION_LIVE_TIMEOUT_SECONDS", 20)
+PRODUCT_SELECTION_BROWSER_COOKIES_PATH = os.getenv("PRODUCT_SELECTION_BROWSER_COOKIES_PATH", "").strip()
+PRODUCT_SELECTION_LIVE_COOKIE_DOMAINS = [
+    item.strip().lower()
+    for item in os.getenv("PRODUCT_SELECTION_LIVE_COOKIE_DOMAINS", "taobao.com,goofish.com,2.taobao.com").split(",")
+    if item.strip()
+]

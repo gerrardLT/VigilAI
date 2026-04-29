@@ -13,7 +13,8 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analysis.providers.openai_provider import OpenAIAnalysisProvider  # noqa: E402
-from analysis.providers.mock_provider import MockAnalysisProvider  # noqa: E402
+from analysis.providers.deterministic_provider import DeterministicTestAnalysisProvider  # noqa: E402
+from analysis.providers.disabled_provider import DisabledAnalysisProvider  # noqa: E402
 from analysis.providers.router import AnalysisModelRouter  # noqa: E402
 from analysis.template_compiler import compile_analysis_template  # noqa: E402
 
@@ -80,8 +81,8 @@ def test_model_router_logs_downgrade_when_requested_budget_tier_is_missing(caplo
     assert "downgrade" in caplog.text.lower()
 
 
-def test_mock_provider_returns_structured_payload_for_contract_tests():
-    provider = MockAnalysisProvider(
+def test_deterministic_provider_returns_structured_payload_for_contract_tests():
+    provider = DeterministicTestAnalysisProvider(
         screening_payload={"status": "pass", "confidence": 0.83}
     )
 
@@ -101,7 +102,20 @@ def test_mock_provider_returns_structured_payload_for_contract_tests():
 
     assert response.output["status"] == "pass"
     assert response.output["confidence"] == 0.83
-    assert response.model_name == "mock-screening"
+    assert response.model_name == "test-screening"
+
+
+def test_disabled_provider_fails_closed_with_clear_configuration_error():
+    provider = DisabledAnalysisProvider()
+
+    with pytest.raises(RuntimeError, match="ANALYSIS_PROVIDER is disabled"):
+        provider.generate_structured(
+            task_type="screening",
+            schema_name="screening_result",
+            json_schema={"type": "object"},
+            prompt="...",
+            model="gpt-4o-mini",
+        )
 
 
 def test_model_router_accepts_compiled_template_route_targets():

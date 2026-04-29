@@ -6,6 +6,7 @@ import type {
   ProductSelectionResearchJobCreateRequest,
   ProductSelectionResearchJobResponse,
   ProductSelectionTrackingItem,
+  ProductSelectionTrackingFilters,
   ProductSelectionTrackingState,
   ProductSelectionTrackingStatus,
   ProductSelectionTrackingUpsertRequest,
@@ -26,7 +27,7 @@ class ProductSelectionApiService {
       if (error instanceof Error) {
         throw new ApiError(0, error.message)
       }
-      throw new ApiError(0, 'Unknown error')
+      throw new ApiError(0, '未知错误')
     })
 
     if (!response.ok) {
@@ -79,9 +80,13 @@ class ProductSelectionApiService {
     )
   }
 
-  getTracking(status?: ProductSelectionTrackingStatus): Promise<ProductSelectionTrackingItem[]> {
+  getTracking(
+    filters: ProductSelectionTrackingFilters | ProductSelectionTrackingStatus = {}
+  ): Promise<ProductSelectionTrackingItem[]> {
+    const normalizedFilters =
+      typeof filters === 'string' || filters === undefined ? { status: filters } : filters
     return this.request<ProductSelectionTrackingItem[]>(
-      `/api/product-selection/tracking${this.buildQueryString({ status })}`
+      `/api/product-selection/tracking${this.buildQueryString(normalizedFilters)}`
     )
   }
 

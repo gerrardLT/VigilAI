@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analysis.policies import ResearchPolicy, SafetyPolicy  # noqa: E402
-from analysis.providers.mock_provider import MockAnalysisProvider  # noqa: E402
+from analysis.providers.deterministic_provider import DeterministicTestAnalysisProvider  # noqa: E402
 from analysis.providers.router import AnalysisModelRouter  # noqa: E402
 from analysis.research_agent import ResearchAgent  # noqa: E402
 from analysis.research_fetcher import FetchedDocument, ResearchFetcher  # noqa: E402
@@ -57,7 +57,9 @@ def replay_eval_set(cases: list[dict]):
     for case in cases:
         context = AnalysisContext.model_validate(case["context"])
         screening_agent = ScreeningAgent(
-            provider=MockAnalysisProvider(screening_payload=case.get("screening_payload") or {}),
+            provider=DeterministicTestAnalysisProvider(
+                screening_payload=case.get("screening_payload") or {}
+            ),
             router=router,
         )
         screening = screening_agent.run(context, budget_tier="low")
@@ -77,7 +79,9 @@ def replay_eval_set(cases: list[dict]):
         )
 
         verdict_agent = VerdictAgent(
-            provider=MockAnalysisProvider(verdict_payload=case.get("verdict_payload") or {}),
+            provider=DeterministicTestAnalysisProvider(
+                verdict_payload=case.get("verdict_payload") or {}
+            ),
             router=router,
         )
         draft = verdict_agent.run(

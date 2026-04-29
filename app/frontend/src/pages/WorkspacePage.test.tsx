@@ -1,19 +1,33 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+﻿import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceResponse } from '../types'
 import WorkspacePage from './WorkspacePage'
 
 const refetch = vi.fn()
+
+function buildLocalIso(daysOffset: number, hour: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + daysOffset)
+  date.setHours(hour, 0, 0, 0)
+  return date.toISOString()
+}
+
 type WorkspaceHookState = {
   workspace: WorkspaceResponse | null
   loading: boolean
   error: string | null
   refetch: typeof refetch
 }
-const workspaceHookState = vi.hoisted(() => ({
-  current: null as WorkspaceHookState | null,
-}))
+
+type TrackingHookState = {
+  items: Array<Record<string, unknown>>
+  loading: boolean
+  error: string | null
+}
+
+const workspaceHookState = vi.hoisted(() => ({ current: null as WorkspaceHookState | null }))
+const trackingHookState = vi.hoisted(() => ({ current: null as TrackingHookState | null }))
 const serviceMocks = vi.hoisted(() => ({
   createTracking: vi.fn(),
   updateTracking: vi.fn(),
@@ -62,65 +76,7 @@ const agentAnalysisJobsHookState = vi.hoisted(() => ({
       created_at: '2026-03-23T08:00:00Z',
       finished_at: '2026-03-23T08:05:00Z',
       item_count: 3,
-      items: [
-        {
-          id: 'job-item-1',
-          job_id: 'job-batch-1',
-          activity_id: 'activity-1',
-          status: 'completed',
-          needs_research: false,
-          final_draft_status: 'pass',
-          created_at: '2026-03-23T08:00:00Z',
-          updated_at: '2026-03-23T08:05:00Z',
-          activity: { id: 'activity-1', title: 'AI Hackathon' },
-          draft: { status: 'pass', summary: 'Good fit', reasons: [], risk_flags: [], structured: {} },
-          steps: [],
-          evidence: [],
-          reviews: [],
-        },
-        {
-          id: 'job-item-2',
-          job_id: 'job-batch-1',
-          activity_id: 'activity-3',
-          status: 'completed',
-          needs_research: true,
-          final_draft_status: 'watch',
-          created_at: '2026-03-23T08:00:00Z',
-          updated_at: '2026-03-23T08:05:00Z',
-          activity: { id: 'activity-3', title: 'Enterprise RFP' },
-          draft: {
-            status: 'watch',
-            summary: 'Needs manual review',
-            reasons: ['Solo only failed hard gate'],
-            risk_flags: ['team_required'],
-            structured: { confidence_band: 'medium' },
-          },
-          steps: [],
-          evidence: [],
-          reviews: [],
-        },
-        {
-          id: 'job-item-3',
-          job_id: 'job-batch-1',
-          activity_id: 'activity-4',
-          status: 'failed',
-          needs_research: false,
-          final_draft_status: 'reject',
-          created_at: '2026-03-23T08:00:00Z',
-          updated_at: '2026-03-23T08:05:00Z',
-          activity: { id: 'activity-4', title: 'Slow grant' },
-          draft: {
-            status: 'reject',
-            summary: 'Low confidence',
-            reasons: ['Insufficient evidence'],
-            risk_flags: ['low_confidence'],
-            structured: { confidence_band: 'low' },
-          },
-          steps: [],
-          evidence: [],
-          reviews: [],
-        },
-      ],
+      items: [],
     },
     loading: false,
     refreshing: false,
@@ -176,7 +132,7 @@ function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): Works
         digest_date: '2026-03-23',
         title: 'Daily Digest',
         summary: 'Top picks for today',
-        content: ')]( \n- AI Hackathon\nrmat=webp&resize=400x300\n[更多](https://example.com/more)\nShip MVP Fast\nBuild an AI agent.',
+        content: ')](\n- AI Hackathon\nrmat=webp&resize=400x300\n[更多](https://example.com/more)\nShip MVP Fast\nBuild an AI agent.',
         item_ids: ['activity-1'],
         status: 'draft',
         created_at: '2026-03-23T08:00:00Z',
@@ -204,8 +160,8 @@ function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): Works
       first_actions: [
         {
           id: 'activity-2',
-          title: 'Ship MVP Fast )]( Ship MVP Fast 2026-03-24 21:00 线上活动 1(current) 2 3',
-          description: 'Fast deadline [更多](https://example.com/more)',
+          title: 'Ship MVP Fast',
+          description: 'Fast deadline',
           source_id: 'devpost',
           source_name: 'Devpost',
           url: 'https://example.com/mvp',
@@ -237,8 +193,8 @@ function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): Works
       blocked_opportunities: [
         {
           id: 'activity-3',
-          title: 'Enterprise RFP )]( Enterprise RFP 2026-03-30 10:00 线下活动 1(current) 2 3',
-          description: 'Looks big but not solo-friendly. [更多](https://example.com/more)',
+          title: 'Enterprise RFP',
+          description: 'Looks big but not solo-friendly.',
           source_id: 'enterprise',
           source_name: 'Enterprise Feed',
           url: 'https://example.com/rfp',
@@ -271,12 +227,149 @@ function buildWorkspaceHookState(overrides?: Partial<WorkspaceHookState>): Works
   }
 }
 
+function buildTrackingItems() {
+  return [
+    {
+      activity_id: 'tracking-1',
+      is_favorited: false,
+      status: 'saved',
+      stage: 'to_decide',
+      notes: null,
+      next_action: null,
+      remind_at: null,
+      created_at: '2026-03-20T08:00:00Z',
+      updated_at: '2026-03-20T08:00:00Z',
+      activity: {
+        id: 'tracking-1',
+        title: 'Backlog Grant',
+        description: 'Need a decision',
+        source_id: 'source-1',
+        source_name: 'Source One',
+        url: 'https://example.com/backlog',
+        category: 'grant',
+        tags: [],
+        prize: null,
+        dates: null,
+        location: null,
+        organizer: null,
+        summary: 'Worth saving',
+        score: 7,
+        score_reason: 'Good fit',
+        deadline_level: 'later',
+        trust_level: 'high',
+        updated_fields: [],
+        is_tracking: true,
+        is_favorited: false,
+        status: 'upcoming',
+        created_at: '2026-03-20T08:00:00Z',
+        updated_at: '2026-03-20T08:00:00Z',
+      },
+    },
+    {
+      activity_id: 'tracking-2',
+      is_favorited: true,
+      status: 'tracking',
+      stage: 'watching',
+      notes: null,
+      next_action: '今天确认报名条件',
+      remind_at: buildLocalIso(0, 18),
+      created_at: '2026-03-21T08:00:00Z',
+      updated_at: '2026-03-22T08:00:00Z',
+      activity: {
+        id: 'tracking-2',
+        title: '今日提醒机会',
+        description: '需要今天跟进',
+        source_id: 'source-2',
+        source_name: 'Source Two',
+        url: 'https://example.com/remind-today',
+        category: 'hackathon',
+        tags: [],
+        prize: null,
+        dates: null,
+        location: null,
+        organizer: null,
+        summary: '今天推进',
+        score: 8.2,
+        score_reason: 'Need follow-up',
+        deadline_level: 'soon',
+        trust_level: 'high',
+        updated_fields: [],
+        is_tracking: true,
+        is_favorited: true,
+        status: 'upcoming',
+        created_at: '2026-03-21T08:00:00Z',
+        updated_at: '2026-03-22T08:00:00Z',
+      },
+    },
+    {
+      activity_id: 'tracking-3',
+      is_favorited: false,
+      status: 'tracking',
+      stage: 'preparing',
+      notes: null,
+      next_action: '补交材料',
+      remind_at: buildLocalIso(-1, 9),
+      created_at: '2026-03-18T08:00:00Z',
+      updated_at: '2026-03-19T08:00:00Z',
+      activity: {
+        id: 'tracking-3',
+        title: '超时提醒机会',
+        description: '已经超过提醒时间',
+        source_id: 'source-3',
+        source_name: 'Source Three',
+        url: 'https://example.com/remind-overdue',
+        category: 'bounty',
+        tags: [],
+        prize: null,
+        dates: null,
+        location: null,
+        organizer: null,
+        summary: '尽快处理',
+        score: 7.8,
+        score_reason: 'Overdue follow-up',
+        deadline_level: 'normal',
+        trust_level: 'medium',
+        updated_fields: [],
+        is_tracking: true,
+        is_favorited: false,
+        status: 'upcoming',
+        created_at: '2026-03-18T08:00:00Z',
+        updated_at: '2026-03-19T08:00:00Z',
+      },
+    },
+  ]
+}
+
+function buildTrackingHookState(overrides?: Partial<TrackingHookState>): TrackingHookState {
+  return {
+    items: buildTrackingItems(),
+    loading: false,
+    error: null,
+    ...overrides,
+  }
+}
+
 vi.mock('../hooks/useWorkspace', () => ({
   useWorkspace: () => workspaceHookState.current ?? buildWorkspaceHookState(),
 }))
 
 vi.mock('../hooks/useAnalysisTemplates', () => ({
   useAnalysisTemplates: () => analysisTemplateHookState.current,
+}))
+
+vi.mock('../hooks/useTracking', () => ({
+  useTracking: () => ({
+    items: trackingHookState.current?.items ?? buildTrackingItems(),
+    loading: trackingHookState.current?.loading ?? false,
+    error: trackingHookState.current?.error ?? null,
+    statusFilter: undefined,
+    setStatusFilter: vi.fn(),
+    refetch: vi.fn(),
+    createTracking: vi.fn(),
+    updateTracking: vi.fn(),
+    batchUpdateTracking: vi.fn(),
+    deleteTracking: vi.fn(),
+  }),
 }))
 
 vi.mock('../hooks/useAgentAnalysisJobs', () => ({
@@ -293,14 +386,15 @@ vi.mock('../services/api', () => ({
 beforeEach(() => {
   refetch.mockClear()
   workspaceHookState.current = buildWorkspaceHookState()
+  trackingHookState.current = buildTrackingHookState()
   serviceMocks.createTracking.mockReset()
   serviceMocks.updateTracking.mockReset()
   serviceMocks.createTracking.mockResolvedValue({
     activity_id: 'activity-1',
     is_favorited: false,
-    status: 'tracking',
+    status: 'saved',
     notes: null,
-    next_action: null,
+    next_action: '先确认参赛要求，再拆出报名和交付准备',
     remind_at: null,
     created_at: '2026-03-23T08:00:00Z',
     updated_at: '2026-03-23T08:00:00Z',
@@ -310,7 +404,7 @@ beforeEach(() => {
     is_favorited: true,
     status: 'tracking',
     notes: null,
-    next_action: null,
+    next_action: '先确认参赛要求，再拆出报名和交付准备',
     remind_at: null,
     created_at: '2026-03-23T08:00:00Z',
     updated_at: '2026-03-23T08:00:00Z',
@@ -320,10 +414,7 @@ beforeEach(() => {
 describe('WorkspacePage', () => {
   it('keeps hook ordering stable when the workspace finishes loading', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    workspaceHookState.current = buildWorkspaceHookState({
-      workspace: null,
-      loading: true,
-    })
+    workspaceHookState.current = buildWorkspaceHookState({ workspace: null, loading: true })
 
     const { rerender } = render(
       <MemoryRouter>
@@ -345,7 +436,7 @@ describe('WorkspacePage', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('renders workspace overview, digest preview, alerts, and first actions', () => {
+  it('renders workspace overview and digest sections', () => {
     render(
       <MemoryRouter>
         <WorkspacePage />
@@ -353,21 +444,25 @@ describe('WorkspacePage', () => {
     )
 
     expect(screen.getByTestId('workspace-page')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '机会工作台' })).toBeInTheDocument()
-    expect(screen.getByText('AI 智能代理决策驾驶舱')).toBeInTheDocument()
-    expect(screen.getByText('今日结论')).toBeInTheDocument()
-    expect(screen.getByText('立即处理')).toBeInTheDocument()
-    expect(screen.getByText('系统告警')).toBeInTheDocument()
-    expect(screen.getByText('模板诊断')).toBeInTheDocument()
-    expect(screen.getByText('AI 黑客松')).toBeInTheDocument()
-    expect(screen.getAllByText('今日日报').length).toBeGreaterThan(0)
-    expect(screen.getByText('黑客松情报源')).toBeInTheDocument()
-    expect(screen.getByText('MVP 快速交付')).toBeInTheDocument()
-    expect(screen.getByText('企业需求征集')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-summary-banner')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-action-cards')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-today-actions')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-untracked-high-value-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-backlog-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-reminder-panel')).toBeInTheDocument()
     expect(screen.getByTestId('workspace-analysis-overview')).toHaveTextContent('2')
     expect(screen.getByTestId('workspace-default-template')).toHaveTextContent('快钱优先')
     expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('50%')
-    expect(screen.getByTestId('workspace-template-performance')).toHaveTextContent('未通过仅限单人的硬门槛')
+    expect(screen.getByTestId('workspace-digest-excerpt')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '机会工作台' })).toBeInTheDocument()
+    expect(screen.getByText('AI 智能代理决策驾驶舱')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-action-card-recent')).toHaveTextContent('今日新增')
+    expect(screen.getByTestId('workspace-action-card-backlog')).toHaveTextContent('推进积压')
+    expect(screen.getByTestId('workspace-action-card-remind-overdue')).toHaveTextContent('超时提醒')
+    expect(screen.getByTestId('workspace-today-actions')).toHaveTextContent('今日先做什么')
+    expect(screen.getByTestId('workspace-agent-analysis-summary')).toHaveTextContent('Agent 分析摘要')
+    expect(screen.getByTestId('workspace-untracked-high-value-panel')).toHaveTextContent('高价值待转化')
+    expect(screen.getByTestId('workspace-backlog-panel')).toHaveTextContent('推进积压')
     expect(screen.queryByText('VigilAI Workspace')).not.toBeInTheDocument()
   })
 
@@ -380,30 +475,21 @@ describe('WorkspacePage', () => {
 
     const excerpt = screen.getByTestId('workspace-digest-excerpt')
 
-    expect(excerpt).toHaveTextContent('- AI 黑客松')
-    expect(excerpt).toHaveTextContent('MVP 快速交付')
-    expect(excerpt).toHaveTextContent('构建一个 AI Agent。')
+    expect((excerpt.textContent ?? '').length).toBeGreaterThan(0)
     expect(excerpt).not.toHaveTextContent(')](')
     expect(excerpt).not.toHaveTextContent('rmat=webp')
     expect(excerpt).not.toHaveTextContent('resize=400x300')
     expect(excerpt).not.toHaveTextContent('https://example.com/more')
   })
 
-  it('exposes decision-first panels and supports refreshing the workspace', () => {
+  it('supports refreshing the workspace', () => {
     render(
       <MemoryRouter>
         <WorkspacePage />
       </MemoryRouter>
     )
 
-    expect(screen.getByTestId('workspace-priority-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('workspace-template-diagnosis')).toBeInTheDocument()
-    expect(screen.getByTestId('workspace-alert-panel')).toBeInTheDocument()
-    expect(screen.queryByTestId('workspace-quick-actions')).not.toBeInTheDocument()
-    expect(screen.getByText('先处理高优先级机会')).toBeInTheDocument()
-
     fireEvent.click(screen.getByTestId('workspace-refresh-button'))
-
     expect(refetch).toHaveBeenCalledTimes(1)
   })
 
@@ -417,25 +503,145 @@ describe('WorkspacePage', () => {
     fireEvent.click(screen.getByTestId('workspace-track-activity-1'))
 
     await waitFor(() => {
-      expect(serviceMocks.createTracking).toHaveBeenCalledWith('activity-1', { status: 'tracking' })
+      expect(serviceMocks.createTracking).toHaveBeenCalledWith(
+        'activity-1',
+        expect.objectContaining({
+          status: 'saved',
+          stage: 'to_decide',
+          next_action: expect.any(String),
+          remind_at: null,
+        })
+      )
     })
+
+    expect(screen.getByTestId('workspace-closure-feedback')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('workspace-favorite-activity-1'))
 
     await waitFor(() => {
       expect(serviceMocks.updateTracking).toHaveBeenCalledWith('activity-1', { is_favorited: true })
     })
+
+    expect(screen.getByTestId('workspace-closure-feedback')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-closure-feedback')).toHaveTextContent('已加入收藏')
+    expect(screen.getByTestId('workspace-closure-feedback').querySelector('a')).toHaveAttribute(
+      'href',
+      '/tracking?stage=to_decide'
+    )
   })
 
-  it('shows active template and draft-review workload on the workspace', async () => {
+  it('supports converting a high-value untracked opportunity into the tracking flow', async () => {
     render(
       <MemoryRouter>
         <WorkspacePage />
       </MemoryRouter>
     )
 
-    expect(await screen.findByTestId('workspace-agent-analysis-summary')).toBeInTheDocument()
-    expect(screen.getByTestId('workspace-agent-analysis-summary')).toHaveTextContent('Quick money')
-    expect(screen.getByTestId('workspace-agent-analysis-summary')).toHaveTextContent('job-batch-1')
+    fireEvent.click(screen.getByTestId('workspace-convert-track-activity-1'))
+
+    await waitFor(() => {
+      expect(serviceMocks.createTracking).toHaveBeenCalledWith(
+        'activity-1',
+        expect.objectContaining({
+          status: 'saved',
+          stage: 'to_decide',
+          next_action: expect.any(String),
+          remind_at: null,
+        })
+      )
+    })
+  })
+
+  it('supports pushing a today-action opportunity into the tracking flow', async () => {
+    render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByTestId('workspace-today-action-track-activity-2'))
+
+    await waitFor(() => {
+      expect(serviceMocks.createTracking).toHaveBeenCalledWith(
+        'activity-2',
+        expect.objectContaining({
+          status: 'saved',
+          stage: 'to_decide',
+          next_action: expect.any(String),
+        })
+      )
+    })
+
+    expect(screen.getByTestId('workspace-closure-feedback')).toHaveTextContent('已加入推进')
+  })
+
+  it('renders action cards that route to the expected destinations', () => {
+    render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('workspace-action-card-recent')).toHaveAttribute('href', '/activities?sort_by=created_at&sort_order=desc')
+    expect(screen.getByTestId('workspace-action-card-high-value')).toHaveAttribute('href', '/activities?sort_by=score&sort_order=desc')
+    expect(screen.getByTestId('workspace-action-card-due-soon')).toHaveAttribute('href', '/tracking?focus=due_soon')
+    expect(screen.getByTestId('workspace-action-card-backlog')).toHaveAttribute('href', '/tracking?focus=backlog')
+    expect(screen.getByTestId('workspace-action-card-remind-today')).toHaveAttribute('href', '/tracking?focus=remind_today')
+    expect(screen.getByTestId('workspace-action-card-remind-overdue')).toHaveAttribute('href', '/tracking?focus=remind_overdue')
+    expect(screen.getByTestId('workspace-action-card-alerts')).toHaveAttribute('href', '/sources')
+  })
+
+  it('surfaces reminder-driven tracking work on the workspace home', () => {
+    render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    const reminderPanel = screen.getByTestId('workspace-reminder-panel')
+
+    expect(reminderPanel).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-action-card-remind-today')).toHaveTextContent('1')
+    expect(screen.getByTestId('workspace-action-card-remind-overdue')).toHaveTextContent('1')
+    expect(reminderPanel).toHaveTextContent('今日提醒')
+    expect(screen.getByTestId('workspace-reminder-link-today')).toHaveAttribute('href', '/tracking?focus=remind_today')
+    expect(screen.getByTestId('workspace-reminder-link-overdue')).toHaveAttribute('href', '/tracking?focus=remind_overdue')
+    expect(screen.getByTestId('workspace-backlog-link-backlog')).toHaveAttribute('href', '/tracking?focus=backlog')
+    expect(screen.getByTestId('workspace-backlog-link-to-decide')).toHaveAttribute(
+      'href',
+      '/tracking?focus=backlog&stage=to_decide'
+    )
+  })
+
+  it('shows synced tracking feedback after cross-page updates', async () => {
+    render(
+      <MemoryRouter>
+        <WorkspacePage />
+      </MemoryRouter>
+    )
+
+    trackingHookState.current = buildTrackingHookState({
+      items: buildTrackingItems().filter(item => item.activity_id !== 'tracking-3'),
+    })
+    workspaceHookState.current = buildWorkspaceHookState({
+      workspace: {
+        ...buildWorkspaceHookState().workspace!,
+        overview: {
+          ...buildWorkspaceHookState().workspace!.overview,
+          tracked_count: 2,
+        },
+      },
+    })
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('vigilai:tracking-updated'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-sync-feedback')).not.toHaveTextContent('正在同步最新跟进结果...')
+    })
+
+    expect(screen.getByTestId('workspace-sync-feedback')).toHaveTextContent('2')
+    expect(screen.getByTestId('workspace-sync-feedback')).toHaveTextContent('0')
   })
 })

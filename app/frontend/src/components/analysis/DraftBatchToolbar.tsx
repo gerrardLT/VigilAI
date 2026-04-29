@@ -22,8 +22,10 @@ export function DraftBatchToolbar({
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="text-sm font-semibold text-slate-900">Draft batch review</div>
-          <div className="mt-1 text-sm text-slate-500">{selectedCount} items selected for agent review actions</div>
+          <div className="text-sm font-semibold text-slate-900">草稿批量复核</div>
+          <div className="mt-1 text-sm text-slate-500">
+            已选择 {selectedCount} 条结果，准备执行 AI 复核动作。
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -34,7 +36,7 @@ export function DraftBatchToolbar({
             disabled={disabled}
             className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            Batch approve
+            批量通过
           </button>
           {onReject && (
             <button
@@ -44,7 +46,7 @@ export function DraftBatchToolbar({
               disabled={disabled}
               className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
             >
-              Batch reject
+              批量拒绝
             </button>
           )}
           {onDeepResearch && (
@@ -55,7 +57,7 @@ export function DraftBatchToolbar({
               disabled={disabled}
               className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
             >
-              Deep research
+              深度调研
             </button>
           )}
         </div>

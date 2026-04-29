@@ -155,16 +155,13 @@ export function FilterBar({
       <div className="space-y-1">
         <div className="text-xs font-medium uppercase tracking-[0.24em] text-slate-500">固定筛选</div>
         <div className="text-lg font-semibold text-slate-900">先用明确条件收窄范围</div>
-        <div className="text-sm text-slate-600">固定筛选负责高频、稳定、可解释的条件，AI 精筛负责进一步理解你的自然语言目标。</div>
+        <div className="text-sm text-slate-600">
+          固定筛选负责高频、稳定、可解释的条件，AI 精筛负责进一步理解你的自然语言目标。
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <FilterSection
-          title="分类"
-          options={CATEGORY_OPTIONS}
-          value={category}
-          onChange={onCategoryChange}
-        />
+        <FilterSection title="分类" options={CATEGORY_OPTIONS} value={category} onChange={onCategoryChange} />
         <FilterSection
           title="截止时间"
           options={DEADLINE_OPTIONS}
@@ -184,7 +181,7 @@ export function FilterBar({
           onChange={onSoloFriendlinessChange}
         />
         <FilterSection
-          title="奖励明确性"
+          title="奖励明确度"
           options={REWARD_CLARITY_OPTIONS}
           value={rewardClarity}
           onChange={onRewardClarityChange}

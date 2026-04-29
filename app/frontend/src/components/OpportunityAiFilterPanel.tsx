@@ -24,7 +24,9 @@ export function OpportunityAiFilterPanel({
       <div className="space-y-1">
         <div className="text-xs font-medium uppercase tracking-[0.24em] text-sky-700">AI 精筛</div>
         <h2 className="text-lg font-semibold text-slate-900">用一句中文描述你真正想找的机会</h2>
-        <p className="text-sm text-slate-600">系统会在当前候选机会中进一步筛选，只保留符合条件的结果。</p>
+        <p className="text-sm text-slate-600">
+          系统会在当前候选机会中进一步筛选，只保留符合条件的结果。
+        </p>
       </div>
 
       <textarea
