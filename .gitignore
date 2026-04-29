@@ -16,3 +16,5 @@ app/backend/test_progress.json
 /app/backend/*.out
 /app/backend/pytest-cache-files-*/
 /app/frontend/*.out
+/.tmp/
+/%TEMP%/
