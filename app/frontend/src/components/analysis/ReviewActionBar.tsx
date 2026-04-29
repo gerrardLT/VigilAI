@@ -20,8 +20,10 @@ export function ReviewActionBar({
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
-          <h3 className="text-base font-semibold text-slate-900">Review & Writeback</h3>
-          <p className="mt-1 text-sm text-slate-500">确认 draft 后才会写回 activity 真值；拒绝不会污染主数据。</p>
+          <h3 className="text-base font-semibold text-slate-900">复核与写回</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            通过后会把结论写回机会主记录；拒绝则保留原数据，只退回当前草稿。
+          </p>
         </div>
         <div className="flex flex-wrap gap-3">
           <button
@@ -30,7 +32,7 @@ export function ReviewActionBar({
             disabled={reviewing}
             className="btn btn-primary"
           >
-            {reviewing ? 'Submitting...' : 'Approve Draft'}
+            {reviewing ? '提交中...' : '通过草稿'}
           </button>
           <button
             type="button"
@@ -38,20 +40,20 @@ export function ReviewActionBar({
             disabled={reviewing}
             className="btn btn-secondary"
           >
-            Reject Draft
+            退回草稿
           </button>
         </div>
       </div>
 
       <label className="mt-4 block space-y-2">
-        <span className="text-sm font-medium text-slate-700">Review Note</span>
+        <span className="text-sm font-medium text-slate-700">复核备注</span>
         <textarea
-          aria-label="Agent analysis review note"
+          aria-label="AI 分析复核备注"
           value={note}
           onChange={event => setNote(event.target.value)}
           rows={3}
           className="input min-h-24 w-full py-3"
-          placeholder="记录你为什么批准、拒绝，或者需要补什么证据。"
+          placeholder="记录为什么通过、为什么退回，或还缺哪些证据。"
         />
       </label>
     </section>

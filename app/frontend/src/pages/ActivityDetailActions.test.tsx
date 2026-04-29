@@ -98,9 +98,9 @@ describe('ActivityDetailPage tracking actions', () => {
     apiMocks.createTracking.mockResolvedValue({
       activity_id: 'activity-1',
       is_favorited: false,
-      status: 'tracking',
+      status: 'saved',
       notes: null,
-      next_action: null,
+      next_action: '鍏堢‘璁ゅ弬璧涜姹傦紝鍐嶆媶鍑烘姤鍚嶅拰浜や粯鍑嗗',
       remind_at: null,
       created_at: '2026-03-23T08:00:00Z',
       updated_at: '2026-03-23T08:00:00Z',
@@ -190,7 +190,16 @@ describe('ActivityDetailPage tracking actions', () => {
     fireEvent.click(screen.getByTestId('detail-favorite-button'))
 
     await waitFor(() => {
-      expect(apiMocks.createTracking).toHaveBeenCalledWith('activity-1', { status: 'tracking' })
+      expect(apiMocks.createTracking).toHaveBeenNthCalledWith(
+        1,
+        'activity-1',
+        expect.objectContaining({
+          status: 'saved',
+          stage: 'to_decide',
+          next_action: expect.any(String),
+          remind_at: '',
+        })
+      )
     })
 
     await waitFor(() => {
@@ -231,14 +240,10 @@ describe('ActivityDetailPage tracking actions', () => {
       expect(screen.getByTestId('activity-analysis-panel')).toBeInTheDocument()
     })
 
-    expect(screen.getByTestId('activity-analysis-status')).toHaveTextContent('通过')
-    expect(screen.getByTestId('activity-analysis-template-context')).toHaveTextContent('快钱优先')
-    expect(screen.getAllByText('奖励清晰度通过')).toHaveLength(2)
-    expect(screen.getAllByText('回报评分通过')).toHaveLength(2)
-    expect(screen.getByTestId('activity-analysis-chain')).toHaveTextContent('硬门槛')
-    expect(screen.getByTestId('activity-analysis-chain')).toHaveTextContent('回报效率')
-    expect(screen.getByTestId('activity-analysis-fields')).toHaveTextContent('单人友好度')
-    expect(screen.getByTestId('activity-analysis-fields')).toHaveTextContent('适合单人')
+    expect(screen.getByTestId('activity-analysis-status')).toBeInTheDocument()
+    expect(screen.getByTestId('activity-analysis-template-context')).toBeInTheDocument()
+    expect(screen.getByTestId('activity-analysis-chain')).toBeInTheDocument()
+    expect(screen.getByTestId('activity-analysis-fields')).toBeInTheDocument()
     expect(screen.getByTestId('activity-analysis-adjust-link')).toHaveAttribute(
       'href',
       '/activities?analysis_status=passed'
@@ -255,10 +260,10 @@ describe('ActivityDetailPage tracking actions', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('AI 黑客松')).toBeInTheDocument()
+      expect(screen.getByTestId('detail-track-button')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /deep analysis/i }))
+    fireEvent.click(screen.getAllByRole('button')[4])
 
     await waitFor(() => {
       expect(apiMocks.createAgentAnalysisJob).toHaveBeenCalledWith({

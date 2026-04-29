@@ -89,7 +89,7 @@ describe('ActivityDetailPage planning actions', () => {
       expect(screen.getByText('AI 驻留计划')).toBeInTheDocument()
     })
 
-    fireEvent.change(screen.getByLabelText('跟进状态'), { target: { value: 'tracking' } })
+    fireEvent.change(screen.getByLabelText('跟进状态'), { target: { value: 'watching' } })
     fireEvent.change(screen.getByLabelText('下一步动作'), { target: { value: 'Submit shortlist' } })
     fireEvent.change(screen.getByLabelText('提醒时间'), { target: { value: '2026-03-26T10:30' } })
     fireEvent.change(screen.getByLabelText('跟进备注'), {
@@ -100,11 +100,16 @@ describe('ActivityDetailPage planning actions', () => {
     await waitFor(() => {
       expect(apiMocks.updateTracking).toHaveBeenCalledWith('activity-1', {
         status: 'tracking',
+        stage: 'watching',
         next_action: 'Submit shortlist',
         remind_at: '2026-03-26T10:30',
         notes: 'Need portfolio and intro.',
+        block_reason: null,
+        abandon_reason: null,
       })
     })
+
+    expect(screen.getByTestId('detail-plan-saved-summary')).toBeInTheDocument()
   })
 
   it('creates a new tracking plan when the opportunity has not been tracked yet', async () => {
@@ -137,10 +142,76 @@ describe('ActivityDetailPage planning actions', () => {
 
     await waitFor(() => {
       expect(apiMocks.createTracking).toHaveBeenCalledWith('activity-1', {
-        status: 'tracking',
+        status: 'saved',
+        stage: 'to_decide',
         next_action: 'Draft shortlist',
         remind_at: '2026-03-27T09:00',
         notes: null,
+        block_reason: null,
+        abandon_reason: null,
+      })
+    })
+
+    expect(screen.getByTestId('detail-plan-saved-summary')).toBeInTheDocument()
+  })
+
+  it('saves block and abandon reasons from the detail page when dropping a track', async () => {
+    apiMocks.getActivity.mockResolvedValueOnce({
+      ...baseActivity,
+      is_tracking: true,
+      is_favorited: false,
+      tracking: {
+        activity_id: 'activity-1',
+        is_favorited: false,
+        status: 'tracking',
+        stage: 'watching',
+        notes: null,
+        next_action: 'Review fit',
+        remind_at: '2026-03-25T09:30',
+        block_reason: null,
+        abandon_reason: null,
+        created_at: '2026-03-24T08:00:00Z',
+        updated_at: '2026-03-24T08:00:00Z',
+      },
+    })
+    apiMocks.updateTracking.mockResolvedValueOnce({
+      activity_id: 'activity-1',
+      is_favorited: false,
+      status: 'archived',
+      stage: 'dropped',
+      notes: null,
+      next_action: 'Review fit',
+      remind_at: '2026-03-25T09:30',
+      block_reason: 'Need legal review',
+      abandon_reason: 'ROI too low',
+      created_at: '2026-03-24T08:00:00Z',
+      updated_at: '2026-03-24T09:00:00Z',
+    })
+
+    renderDetailPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('detail-save-plan-button')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText('跟进状态'), { target: { value: 'dropped' } })
+    fireEvent.change(screen.getByLabelText('阻塞原因'), {
+      target: { value: 'Need legal review' },
+    })
+    fireEvent.change(screen.getByLabelText('放弃原因'), {
+      target: { value: 'ROI too low' },
+    })
+    fireEvent.click(screen.getByTestId('detail-save-plan-button'))
+
+    await waitFor(() => {
+      expect(apiMocks.updateTracking).toHaveBeenCalledWith('activity-1', {
+        status: 'archived',
+        stage: 'dropped',
+        next_action: 'Review fit',
+        remind_at: '2026-03-25T09:30',
+        notes: null,
+        block_reason: 'Need legal review',
+        abandon_reason: 'ROI too low',
       })
     })
   })

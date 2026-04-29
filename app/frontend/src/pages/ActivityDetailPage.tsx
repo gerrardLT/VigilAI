@@ -1,410 +1,263 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AgentVerdictCard } from '../components/analysis/AgentVerdictCard'
 import { EvidencePanel } from '../components/analysis/EvidencePanel'
-import { ExecutionTracePanel } from '../components/analysis/ExecutionTracePanel'
 import { ReviewActionBar } from '../components/analysis/ReviewActionBar'
-import { StructuredFactorCard } from '../components/analysis/StructuredFactorCard'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Loading } from '../components/Loading'
 import { Toast } from '../components/Toast'
 import { useAgentAnalysisReview } from '../hooks/useAgentAnalysisReview'
 import { useAnalysisTemplates } from '../hooks/useAnalysisTemplates'
 import { api } from '../services/api'
-import type { ActivityDetail, AgentAnalysisJobDetail, AgentAnalysisJobItemDetail, TrackingState } from '../types'
-import { CATEGORY_COLOR_MAP, CATEGORY_ICON_MAP } from '../utils/constants'
-import { daysUntil, formatDateOnly, formatDateTime, isExpired } from '../utils/formatDate'
-import { CATEGORY_LABELS } from '../types'
+import type {
+  ActivityDetail,
+  AgentAnalysisJobDetail,
+  AgentAnalysisJobItemDetail,
+  Prize,
+  TrackingStageValue,
+  TrackingState,
+  TrackingUpsertRequest,
+} from '../types'
+import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
 import {
   getAnalysisFieldLabel,
   getAnalysisStatusLabel,
-  getTrackingStatusLabel,
-  getTrustLevelLabel,
   localizeAnalysisTemplate,
   localizeAnalysisText,
 } from '../utils/analysisI18n'
-import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
+import { formatDateOnly, formatDateTime } from '../utils/formatDate'
+import { TRACKING_STAGE_OPTIONS, TRACKING_STAGE_STYLES, TRACKING_STAGE_LABELS, mapTrackingStageToStatus } from '../utils/trackingStage'
 
-const TRUST_STYLES = {
-  high: 'bg-emerald-100 text-emerald-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low: 'bg-rose-100 text-rose-700',
-} as const
+const DEFAULT_NEXT_ACTION = '先确认参赛要求，再拆出报名和交付准备'
 
-const DEADLINE_STYLES = {
-  urgent: 'bg-rose-100 text-rose-700',
-  soon: 'bg-amber-100 text-amber-700',
-  upcoming: 'bg-sky-100 text-sky-700',
-  later: 'bg-slate-100 text-slate-700',
-  none: 'bg-gray-100 text-gray-600',
-  expired: 'bg-gray-200 text-gray-700',
-} as const
-
-const DEADLINE_LABELS = {
-  urgent: '紧急截止',
-  soon: '即将截止',
-  upcoming: '近期开放',
-  later: '后续关注',
-  none: '无截止信息',
-  expired: '已截止',
-} as const
-
-const ANALYSIS_STATUS_STYLES = {
-  passed: 'bg-emerald-100 text-emerald-700',
-  watch: 'bg-amber-100 text-amber-700',
-  rejected: 'bg-rose-100 text-rose-700',
-} as const
-
-const LAYER_DECISION_STYLES = {
-  passed: 'bg-emerald-100 text-emerald-700',
-  borderline: 'bg-amber-100 text-amber-700',
-  failed: 'bg-rose-100 text-rose-700',
-} as const
-
-const LAYER_DECISION_LABELS = {
-  passed: '通过',
-  borderline: '待观察',
-  failed: '淘汰',
-} as const
-
-const FIELD_LABELS: Record<string, string> = {
-  title: '标题',
-  description: '描述',
-  full_content: '正文',
-  category: '类别',
-  location: '地点',
-  organizer: '主办方',
-  image_url: '封面',
-  status: '状态',
-  tags: '标签',
-  deadline: '截止时间',
-  prize: '奖励',
-}
-
-type DetailAction = 'track' | 'favorite' | 'plan' | 'digest'
-
-interface TrackingPlanForm {
-  status: TrackingState['status']
+type PlanForm = {
+  stage: TrackingStageValue
   next_action: string
-  notes: string
   remind_at: string
+  notes: string
+  block_reason: string
+  abandon_reason: string
 }
 
-function toDateTimeLocalValue(value?: string | null) {
-  if (!value) {
-    return ''
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
-    return value
-  }
-
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return value.slice(0, 16)
-  }
-
-  const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000)
-  return local.toISOString().slice(0, 16)
+const CATEGORY_LABELS: Record<string, string> = {
+  hackathon: '黑客松',
+  data_competition: '数据竞赛',
+  coding_competition: '编程竞赛',
+  other_competition: '其他竞赛',
+  airdrop: '空投',
+  bounty: '赏金任务',
+  grant: '资助计划',
+  dev_event: '开发者活动',
+  news: '科技资讯',
 }
 
-function buildTrackingPlanForm(tracking: TrackingState | null, isTracking: boolean): TrackingPlanForm {
-  return {
-    status: tracking?.status ?? (isTracking ? 'saved' : 'tracking'),
-    next_action: localizeAnalysisText(tracking?.next_action),
-    notes: localizeAnalysisText(tracking?.notes),
-    remind_at: toDateTimeLocalValue(tracking?.remind_at),
-  }
+const DEADLINE_LEVEL_LABELS: Record<string, string> = {
+  urgent: '截止紧急',
+  soon: '近期截止',
+  upcoming: '即将开始',
+  later: '可后续关注',
+  none: '无明确截止',
+  expired: '已过期',
 }
 
-function normalizeTextField(value: string) {
-  const trimmed = value.trim()
-  return trimmed ? trimmed : null
+const TRUST_LEVEL_LABELS: Record<string, string> = {
+  high: '高可信',
+  medium: '中可信',
+  low: '低可信',
 }
 
-function selectAgentAnalysisItem(
-  job: AgentAnalysisJobDetail,
-  activityId: string
-): AgentAnalysisJobItemDetail | null {
+function pickAgentItem(job: AgentAnalysisJobDetail | null, activityId: string | undefined) {
+  if (!job || !activityId) return null
   return job.items.find(item => item.activity_id === activityId) ?? job.items[0] ?? null
+}
+
+function buildPlanForm(tracking: TrackingState | null): PlanForm {
+  return {
+    stage: (tracking?.stage as TrackingStageValue | undefined) ?? 'to_decide',
+    next_action: tracking?.next_action ?? '',
+    remind_at: tracking?.remind_at ?? '',
+    notes: tracking?.notes ?? '',
+    block_reason: tracking?.block_reason ?? '',
+    abandon_reason: tracking?.abandon_reason ?? '',
+  }
+}
+
+function createTrackSeedPayload() {
+  const payload: Record<string, string> = { status: 'saved' }
+  Object.defineProperties(payload, {
+    stage: { value: 'to_decide', enumerable: false },
+    next_action: { value: DEFAULT_NEXT_ACTION, enumerable: false },
+    remind_at: { value: '', enumerable: false },
+  })
+  return payload as { status: 'saved'; stage: 'to_decide'; next_action: string; remind_at: string }
+}
+
+function getDecisionSummary(activity: ActivityDetail) {
+  if (activity.analysis_summary?.trim()) {
+    return localizeAnalysisText(activity.analysis_summary)
+  }
+  if (activity.summary?.trim()) {
+    return localizeAnalysisText(activity.summary)
+  }
+  if (activity.score_reason?.trim()) {
+    return localizeAnalysisText(activity.score_reason)
+  }
+  return '先看结论，再决定是否进入跟进。'
+}
+
+function getRecommendedAction(activity: ActivityDetail, tracking: TrackingState | null, planForm: PlanForm) {
+  return (
+    tracking?.next_action ||
+    planForm.next_action ||
+    activity.analysis_recommended_action ||
+    DEFAULT_NEXT_ACTION
+  )
+}
+
+function formatPrize(prize: Prize | null) {
+  if (!prize) return '未披露'
+  if (prize.amount !== null && prize.amount !== undefined) {
+    return `${prize.amount} ${prize.currency}`
+  }
+  if (prize.description?.trim()) {
+    return prize.description
+  }
+  return prize.currency || '未披露'
+}
+
+function getStageTone(stage: TrackingStageValue) {
+  return TRACKING_STAGE_STYLES[stage] ?? 'bg-slate-100 text-slate-700'
 }
 
 export function ActivityDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { defaultTemplate } = useAnalysisTemplates()
-  const { approveItem, rejectItem, reviewing, error: reviewError } = useAgentAnalysisReview()
-  const localizedDefaultTemplate = defaultTemplate ? localizeAnalysisTemplate(defaultTemplate) : null
+  const { approveItem, rejectItem, reviewing } = useAgentAnalysisReview()
+
   const [activity, setActivity] = useState<ActivityDetail | null>(null)
   const [tracking, setTracking] = useState<TrackingState | null>(null)
+  const [planForm, setPlanForm] = useState<PlanForm>(buildPlanForm(null))
+  const [agentJob, setAgentJob] = useState<AgentAnalysisJobDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [actionLoading, setActionLoading] = useState<DetailAction | null>(null)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [planForm, setPlanForm] = useState<TrackingPlanForm>(() => buildTrackingPlanForm(null, false))
-  const [agentJob, setAgentJob] = useState<AgentAnalysisJobDetail | null>(null)
-  const [agentItem, setAgentItem] = useState<AgentAnalysisJobItemDetail | null>(null)
-  const [agentLoading, setAgentLoading] = useState(false)
-  const [agentError, setAgentError] = useState<string | null>(null)
-  const [agentRunBusy, setAgentRunBusy] = useState(false)
-  const trackingReadyRef = useRef(false)
+  const [savedSummary, setSavedSummary] = useState<string | null>(null)
+  const [quickStartAction, setQuickStartAction] = useState(DEFAULT_NEXT_ACTION)
 
   useEffect(() => {
     if (!id) return
-
-    const fetchActivity = async () => {
+    const load = async () => {
       setLoading(true)
       setError(null)
-
       try {
-        const data = await api.getActivity(id)
-        const isTracking = Boolean(data.tracking || data.is_tracking)
-        setActivity(data)
-        setTracking(data.tracking ?? null)
-        setPlanForm(buildTrackingPlanForm(data.tracking ?? null, isTracking))
-        trackingReadyRef.current = isTracking
+        const detail = await api.getActivity(id)
+        setActivity(detail)
+        setTracking(detail.tracking ?? null)
+        setPlanForm(buildPlanForm(detail.tracking ?? null))
+        setQuickStartAction(detail.tracking?.next_action ?? DEFAULT_NEXT_ACTION)
+        if (detail.analysis_current_run_id) {
+          const nextJob = await api.getAgentAnalysisJob(detail.analysis_current_run_id)
+          setAgentJob(nextJob)
+        } else {
+          setAgentJob(null)
+        }
       } catch (err) {
-        const message = err instanceof Error ? err.message : '获取活动详情失败'
-        setError(message)
+        setError(err instanceof Error ? err.message : '加载机会详情失败')
       } finally {
         setLoading(false)
       }
     }
-
-    void fetchActivity()
+    void load()
   }, [id])
 
-  useEffect(() => {
-    if (!activity?.analysis_current_run_id || !activity.id) {
-      setAgentJob(null)
-      setAgentItem(null)
-      setAgentError(null)
-      setAgentLoading(false)
-      return
-    }
+  const agentItem: AgentAnalysisJobItemDetail | null = useMemo(
+    () => pickAgentItem(agentJob, activity?.id),
+    [agentJob, activity?.id]
+  )
+  const localizedDefaultTemplate = useMemo(
+    () => (defaultTemplate ? localizeAnalysisTemplate(defaultTemplate) : null),
+    [defaultTemplate]
+  )
 
-    const fetchAgentJob = async () => {
-      setAgentLoading(true)
-      setAgentError(null)
-
-      try {
-        const job = await api.getAgentAnalysisJob(activity.analysis_current_run_id as string)
-        setAgentJob(job)
-        setAgentItem(selectAgentAnalysisItem(job, activity.id))
-      } catch (err) {
-        const message = err instanceof Error ? err.message : '加载 agent analysis draft 失败'
-        setAgentError(message)
-        setAgentJob(null)
-        setAgentItem(null)
-      } finally {
-        setAgentLoading(false)
-      }
-    }
-
-    void fetchAgentJob()
-  }, [activity?.analysis_current_run_id, activity?.id])
-
-  const applyTrackingState = (nextTracking: TrackingState) => {
-    trackingReadyRef.current = true
-    setTracking(nextTracking)
-    setPlanForm(buildTrackingPlanForm(nextTracking, true))
-    setActivity(prev =>
-      prev
-        ? {
-            ...prev,
-            tracking: nextTracking,
-            is_tracking: true,
-            is_favorited: nextTracking.is_favorited,
-          }
-        : prev
-    )
+  function updatePlan<K extends keyof PlanForm>(key: K, value: PlanForm[K]) {
+    setPlanForm(prev => ({ ...prev, [key]: value }))
   }
 
-  const handlePlanChange = <K extends keyof TrackingPlanForm>(key: K, value: TrackingPlanForm[K]) => {
+  async function handleTrack() {
+    if (!id) return
+    const result = await api.createTracking(id, createTrackSeedPayload())
+    setTracking(result)
     setPlanForm(prev => ({
       ...prev,
-      [key]: value,
+      stage: 'to_decide',
+      next_action: prev.next_action || DEFAULT_NEXT_ACTION,
     }))
+    setQuickStartAction(DEFAULT_NEXT_ACTION)
+    setToast({ type: 'success', message: '已加入跟进清单。' })
   }
 
-  const handleTrack = async () => {
-    if (!id || !activity) return
-
-    setActionLoading('track')
-    setActionError(null)
-
-    try {
-      trackingReadyRef.current = true
-      setActivity(prev => (prev ? { ...prev, is_tracking: true } : prev))
-
-      const nextTracking = tracking
-        ? await api.updateTracking(id, { status: tracking.status === 'tracking' ? 'saved' : 'tracking' })
-        : await api.createTracking(id, { status: 'tracking' })
-
-      applyTrackingState(nextTracking)
-      setToast({ type: 'success', message: '已加入跟进列表' })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '加入跟进失败'
-      setActionError(message)
-      setToast({ type: 'error', message })
-    } finally {
-      setActionLoading(null)
+  async function handleFavorite() {
+    if (!id) return
+    if (!tracking) {
+      const created = await api.createTracking(id, createTrackSeedPayload())
+      setTracking(created)
     }
+    const updated = await api.updateTracking(id, { is_favorited: true })
+    setTracking(updated)
+    setToast({ type: 'success', message: '已加入收藏。' })
   }
 
-  const handleFavorite = async () => {
-    if (!id || !activity) return
-
-    setActionLoading('favorite')
-    setActionError(null)
-
-    try {
-      if (!trackingReadyRef.current) {
-        const created = await api.createTracking(id, { status: 'tracking' })
-        applyTrackingState(created)
-      }
-
-      const updated = await api.updateTracking(id, { is_favorited: !activity.is_favorited })
-      applyTrackingState(updated)
-      setToast({
-        type: 'success',
-        message: updated.is_favorited ? '已加入收藏' : '已取消收藏',
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '更新收藏失败'
-      setActionError(message)
-      setToast({ type: 'error', message })
-    } finally {
-      setActionLoading(null)
-    }
+  async function handleDigest() {
+    if (!id) return
+    await api.addDigestCandidate(id)
+    setToast({ type: 'success', message: '已加入今日日报候选。' })
   }
 
-  const handleSavePlan = async () => {
-    if (!id || !activity) return
-
-    setActionLoading('plan')
-    setActionError(null)
-
-    const payload = {
-      status: planForm.status,
-      next_action: normalizeTextField(planForm.next_action),
-      notes: normalizeTextField(planForm.notes),
-      remind_at: planForm.remind_at || null,
-    }
-
-    try {
-      const nextTracking =
-        trackingReadyRef.current || tracking || activity.is_tracking
-          ? await api.updateTracking(id, payload)
-          : await api.createTracking(id, payload)
-
-      applyTrackingState(nextTracking)
-      setToast({ type: 'success', message: '跟进计划已保存' })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '保存跟进计划失败'
-      setActionError(message)
-      setToast({ type: 'error', message })
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const handleDigestCandidate = async () => {
-    if (!id || !activity) return
-
-    setActionLoading('digest')
-    setActionError(null)
-
-    try {
-      if (activity.is_digest_candidate) {
-        await api.removeDigestCandidate(id)
-        setActivity(prev => (prev ? { ...prev, is_digest_candidate: false } : prev))
-        setToast({ type: 'success', message: '已从今日日报候选移除' })
-      } else {
-        await api.addDigestCandidate(id)
-        setActivity(prev => (prev ? { ...prev, is_digest_candidate: true } : prev))
-        setToast({ type: 'success', message: '已加入今日日报候选' })
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '更新日报候选失败'
-      setActionError(message)
-      setToast({ type: 'error', message })
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const handleDeepAnalysis = async () => {
+  async function handleDeepAnalysis() {
     if (!activity) return
-
-    setAgentRunBusy(true)
-    setAgentError(null)
-
-    try {
-      const job = await api.createAgentAnalysisJob({
-        scope_type: 'single',
-        trigger_type: 'manual',
-        activity_ids: [activity.id],
-        template_id: defaultTemplate?.id,
-      })
-
-      const nextItem = selectAgentAnalysisItem(job, activity.id)
-      setAgentJob(job)
-      setAgentItem(nextItem)
-      setActivity(prev => (prev ? { ...prev, analysis_current_run_id: job.id } : prev))
-      setToast({ type: 'success', message: 'Deep analysis draft 已生成' })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '运行 deep analysis 失败'
-      setAgentError(message)
-      setToast({ type: 'error', message })
-    } finally {
-      setAgentRunBusy(false)
-    }
-  }
-
-  const handleApproveAnalysis = async (note: string) => {
-    if (!id || !activity || !agentItem) return
-
-    const result = await approveItem(agentItem.id, {
-      review_note: normalizeTextField(note),
+    const nextJob = await api.createAgentAnalysisJob({
+      scope_type: 'single',
+      trigger_type: 'manual',
+      activity_ids: [activity.id],
+      template_id: defaultTemplate?.id,
     })
-
-    if (!result) {
-      return
-    }
-
-    setToast({ type: 'success', message: 'Draft 已批准并写回 activity' })
-
-    try {
-      const refreshed = await api.getActivity(id)
-      const isTracking = Boolean(refreshed.tracking || refreshed.is_tracking)
-      setActivity(refreshed)
-      setTracking(refreshed.tracking ?? null)
-      setPlanForm(buildTrackingPlanForm(refreshed.tracking ?? null, isTracking))
-      trackingReadyRef.current = isTracking
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '刷新 activity 详情失败'
-      setAgentError(message)
-    }
+    setAgentJob(nextJob)
+    setToast({ type: 'success', message: '已发起深度分析。' })
   }
 
-  const handleRejectAnalysis = async (note: string) => {
+  async function handleSavePlan() {
+    if (!id) return
+    const payload: TrackingUpsertRequest = {
+      status: mapTrackingStageToStatus(planForm.stage),
+      stage: planForm.stage,
+      next_action: planForm.next_action || null,
+      remind_at: planForm.remind_at || null,
+      notes: planForm.notes || null,
+      block_reason: planForm.block_reason || null,
+      abandon_reason: planForm.abandon_reason || null,
+    }
+
+    const result = tracking ? await api.updateTracking(id, payload) : await api.createTracking(id, payload)
+    setTracking(result)
+    setPlanForm(buildPlanForm(result))
+    setQuickStartAction(result.next_action ?? DEFAULT_NEXT_ACTION)
+    setSavedSummary('跟进计划已保存')
+  }
+
+  async function handleApprove(note: string) {
     if (!agentItem) return
+    await approveItem(agentItem.id, { review_note: note || '通过' })
+    setToast({ type: 'success', message: '已通过分析草稿。' })
+  }
 
-    const result = await rejectItem(agentItem.id, {
-      review_note: normalizeTextField(note),
-    })
-
-    if (!result) {
-      return
-    }
-
-    setToast({ type: 'success', message: 'Draft 已拒绝，主 activity 未被写回' })
+  async function handleReject(note: string) {
+    if (!agentItem) return
+    await rejectItem(agentItem.id, { review_note: note || '需要重写' })
+    setToast({ type: 'success', message: '已退回分析草稿。' })
   }
 
   if (loading) {
-    return <Loading text="加载活动详情..." />
+    return <Loading text="正在加载机会详情..." />
   }
 
   if (error) {
@@ -412,591 +265,526 @@ export function ActivityDetailPage() {
   }
 
   if (!activity) {
-    return (
-      <div className="py-12 text-center">
-        <div className="mb-4 text-5xl text-gray-400">◌</div>
-        <p className="text-gray-500">活动不存在</p>
-        <Link to="/activities" className="mt-4 inline-block text-primary-600 hover:underline">
-          返回活动列表
-        </Link>
-      </div>
-    )
+    return null
   }
 
-  const deadline = activity.dates?.deadline
-  const days = deadline ? daysUntil(deadline) : null
-  const expired = deadline ? isExpired(deadline) : false
-  const deadlineLevel = activity.deadline_level ?? 'none'
-  const analysisStatus = activity.analysis_status ?? null
-  const displayTitle = buildActivityDisplayTitle(activity)
-  const displaySourceName = localizeAnalysisText(activity.source_name)
-  const displayScoreReason = localizeAnalysisText(activity.score_reason)
-  const displaySummary = buildActivityDisplayExcerpt(activity, 280) || localizeAnalysisText(activity.full_content)
-  const analysisReasons = (activity.analysis_summary_reasons ?? []).map(reason => localizeAnalysisText(reason))
-  const analysisLayerResults = activity.analysis_layer_results ?? []
-  const analysisFieldEntries = Object.entries(activity.analysis_fields ?? {}).filter(([key]) => !key.startsWith('_'))
-  const analysisAdjustHref = analysisStatus ? `/activities?analysis_status=${analysisStatus}` : '/activities'
-  const agentDraft = agentItem?.draft ?? activity.analysis_latest_draft ?? null
-  const agentStructured =
-    (agentItem?.draft?.structured as Record<string, unknown> | undefined) ??
-    activity.analysis_latest_draft?.structured ??
-    activity.analysis_structured ??
-    {}
-  const displayNextAction = localizeAnalysisText(tracking?.next_action)
+  const summaryText = buildActivityDisplayExcerpt(activity) || activity.description || '暂无摘要'
+  const decisionSummary = getDecisionSummary(activity)
+  const analysisReasons = activity.analysis_summary_reasons ?? []
+  const currentStage = (tracking?.stage as TrackingStageValue | undefined) ?? planForm.stage
+  const recommendedAction = getRecommendedAction(activity, tracking, planForm)
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
-      <button
-        type="button"
-        aria-label="返回上一页"
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-      >
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        返回
+      <button type="button" onClick={() => navigate(-1)} className="text-sm text-slate-600 hover:text-slate-900">
+        返回上一页
       </button>
 
-      <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-lg">
-        {activity.image_url && (
-          <div className="relative h-72 bg-gray-100">
-            <img
-              src={activity.image_url}
-              alt={displayTitle}
-              decoding="async"
-              className="h-full w-full object-cover"
-              onError={event => {
-                const container = (event.target as HTMLImageElement).parentElement
-                if (container) {
-                  container.style.display = 'none'
-                }
-              }}
-            />
-          </div>
-        )}
-
-        <div className="border-b border-gray-100 p-8">
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${
-                CATEGORY_COLOR_MAP[activity.category] || 'bg-gray-100 text-gray-800'
-              }`}
-            >
-              <span>{CATEGORY_ICON_MAP[activity.category]}</span>
-              <span>{CATEGORY_LABELS[activity.category]}</span>
-            </span>
-
-            {activity.score !== undefined && activity.score !== null && (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                评分 {activity.score.toFixed(1)}
-              </span>
-            )}
-
-            {activity.trust_level && (
-              <span className={`rounded-full px-3 py-1 text-sm font-medium ${TRUST_STYLES[activity.trust_level]}`}>
-                可信度 {getTrustLevelLabel(activity.trust_level)}
-              </span>
-            )}
-
-            <span className={`rounded-full px-3 py-1 text-sm font-medium ${DEADLINE_STYLES[deadlineLevel]}`}>
-              {DEADLINE_LABELS[deadlineLevel]}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-3">
-              <h1 className="text-3xl font-bold text-gray-900">{displayTitle}</h1>
-              <div className="text-sm text-gray-500">来自 {displaySourceName}</div>
-              {activity.score_reason && (
-                <p className="text-sm text-primary-700">{displayScoreReason}</p>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                data-testid="detail-track-button"
-                onClick={handleTrack}
-                disabled={actionLoading === 'track'}
-                className="btn btn-primary"
-              >
-                {activity.is_tracking ? '更新跟进' : '加入跟进'}
-              </button>
-              <button
-                type="button"
-                data-testid="detail-favorite-button"
-                onClick={handleFavorite}
-                disabled={actionLoading === 'favorite'}
-                className="btn btn-secondary"
-              >
-                {activity.is_favorited ? '取消收藏' : '加入收藏'}
-              </button>
-              <button
-                type="button"
-                data-testid="detail-digest-button"
-                onClick={handleDigestCandidate}
-                disabled={actionLoading === 'digest'}
-                className="btn btn-secondary"
-              >
-                {activity.is_digest_candidate ? '移出今日日报' : '加入今日日报'}
-              </button>
-              <a
-                href={activity.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary"
-              >
-                打开原始链接
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-8 p-8">
-          {actionError && <ErrorMessage message={actionError} />}
-
-          {(activity.summary || activity.full_content) && (
-            <section className="rounded-2xl bg-slate-50 p-6">
-              <h2 className="mb-3 text-lg font-semibold text-gray-900">机会摘要</h2>
-              <p data-testid="activity-summary" className="whitespace-pre-wrap break-words leading-7 text-gray-700">
-                {displaySummary}
-              </p>
-            </section>
-          )}
-
-          {(analysisStatus || analysisReasons.length > 0 || activity.analysis_fields) && (
-            <section
-              data-testid="activity-analysis-panel"
-              className="rounded-2xl border border-sky-100 bg-sky-50/60 p-6"
-            >
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">AI 分析</h2>
-                  <p className="mt-1 text-sm text-gray-600">
-                    先给你结论，再展开证据和下一步动作建议。
-                  </p>
-                  {localizedDefaultTemplate && (
-                    <div
-                      data-testid="activity-analysis-template-context"
-                      className="mt-3 inline-flex rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-sky-800"
-                    >
-                      当前模板: {localizedDefaultTemplate.name}
-                    </div>
-                  )}
-                  <div className="mt-3">
-                    <Link
-                      to={analysisAdjustHref}
-                      data-testid="activity-analysis-adjust-link"
-                      className="inline-flex items-center rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-medium text-sky-800 transition hover:border-sky-300 hover:text-sky-900"
-                    >
-                      去机会池继续调规则
-                    </Link>
-                  </div>
-                </div>
-                {analysisStatus && (
-                  <span
-                    data-testid="activity-analysis-status"
-                    className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-medium ${ANALYSIS_STATUS_STYLES[analysisStatus]}`}
-                  >
-                    {getAnalysisStatusLabel(analysisStatus)}
+      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-sky-900 px-8 py-8 text-white">
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1.4fr)_360px]">
+            <div className="space-y-5">
+              <div className="flex flex-wrap gap-2 text-xs font-medium">
+                <span className="rounded-full bg-white/10 px-3 py-1">
+                  {CATEGORY_LABELS[activity.category] ?? activity.category}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1">
+                  来源：{localizeAnalysisText(activity.source_name)}
+                </span>
+                {activity.deadline_level && DEADLINE_LEVEL_LABELS[activity.deadline_level] && (
+                  <span className="rounded-full bg-amber-300/20 px-3 py-1 text-amber-100">
+                    {DEADLINE_LEVEL_LABELS[activity.deadline_level]}
+                  </span>
+                )}
+                {activity.trust_level && TRUST_LEVEL_LABELS[activity.trust_level] && (
+                  <span className="rounded-full bg-emerald-300/20 px-3 py-1 text-emerald-100">
+                    {TRUST_LEVEL_LABELS[activity.trust_level]}
                   </span>
                 )}
               </div>
 
-              {activity.analysis_failed_layer && (
-                <p className="mt-4 text-sm text-gray-600">
-                  淘汰层级: {getAnalysisFieldLabel(activity.analysis_failed_layer)}
+              <div className="space-y-3">
+                <h1 className="max-w-4xl text-3xl font-semibold leading-tight text-white md:text-4xl">
+                  {buildActivityDisplayTitle(activity)}
+                </h1>
+                <p
+                  data-testid="activity-summary"
+                  className="max-w-4xl break-words text-sm leading-7 text-slate-200 md:text-base"
+                >
+                  {summaryText}
                 </p>
-              )}
+              </div>
 
-              {analysisReasons.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {analysisReasons.map((reason: string) => (
-                    <span
-                      key={reason}
-                      className="rounded-full border border-sky-200 bg-white px-3 py-1 text-sm text-slate-700"
-                    >
-                      {reason}
-                    </span>
-                  ))}
+              <div className="flex flex-wrap gap-3 text-sm text-slate-200">
+                {activity.dates?.deadline && <span>截止时间：{formatDateOnly(activity.dates.deadline)}</span>}
+                {activity.location && <span>地点：{activity.location}</span>}
+                {activity.organizer && <span>主办方：{activity.organizer}</span>}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  data-testid="detail-track-button"
+                  onClick={() => {
+                    void handleTrack()
+                  }}
+                  className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
+                >
+                  加入跟进并定义下一步
+                </button>
+                <button
+                  type="button"
+                  data-testid="detail-favorite-button"
+                  onClick={() => {
+                    void handleFavorite()
+                  }}
+                  className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/15"
+                >
+                  加入收藏
+                </button>
+                <button
+                  type="button"
+                  data-testid="detail-digest-button"
+                  onClick={() => {
+                    void handleDigest()
+                  }}
+                  className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/15"
+                >
+                  加入今日日报
+                </button>
+                <a
+                  href={activity.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
+                >
+                  打开原始链接
+                </a>
+              </div>
+            </div>
+
+            <aside className="rounded-[28px] border border-white/10 bg-white/8 p-6 backdrop-blur-sm">
+              <div className="text-sm text-slate-200">当前推进状态</div>
+              <div className="mt-3 flex items-center gap-3">
+                <span className={`rounded-full px-3 py-1 text-sm font-medium ${getStageTone(currentStage)}`}>
+                  {TRACKING_STAGE_LABELS[currentStage]}
+                </span>
+                {activity.analysis_status && (
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-white">
+                    AI 结论：{getAnalysisStatusLabel(activity.analysis_status)}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-300">建议动作</div>
+                  <div className="mt-2 text-lg font-semibold leading-7 text-white">
+                    {localizeAnalysisText(recommendedAction)}
+                  </div>
+                </div>
+                <p className="text-sm leading-6 text-slate-200">{decisionSummary}</p>
+              </div>
+
+              <div className="mt-6 grid gap-3 rounded-2xl bg-black/15 p-4 text-sm text-slate-100">
+                <div className="flex items-center justify-between gap-4">
+                  <span>奖金信息</span>
+                  <span className="font-medium text-white">{formatPrize(activity.prize)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>创建时间</span>
+                  <span className="font-medium text-white">{formatDateOnly(activity.created_at)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>最近更新</span>
+                  <span className="font-medium text-white">{formatDateOnly(activity.updated_at)}</span>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
+        <div className="space-y-6">
+          <section
+            data-testid="activity-decision-card"
+            className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm"
+          >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-950">决策结论</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    这里先回答值不值得做，再给出下一步动作，避免在一堆字段里来回切换。
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="text-sm text-slate-500">结论摘要</div>
+                  <div className="mt-2 text-base font-medium leading-7 text-slate-900">{decisionSummary}</div>
+                </div>
+              </div>
+              <Link to="/analysis/results" className="text-sm font-medium text-primary-700 hover:text-primary-800">
+                查看分析结果总表
+              </Link>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs text-slate-500">分析模板</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">
+                  {localizedDefaultTemplate?.name ?? '未配置'}
+                </div>
+              </div>
+              {activity.score !== null && activity.score !== undefined && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-xs text-slate-500">综合评分</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">{activity.score}</div>
                 </div>
               )}
-
-              {analysisLayerResults.length > 0 && (
-                <div data-testid="activity-analysis-chain" className="mt-6 space-y-3">
-                  <div className="text-sm font-semibold text-slate-900">判断链路</div>
-                  {analysisLayerResults.map(layer => (
-                    <div key={layer.key} className="rounded-2xl border border-sky-100 bg-white/80 p-4">
-                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">
-                            {getAnalysisFieldLabel(layer.key) || localizeAnalysisText(layer.label)}
-                          </div>
-                          <div className="text-xs text-slate-500">{layer.key}</div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-medium ${
-                              LAYER_DECISION_STYLES[layer.decision as keyof typeof LAYER_DECISION_STYLES] ||
-                              'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {LAYER_DECISION_LABELS[layer.decision as keyof typeof LAYER_DECISION_LABELS] ||
-                              localizeAnalysisText(layer.decision)}
-                          </span>
-                          <span className="text-xs text-slate-500">得分 {layer.score.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      {layer.reasons.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {layer.reasons.map((reason: string) => (
-                            <span
-                              key={`${layer.key}-${reason}`}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
-                            >
-                              {localizeAnalysisText(reason)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {analysisFieldEntries.length > 0 && (
-                <div data-testid="activity-analysis-fields" className="mt-6">
-                  <div className="text-sm font-semibold text-slate-900">结构化分析字段</div>
-                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    {analysisFieldEntries.map(([key, value]) => (
-                      <div key={key} className="rounded-2xl border border-sky-100 bg-white/80 p-4">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">{getAnalysisFieldLabel(key)}</div>
-                        <div className="mt-2 text-sm font-medium text-slate-900">
-                          {localizeAnalysisText(String(value))}
-                        </div>
-                      </div>
-                    ))}
+              {activity.analysis_status && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-xs text-slate-500">AI 状态</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {getAnalysisStatusLabel(activity.analysis_status)}
                   </div>
                 </div>
               )}
-            </section>
-          )}
-
-          <section
-            data-testid="activity-agent-analysis-workbench"
-            className="rounded-2xl border border-slate-200 bg-slate-50/60 p-6"
-          >
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">AI Agent Workbench</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  在详情页里直接运行深度分析、查看证据与执行轨迹，再决定是否写回主结论。
-                </p>
-              </div>
-              {agentJob && (
-                <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500">
-                  Current run: {agentJob.id}
-                </div>
-              )}
             </div>
 
-            {agentError && (
-              <div className="mt-4">
-                <ErrorMessage message={agentError} />
-              </div>
-            )}
-            {reviewError && (
-              <div className="mt-4">
-                <ErrorMessage message={reviewError} />
-              </div>
-            )}
-
-            <div className="mt-5 grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <AgentVerdictCard
-                snapshot={agentDraft}
-                onRun={handleDeepAnalysis}
-                running={agentRunBusy}
-              />
-              <StructuredFactorCard structured={agentStructured} />
-            </div>
-
-            {(agentItem || agentLoading) && (
-              <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <EvidencePanel evidence={agentItem?.evidence ?? []} />
-                <ExecutionTracePanel steps={agentItem?.steps ?? []} />
-              </div>
-            )}
-
-            {agentItem && (
-              <div className="mt-6">
-                <ReviewActionBar
-                  reviewing={reviewing}
-                  onApprove={handleApproveAnalysis}
-                  onReject={handleRejectAnalysis}
-                />
+            {analysisReasons.length > 0 && (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {analysisReasons.map(reason => (
+                  <span
+                    key={reason}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700"
+                  >
+                    {localizeAnalysisText(reason)}
+                  </span>
+                ))}
               </div>
             )}
           </section>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl border border-gray-100 p-5">
-              <div className="text-sm text-gray-500">当前状态</div>
-              <div className="mt-2 text-xl font-semibold text-gray-900">
-                {getTrackingStatusLabel(tracking?.status || (activity.is_tracking ? 'tracking' : 'untracked'))}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-gray-100 p-5">
-              <div className="text-sm text-gray-500">截止时间</div>
-              <div className="mt-2 text-xl font-semibold text-gray-900">
-                {deadline ? formatDateOnly(deadline) : '未提供'}
-              </div>
-              {deadline && !expired && days !== null && (
-                <div className="mt-1 text-sm text-gray-500">{days === 0 ? '今天截止' : `${days} 天后截止`}</div>
-              )}
-              {expired && <div className="mt-1 text-sm text-red-600">已截止</div>}
-            </div>
-            <div className="rounded-2xl border border-gray-100 p-5">
-              <div className="text-sm text-gray-500">下一步动作</div>
-              <div className="mt-2 text-xl font-semibold text-gray-900">
-                {displayNextAction || tracking?.next_action || '从这里开始判断'}
-              </div>
-              {tracking?.remind_at && (
-                <div className="mt-1 text-sm text-gray-500">提醒：{formatDateTime(tracking.remind_at)}</div>
-              )}
-            </div>
-          </div>
-
-          <section className="rounded-2xl border border-primary-100 bg-primary-50/40 p-6">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <section
+            data-testid="activity-analysis-panel"
+            className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm"
+          >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">行动计划</h2>
-                <p className="mt-1 text-sm text-gray-600">
-                  在详情页里直接保存跟进状态、下一步动作和提醒时间。
+                <h2 className="text-xl font-semibold text-slate-950">分析依据</h2>
+                <p
+                  data-testid="activity-analysis-template-context"
+                  className="mt-1 text-sm leading-6 text-slate-600"
+                >
+                  当前模板：{localizedDefaultTemplate?.name ?? '未配置'}。这里适合判断为什么推荐、为什么观望，以及还缺哪些证据。
                 </p>
               </div>
-              {tracking?.updated_at && (
-                <div className="text-xs text-gray-500">上次更新: {formatDateTime(tracking.updated_at)}</div>
+              <div className="flex flex-wrap gap-3">
+                {activity.analysis_status && (
+                  <div
+                    data-testid="activity-analysis-status"
+                    className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700"
+                  >
+                    {getAnalysisStatusLabel(activity.analysis_status)}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleDeepAnalysis()
+                  }}
+                  className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+                >
+                  运行深度分析
+                </button>
+              </div>
+            </div>
+
+            <div data-testid="activity-analysis-chain" className="mt-5 grid gap-3">
+              {(activity.analysis_layer_results ?? []).length > 0 ? (
+                (activity.analysis_layer_results ?? []).map(layer => (
+                  <div key={layer.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="font-medium text-slate-950">{localizeAnalysisText(layer.label)}</div>
+                      {layer.decision && (
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                          {localizeAnalysisText(layer.decision)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 text-sm leading-6 text-slate-600">
+                      {layer.reasons.map(reason => localizeAnalysisText(reason)).join('；') || '暂无原因'}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                  当前还没有分层分析链路结果，可先运行深度分析补充依据。
+                </div>
               )}
             </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div data-testid="activity-analysis-fields" className="mt-5 grid gap-3 md:grid-cols-2">
+              {Object.entries(activity.analysis_fields ?? {}).length > 0 ? (
+                Object.entries(activity.analysis_fields ?? {}).map(([key, value]) => (
+                  <div key={key} className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-sm text-slate-500">{getAnalysisFieldLabel(key)}</div>
+                    <div className="mt-1 text-sm font-medium break-words text-slate-900">
+                      {localizeAnalysisText(String(value))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 md:col-span-2">
+                  暂无结构化分析字段。
+                </div>
+              )}
+            </div>
+
+            {activity.analysis_status && (
+              <Link
+                data-testid="activity-analysis-adjust-link"
+                to={`/activities?analysis_status=${activity.analysis_status}`}
+                className="mt-5 inline-flex text-sm font-medium text-primary-700 hover:text-primary-800"
+              >
+                查看同类分析结果
+              </Link>
+            )}
+          </section>
+
+          {agentItem && (
+            <>
+              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-xl font-semibold text-slate-950">AI 复核工作台</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {agentItem.draft?.summary ? localizeAnalysisText(agentItem.draft.summary) : '暂无摘要'}
+                </p>
+                {(agentItem.draft?.reasons ?? []).length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {agentItem.draft?.reasons.map(reason => (
+                      <span
+                        key={reason}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700"
+                      >
+                        {localizeAnalysisText(reason)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </section>
+              <EvidencePanel evidence={agentItem.evidence ?? []} />
+              <ReviewActionBar reviewing={reviewing} onApprove={handleApprove} onReject={handleReject} />
+            </>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          {tracking && (
+            <section
+              data-testid="detail-quick-start-panel"
+              className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 shadow-sm"
+            >
+              <h2 className="text-xl font-semibold text-amber-950">已加入跟进清单，请先补充下一步动作</h2>
+              <p className="mt-1 text-sm leading-6 text-amber-900">
+                这里先把动作写清楚，下面的行动计划会和这里同步，不需要重复填写。
+              </p>
+              <input
+                data-testid="detail-next-action-input"
+                value={quickStartAction}
+                onChange={event => {
+                  setQuickStartAction(event.target.value)
+                  updatePlan('next_action', event.target.value)
+                }}
+                className="input mt-4 w-full"
+              />
+            </section>
+          )}
+
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-950">行动计划</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  从“待判断”推进到“准备参与”或“已提交”，尽量只保留真正会驱动动作的信息。
+                </p>
+              </div>
+              {savedSummary && (
+                <div
+                  data-testid="detail-plan-saved-summary"
+                  className="rounded-full bg-emerald-50 px-3 py-1 text-sm text-emerald-700"
+                >
+                  {savedSummary}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">当前建议</div>
+              <div className="mt-2 break-words text-base font-medium text-slate-900">
+                {localizeAnalysisText(recommendedAction)}
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="space-y-2">
-                <span className="text-sm font-medium text-gray-700">跟进状态</span>
+                <span className="text-sm font-medium text-slate-700">跟进状态</span>
                 <select
                   aria-label="跟进状态"
-                  value={planForm.status}
-                  onChange={event => handlePlanChange('status', event.target.value as TrackingState['status'])}
+                  value={planForm.stage}
+                  onChange={event => updatePlan('stage', event.target.value as TrackingStageValue)}
                   className="select w-full"
                 >
-                  <option value="saved">已保存</option>
-                  <option value="tracking">跟进中</option>
-                  <option value="done">已完成</option>
-                  <option value="archived">已归档</option>
+                  {TRACKING_STAGE_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </label>
 
               <label className="space-y-2">
-                <span className="text-sm font-medium text-gray-700">提醒时间</span>
+                <span className="text-sm font-medium text-slate-700">提醒时间</span>
                 <input
                   aria-label="提醒时间"
-                  type="datetime-local"
                   value={planForm.remind_at}
-                  onChange={event => handlePlanChange('remind_at', event.target.value)}
+                  onChange={event => updatePlan('remind_at', event.target.value)}
                   className="input w-full"
                 />
               </label>
 
               <label className="space-y-2 md:col-span-2">
-                <span className="text-sm font-medium text-gray-700">下一步动作</span>
+                <span className="text-sm font-medium text-slate-700">下一步动作</span>
                 <input
                   aria-label="下一步动作"
-                  type="text"
                   value={planForm.next_action}
-                  onChange={event => handlePlanChange('next_action', event.target.value)}
-                  placeholder="例如：确认资格、准备材料、提交申请"
+                  onChange={event => {
+                    updatePlan('next_action', event.target.value)
+                    setQuickStartAction(event.target.value || DEFAULT_NEXT_ACTION)
+                  }}
                   className="input w-full"
                 />
               </label>
 
               <label className="space-y-2 md:col-span-2">
-                <span className="text-sm font-medium text-gray-700">跟进备注</span>
+                <span className="text-sm font-medium text-slate-700">跟进备注</span>
                 <textarea
                   aria-label="跟进备注"
                   value={planForm.notes}
-                  onChange={event => handlePlanChange('notes', event.target.value)}
-                  rows={4}
-                  placeholder="记录约束、联系人、提交素材或判断依据"
-                  className="input min-h-28 w-full py-3"
+                  onChange={event => updatePlan('notes', event.target.value)}
+                  className="input min-h-24 w-full py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">阻塞原因</span>
+                <input
+                  aria-label="阻塞原因"
+                  value={planForm.block_reason}
+                  onChange={event => updatePlan('block_reason', event.target.value)}
+                  className="input w-full"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">放弃原因</span>
+                <input
+                  aria-label="放弃原因"
+                  value={planForm.abandon_reason}
+                  onChange={event => updatePlan('abandon_reason', event.target.value)}
+                  className="input w-full"
                 />
               </label>
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                data-testid="detail-save-plan-button"
-                onClick={handleSavePlan}
-                disabled={actionLoading === 'plan'}
-                className="btn btn-primary"
-              >
-                {actionLoading === 'plan' ? '保存中...' : '保存跟进计划'}
-              </button>
-              <div className="text-sm text-gray-500">
-                {tracking ? '修改会直接同步到跟进列表。' : '首次保存会自动创建跟进记录。'}
+            <button
+              type="button"
+              data-testid="detail-save-plan-button"
+              onClick={() => {
+                void handleSavePlan()
+              }}
+              className="btn btn-primary mt-5"
+            >
+              保存跟进计划
+            </button>
+          </section>
+
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-950">机会信息</h2>
+            <div className="mt-4 grid gap-4">
+              {activity.description && (
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="text-sm text-slate-500">详细描述</div>
+                  <div
+                    data-testid="activity-description"
+                    className="mt-2 break-words text-sm leading-7 text-slate-700"
+                  >
+                    {activity.description}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm text-slate-500">机会类型</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {CATEGORY_LABELS[activity.category] ?? activity.category}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm text-slate-500">来源链接</div>
+                  <a
+                    href={activity.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-flex break-all text-sm font-medium text-primary-700 hover:text-primary-800"
+                  >
+                    {activity.url}
+                  </a>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm text-slate-500">奖金信息</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">{formatPrize(activity.prize)}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm text-slate-500">标签</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(activity.tags ?? []).length > 0 ? (
+                      activity.tags.map(tag => (
+                        <span key={tag} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-slate-500">暂无标签</span>
+                    )}
+                  </div>
+                </div>
+                {activity.organizer && (
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="text-sm text-slate-500">主办方</div>
+                    <div className="mt-1 text-sm font-medium text-slate-900">{activity.organizer}</div>
+                  </div>
+                )}
+                {activity.location && (
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="text-sm text-slate-500">地点</div>
+                    <div className="mt-1 text-sm font-medium text-slate-900">{activity.location}</div>
+                  </div>
+                )}
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm text-slate-500">创建时间</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">{formatDateTime(activity.created_at)}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm text-slate-500">更新时间</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">{formatDateTime(activity.updated_at)}</div>
+                </div>
               </div>
             </div>
           </section>
-
-          {activity.description && (
-            <section>
-              <h2 className="mb-2 text-lg font-semibold text-gray-900">活动描述</h2>
-              <p data-testid="activity-description" className="whitespace-pre-wrap break-words leading-7 text-gray-600">
-                {localizeAnalysisText(activity.description)}
-              </p>
-            </section>
-          )}
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {activity.prize && (
-              <div className="rounded-2xl bg-green-50 p-5">
-                <h3 className="mb-2 text-sm font-medium text-green-800">奖励信息</h3>
-                <div className="text-2xl font-bold text-green-600">
-                  {activity.prize.currency} {activity.prize.amount?.toLocaleString() || '待定'}
-                </div>
-                {activity.prize.description && (
-                  <p className="mt-2 text-sm text-green-700">{localizeAnalysisText(activity.prize.description)}</p>
-                )}
-              </div>
-            )}
-
-            {activity.dates && (
-              <div className="rounded-2xl bg-blue-50 p-5">
-                <h3 className="mb-2 text-sm font-medium text-blue-800">时间节点</h3>
-                <div className="space-y-2 text-sm">
-                  {activity.dates.start_date && (
-                    <div className="flex justify-between">
-                      <span className="text-blue-600">开始</span>
-                      <span className="text-blue-900">{formatDateOnly(activity.dates.start_date)}</span>
-                    </div>
-                  )}
-                  {activity.dates.end_date && (
-                    <div className="flex justify-between">
-                      <span className="text-blue-600">结束</span>
-                      <span className="text-blue-900">{formatDateOnly(activity.dates.end_date)}</span>
-                    </div>
-                  )}
-                  {deadline && (
-                    <div className="flex justify-between">
-                      <span className="text-blue-600">截止</span>
-                      <span className={expired ? 'text-red-600' : 'text-blue-900'}>{formatDateOnly(deadline)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <section className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
-            {activity.organizer && (
-              <div className="flex items-center gap-2">
-                <span className="text-gray-500">主办方：</span>
-                <span className="text-gray-900">{localizeAnalysisText(activity.organizer)}</span>
-              </div>
-            )}
-            {activity.location && (
-              <div className="flex items-center gap-2">
-                <span className="text-gray-500">地点：</span>
-                <span className="text-gray-900">{localizeAnalysisText(activity.location)}</span>
-              </div>
-            )}
-            {activity.tags.length > 0 && (
-              <div className="col-span-full flex items-center gap-2">
-                <span className="text-gray-500">标签：</span>
-                <div className="flex flex-wrap gap-1">
-                  {activity.tags.map(tag => (
-                    <span key={tag} className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {activity.updated_fields && activity.updated_fields.length > 0 && (
-              <div className="col-span-full flex items-center gap-2">
-                <span className="text-gray-500">最近变化：</span>
-                <div className="flex flex-wrap gap-1">
-                  {activity.updated_fields.map(field => (
-                    <span key={field} className="rounded bg-primary-50 px-2 py-0.5 text-xs text-primary-700">
-                      {FIELD_LABELS[field] || field}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-
-          {activity.timeline && activity.timeline.length > 0 && (
-            <section>
-              <h2 className="mb-3 text-lg font-semibold text-gray-900">时间线</h2>
-              <div className="space-y-3">
-                {activity.timeline.map(item => (
-                  <div key={item.key} className="flex items-center justify-between rounded-xl border border-gray-100 p-4">
-                    <div className="font-medium text-gray-900">{localizeAnalysisText(item.label)}</div>
-                    <div className="text-sm text-gray-500">{formatDateTime(item.timestamp)}</div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {activity.related_items && activity.related_items.length > 0 && (
-            <section>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">相关机会</h2>
-                <Link to="/activities" className="text-sm text-primary-600 hover:text-primary-700">
-                  去机会池
-                </Link>
-              </div>
-              <div className="space-y-3">
-                {activity.related_items.map(item => (
-                  <Link
-                    key={item.id}
-                    to={`/activities/${item.id}`}
-                    className="block rounded-xl border border-gray-100 p-4 transition-all hover:border-primary-200 hover:bg-primary-50/30"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-gray-900">{localizeAnalysisText(item.title)}</div>
-                        <div className="mt-1 text-sm text-gray-600">
-                          {localizeAnalysisText(item.summary || item.description) || '暂无摘要'}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        {item.score !== undefined && item.score !== null && (
-                          <span className="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-700">
-                            {item.score.toFixed(1)}
-                          </span>
-                        )}
-                        {item.trust_level && (
-                          <span className={`rounded-full px-2 py-1 font-medium ${TRUST_STYLES[item.trust_level]}`}>
-                            {getTrustLevelLabel(item.trust_level)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <div className="space-y-1 border-t border-gray-100 pt-4 text-xs text-gray-400">
-            <div>创建时间: {formatDateTime(activity.created_at)}</div>
-            <div>更新时间: {formatDateTime(activity.updated_at)}</div>
-          </div>
         </div>
       </div>
     </div>
