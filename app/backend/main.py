@@ -77,6 +77,7 @@ class VigilAI:
         app.state.agent_artifact_service = ArtifactService(app.state.agent_platform_repository)
         app.state.reward_opportunity_repository = RewardOpportunityRepository(self.data_manager.db_path)
         app.state.reward_opportunity_service = RewardOpportunityService(app.state.reward_opportunity_repository)
+        self.scheduler.reward_opportunity_service = app.state.reward_opportunity_service
         
         # 暂时禁用定时任务调度器，仅支持手动刷新
         # logger.info("Starting scheduler...")

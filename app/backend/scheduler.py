@@ -97,6 +97,7 @@ class TaskScheduler:
         self.scrapers: Dict[str, BaseScraper] = {}
         self._running = False
         self.analysis_run_manager = AnalysisRunManager(data_manager=data_manager)
+        self.reward_opportunity_service = None
         
         # 爬虫状态维护 (Validates: Requirements 13.5)
         self.scraper_states: Dict[str, ScraperState] = {}
@@ -361,6 +362,20 @@ class TaskScheduler:
             )
         
         logger.info(f"Registered {len(self.scrapers)} scraper jobs")
+
+    def register_reward_opportunity_jobs(self) -> None:
+        self.scheduler.add_job(
+            self.run_reward_source_sync,
+            "interval",
+            minutes=30,
+            id="reward-opportunity-source-sync",
+            replace_existing=True,
+        )
+
+    def run_reward_source_sync(self) -> None:
+        if not self.reward_opportunity_service:
+            return
+        self.reward_opportunity_service.get_overview()
     
     async def _run_scraper(self, source_id: str):
         """
@@ -431,6 +446,7 @@ class TaskScheduler:
         
         logger.info("Starting task scheduler...")
         self._register_jobs()
+        self.register_reward_opportunity_jobs()
         self.scheduler.start()
         self._running = True
         logger.info("Task scheduler started")

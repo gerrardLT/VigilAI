@@ -102,6 +102,15 @@ class TestTaskSchedulerInit:
         assert 'design_competition' in scheduler._scraper_classes
         assert 'coding_competition' in scheduler._scraper_classes
 
+    def test_scheduler_registers_reward_opportunity_job(self):
+        dm = create_mock_data_manager()
+        scheduler = TaskScheduler(dm)
+
+        scheduler.register_reward_opportunity_jobs()
+
+        names = [job.id for job in scheduler.scheduler.get_jobs()]
+        assert "reward-opportunity-source-sync" in names
+
 
 class TestDynamicScraperRegistration:
     """动态爬虫注册测试 - Validates: Requirements 13.4"""
