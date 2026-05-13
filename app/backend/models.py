@@ -13,6 +13,7 @@ from analysis.schemas import AnalysisSnapshot
 from pydantic import BaseModel, Field
 
 from agent_platform.models import AgentArtifact, AgentJob, AgentSession, AgentTurn
+from reward_opportunity.models import RewardInvestigationRun, RewardOpportunity
 
 
 class Category(str, Enum):
