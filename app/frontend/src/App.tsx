@@ -17,6 +17,9 @@ import SelectionOpportunitiesPage from './pages/selection/SelectionOpportunities
 import SelectionOpportunityDetailPage from './pages/selection/SelectionOpportunityDetailPage'
 import SelectionComparePage from './pages/selection/SelectionComparePage'
 import SelectionTrackingPage from './pages/selection/SelectionTrackingPage'
+import RewardWorkspacePage from './pages/rewards/RewardWorkspacePage'
+import RewardOpportunitiesPage from './pages/rewards/RewardOpportunitiesPage'
+import RewardOpportunityDetailPage from './pages/rewards/RewardOpportunityDetailPage'
 
 function App() {
   return (
@@ -40,6 +43,9 @@ function App() {
             <Route path="selection/opportunities/:id" element={<SelectionOpportunityDetailPage />} />
             <Route path="selection/compare" element={<SelectionComparePage />} />
             <Route path="selection/tracking" element={<SelectionTrackingPage />} />
+            <Route path="rewards/workspace" element={<RewardWorkspacePage />} />
+            <Route path="rewards/opportunities" element={<RewardOpportunitiesPage />} />
+            <Route path="rewards/opportunities/:id" element={<RewardOpportunityDetailPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

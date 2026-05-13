@@ -5,6 +5,7 @@ import { APP_NAME } from '../utils/constants'
 const navLinks = [
   { path: '/agent', label: '智能助手' },
   { path: '/selection/workspace', label: '选品' },
+  { path: '/rewards/workspace', label: '奖励' },
   { path: '/', label: '工作台' },
   { path: '/activities', label: '机会池' },
   { path: '/analysis/results', label: '分析结果' },

@@ -73,6 +73,13 @@ export type {
   ProductSelectionWorkspaceResponse,
 } from './productSelection'
 
+export type {
+  RewardOpportunityItem,
+  RewardOpportunityListResponse,
+  RewardOpportunityOperationsResponse,
+  RewardOpportunityOverview,
+} from './rewardOpportunity'
+
 export type Category =
   | 'hackathon'
   | 'data_competition'
