@@ -10,7 +10,7 @@ import sqlite3
 import uuid
 from typing import Any, Iterator
 
-from .models import RewardInvestigationAction, RewardInvestigationRun
+from .models import RewardInvestigationAction, RewardInvestigationRun, RewardOpportunity
 
 
 def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
@@ -321,3 +321,56 @@ class RewardOpportunityRepository:
         )
         return run.model_dump(mode="json")
 
+    def list_opportunities(self) -> list[RewardOpportunity]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, title, source_platform, source_url, ai_stage_2_label, ai_confidence,
+                       reward_type, reward_value_text, action_required, ai_summary, created_at
+                FROM reward_opportunities
+                ORDER BY created_at DESC, id DESC
+                """
+            ).fetchall()
+        return [
+            RewardOpportunity(
+                id=row["id"],
+                title=row["title"],
+                source_platform=row["source_platform"],
+                source_url=row["source_url"],
+                ai_stage_2_label=row["ai_stage_2_label"],
+                ai_confidence=row["ai_confidence"],
+                reward_type=row["reward_type"],
+                reward_value_text=row["reward_value_text"],
+                action_required=row["action_required"],
+                ai_summary=row["ai_summary"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    def get_opportunity(self, opportunity_id: str) -> RewardOpportunity | None:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT id, title, source_platform, source_url, ai_stage_2_label, ai_confidence,
+                       reward_type, reward_value_text, action_required, ai_summary, created_at
+                FROM reward_opportunities
+                WHERE id = ?
+                """,
+                (opportunity_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return RewardOpportunity(
+            id=row["id"],
+            title=row["title"],
+            source_platform=row["source_platform"],
+            source_url=row["source_url"],
+            ai_stage_2_label=row["ai_stage_2_label"],
+            ai_confidence=row["ai_confidence"],
+            reward_type=row["reward_type"],
+            reward_value_text=row["reward_value_text"],
+            action_required=row["action_required"],
+            ai_summary=row["ai_summary"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )

@@ -19,6 +19,8 @@ from agent_platform.tool_router import ToolRouter, build_default_registry
 from api import app
 from config import API_HOST, API_PORT, DATA_DIR, LOG_LEVEL, LOG_FORMAT
 from data_manager import DataManager
+from reward_opportunity.repository import RewardOpportunityRepository
+from reward_opportunity.service import RewardOpportunityService
 from scheduler import TaskScheduler
 
 # 确保数据目录存在（必须在配置日志之前）
@@ -73,6 +75,8 @@ class VigilAI:
         )
         app.state.agent_conversation_engine = ConversationEngine(app.state.agent_tool_router)
         app.state.agent_artifact_service = ArtifactService(app.state.agent_platform_repository)
+        app.state.reward_opportunity_repository = RewardOpportunityRepository(self.data_manager.db_path)
+        app.state.reward_opportunity_service = RewardOpportunityService(app.state.reward_opportunity_repository)
         
         # 暂时禁用定时任务调度器，仅支持手动刷新
         # logger.info("Starting scheduler...")

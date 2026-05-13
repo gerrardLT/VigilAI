@@ -27,6 +27,8 @@ from config import (
 )
 from product_selection.repository import ProductSelectionRepository
 from product_selection.service import ProductSelectionService
+from reward_opportunity.repository import RewardOpportunityRepository
+from reward_opportunity.service import RewardOpportunityService
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +262,28 @@ def _get_product_selection_service(request: Request) -> ProductSelectionService:
     if service is None or getattr(service, "repository", None) is not repository:
         service = ProductSelectionService(repository=repository)
         request.app.state.product_selection_service = service
+    return service
+
+
+def _get_reward_opportunity_repository(request: Request) -> RewardOpportunityRepository:
+    repository = getattr(request.app.state, "reward_opportunity_repository", None)
+    data_manager = getattr(request.app.state, "data_manager", None)
+    if data_manager is None:
+        raise RuntimeError("Data manager is not initialized")
+
+    if repository is None or getattr(repository, "db_path", None) != data_manager.db_path:
+        repository = RewardOpportunityRepository(data_manager.db_path)
+        request.app.state.reward_opportunity_repository = repository
+
+    return repository
+
+
+def _get_reward_opportunity_service(request: Request) -> RewardOpportunityService:
+    repository = _get_reward_opportunity_repository(request)
+    service = getattr(request.app.state, "reward_opportunity_service", None)
+    if service is None or getattr(service, "repository", None) is not repository:
+        service = RewardOpportunityService(repository=repository)
+        request.app.state.reward_opportunity_service = service
     return service
 
 
@@ -499,6 +523,29 @@ async def delete_product_selection_tracking(request: Request, opportunity_id: st
 @app.get("/api/product-selection/workspace")
 async def get_product_selection_workspace(request: Request):
     return _get_product_selection_service(request).get_workspace()
+
+
+@app.get("/api/reward-opportunities/overview")
+async def get_reward_opportunity_overview(request: Request):
+    return _get_reward_opportunity_service(request).get_overview()
+
+
+@app.get("/api/reward-opportunities")
+async def list_reward_opportunities(request: Request):
+    return _get_reward_opportunity_service(request).list_opportunities()
+
+
+@app.get("/api/reward-opportunities/operations")
+async def get_reward_opportunity_operations(request: Request):
+    return _get_reward_opportunity_service(request).get_operations()
+
+
+@app.get("/api/reward-opportunities/{opportunity_id}")
+async def get_reward_opportunity_detail(request: Request, opportunity_id: str):
+    detail = _get_reward_opportunity_service(request).get_opportunity(opportunity_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Reward opportunity not found")
+    return detail
 
 
 @app.get("/api/activities")
