@@ -22,6 +22,8 @@ from agent_platform.tool_router import ToolRouter, build_default_registry
 from api import app
 from config import API_HOST, API_PORT, APP_SCHEDULER_ENABLED, DATA_DIR, LOG_FORMAT, LOG_LEVEL
 from data_manager import DataManager
+from reward_opportunity.repository import RewardOpportunityRepository
+from reward_opportunity.service import RewardOpportunityService
 from scheduler import TaskScheduler
 
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -69,6 +71,9 @@ class VigilAI:
         app.state.agent_artifact_service = ArtifactService(app.state.agent_platform_repository)
         app.state.agent_memory_service = MemoryService(app.state.agent_platform_repository)
         app.state.agent_reflection_service = ReflectionService(app.state.agent_platform_repository)
+        app.state.reward_opportunity_repository = RewardOpportunityRepository(self.data_manager.db_path)
+        app.state.reward_opportunity_service = RewardOpportunityService(app.state.reward_opportunity_repository)
+        self.scheduler.reward_opportunity_service = app.state.reward_opportunity_service
 
         if APP_SCHEDULER_ENABLED:
             logger.info("Starting scheduler...")

@@ -19,7 +19,7 @@ function useIsActivePath() {
     if (path === '/') {
       return location.pathname === path
     }
-    return location.pathname === path || location.pathname.startsWith(`${path}/`) || location.pathname.startsWith(`${path}?`)
+    return location.pathname === path || location.pathname.startsWith(`${path}/`)
   }
 }
 
@@ -29,11 +29,11 @@ export function DomainHeader({ brandLabel, brandTo, navLinks }: DomainHeaderProp
   return (
     <header className="border-b border-gray-200 bg-white shadow-sm">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link to={brandTo} aria-label={`${brandLabel} 首页`} className="flex items-center gap-2">
+        <Link to={brandTo} aria-label={`${brandLabel} home`} className="flex items-center gap-2">
           <span className="text-xl font-bold text-gray-900">{brandLabel}</span>
         </Link>
 
-        <nav aria-label={`${brandLabel} 导航`} className="hidden items-center gap-1 md:flex">
+        <nav aria-label={`${brandLabel} navigation`} className="hidden items-center gap-1 md:flex">
           {navLinks.map(link => (
             <Link
               key={link.path}
@@ -72,7 +72,7 @@ function MobileMenu({ brandLabel, navLinks }: Pick<DomainHeaderProps, 'brandLabe
     <div className="relative">
       <button
         type="button"
-        aria-label={isOpen ? `关闭${brandLabel}导航菜单` : `打开${brandLabel}导航菜单`}
+        aria-label={isOpen ? `Close ${brandLabel} navigation menu` : `Open ${brandLabel} navigation menu`}
         aria-expanded={isOpen}
         aria-controls={menuId}
         onClick={() => setIsOpen(current => !current)}
@@ -85,7 +85,7 @@ function MobileMenu({ brandLabel, navLinks }: Pick<DomainHeaderProps, 'brandLabe
       {isOpen ? (
         <nav
           id={menuId}
-          aria-label={`${brandLabel}移动端导航菜单`}
+          aria-label={`${brandLabel} mobile navigation`}
           className="absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-gray-200 bg-white py-2 shadow-lg"
         >
           {navLinks.map(link => (

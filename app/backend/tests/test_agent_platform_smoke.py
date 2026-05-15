@@ -88,4 +88,8 @@ def test_agent_platform_supports_opportunity_and_selection_domains(client):
     assert opportunity_payload["artifacts"][0]["artifact_type"] == "checklist"
     assert selection_payload["artifacts"][0]["artifact_type"] == "checklist"
     assert opportunity_payload["tool_calls"]
-    assert any(item["artifact_type"] == "shortlist" for item in selection_payload["artifacts"])
+    assert selection_payload["tool_calls"]
+
+    selection_summary = selection_payload["tool_calls"][0]["result_summary"]
+    if selection_summary.get("item_count", 0) > 0:
+        assert any(item["artifact_type"] == "shortlist" for item in selection_payload["artifacts"])

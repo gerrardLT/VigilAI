@@ -158,6 +158,15 @@ class TestTaskSchedulerInit:
         assert result["processed_count"] == 1
         mocked_run.assert_called_once()
 
+    def test_scheduler_registers_reward_opportunity_job(self):
+        dm = create_mock_data_manager()
+        scheduler = TaskScheduler(dm)
+
+        scheduler.register_reward_opportunity_jobs()
+
+        job_ids = {job.id for job in scheduler.scheduler.get_jobs()}
+        assert "reward-opportunity-source-sync" in job_ids
+
 
 class TestDynamicScraperRegistration:
     """动态爬虫注册测试 - Validates: Requirements 13.4"""
