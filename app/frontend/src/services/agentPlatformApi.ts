@@ -2,6 +2,7 @@ import { ApiError } from './api'
 import type {
   AgentArtifact,
   AgentSession,
+  AgentSessionContext,
   AgentSessionCreateRequest,
   AgentTurn,
   AgentTurnCreateRequest,
@@ -57,6 +58,10 @@ class AgentPlatformApiService {
 
   listArtifacts(sessionId: string): Promise<AgentArtifact[]> {
     return this.request<AgentArtifact[]>(`/api/agent/sessions/${sessionId}/artifacts`)
+  }
+
+  getSessionContext(sessionId: string): Promise<AgentSessionContext> {
+    return this.request<AgentSessionContext>(`/api/agent/sessions/${sessionId}/context`)
   }
 }
 

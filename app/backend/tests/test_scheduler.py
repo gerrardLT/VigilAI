@@ -5,6 +5,7 @@ VigilAI Scheduler单元测试和属性测试
 Validates: Requirements 13.1, 13.2, 13.4, 13.5, 11.5, 12.5, 15.1, 15.2
 """
 
+import asyncio
 import pytest
 from hypothesis import given, strategies as st, settings, assume
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -17,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scheduler import TaskScheduler, ScraperState
 from scrapers.base import BaseScraper
 from data_manager import DataManager
+from product_selection.service import ProductSelectionService
 
 
 class ConcreteTestScraper(BaseScraper):
@@ -101,6 +103,60 @@ class TestTaskSchedulerInit:
         assert 'government' in scheduler._scraper_classes
         assert 'design_competition' in scheduler._scraper_classes
         assert 'coding_competition' in scheduler._scraper_classes
+
+    def test_register_jobs_adds_selection_automation_when_enabled(self):
+        dm = create_mock_data_manager()
+        scheduler = TaskScheduler(dm)
+
+        with patch("scheduler.SELECTION_AUTOMATION_ENABLED", True), patch(
+            "scheduler.SELECTION_AUTOMATION_INTERVAL_MINUTES", 15
+        ), patch("scheduler.ANALYSIS_SCHEDULER_ENABLED", False):
+            scheduler._register_jobs()
+
+        job_ids = {job.id for job in scheduler.scheduler.get_jobs()}
+        assert "scheduled_product_selection_refresh" in job_ids
+
+    def test_register_jobs_adds_selection_operations_when_enabled(self):
+        dm = create_mock_data_manager()
+        scheduler = TaskScheduler(dm)
+
+        with patch("scheduler.SELECTION_OPERATIONS_ENABLED", True), patch(
+            "scheduler.SELECTION_OPERATIONS_INTERVAL_MINUTES", 30
+        ), patch("scheduler.ANALYSIS_SCHEDULER_ENABLED", False):
+            scheduler._register_jobs()
+
+        job_ids = {job.id for job in scheduler.scheduler.get_jobs()}
+        assert "scheduled_product_selection_operations" in job_ids
+
+    def test_run_scheduled_product_selection_refresh_executes_automation_cycle_when_enabled(self):
+        dm = create_mock_data_manager()
+        dm.db_path = ":memory:"
+        scheduler = TaskScheduler(dm)
+
+        with patch("scheduler.SELECTION_AUTOMATION_ENABLED", True), patch.object(
+            ProductSelectionService,
+            "run_automation_cycle",
+            return_value={"job": {"id": "job-1"}, "tracked_count": 1},
+        ) as mocked_run:
+            result = asyncio.run(scheduler.run_scheduled_product_selection_refresh())
+
+        assert result["tracked_count"] == 1
+        mocked_run.assert_called_once()
+
+    def test_run_scheduled_product_selection_operations_executes_cycle_when_enabled(self):
+        dm = create_mock_data_manager()
+        dm.db_path = ":memory:"
+        scheduler = TaskScheduler(dm)
+
+        with patch("scheduler.SELECTION_OPERATIONS_ENABLED", True), patch.object(
+            ProductSelectionService,
+            "run_operations_cycle",
+            return_value={"job": {"id": "job-ops-1"}, "processed_count": 1},
+        ) as mocked_run:
+            result = asyncio.run(scheduler.run_scheduled_product_selection_operations())
+
+        assert result["processed_count"] == 1
+        mocked_run.assert_called_once()
 
 
 class TestDynamicScraperRegistration:

@@ -1,17 +1,26 @@
 """
-Deterministic Taobao adapter for MVP product-selection research.
+Taobao adapter for product-selection research.
 """
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
+from config import SELECTION_LIVE_TAOBAO_SEARCH_URL
 
-class TaobaoAdapter:
+from .base import MarketplaceSearchAdapter
+
+
+class TaobaoAdapter(MarketplaceSearchAdapter):
     platform = "taobao"
+    supported_hosts = ("taobao.com", "tmall.com")
+    product_url_patterns = (
+        r"item\.taobao\.com/item\.htm",
+        r"detail\.tmall\.com/item\.htm",
+    )
+    search_url_template = SELECTION_LIVE_TAOBAO_SEARCH_URL
 
-    def search_products(self, query_text: str, *, query_type: str) -> list[dict[str, Any]]:
+    def _search_fallback_products(self, query_text: str, *, query_type: str) -> list[dict[str, Any]]:
         seed = self._seed(query_text)
         category_path = self._category_path(query_text)
         titles = [
@@ -61,14 +70,18 @@ class TaobaoAdapter:
                             "freshness": "fresh",
                             "reliability": 0.74,
                         },
+                        {
+                            "platform": self.platform,
+                            "signal_type": "data_source",
+                            "value_json": {"mode": "synthetic", "channel": "fallback"},
+                            "sample_size": 1,
+                            "freshness": "fresh",
+                            "reliability": 0.65,
+                        },
                     ],
                 }
             )
         return products
-
-    @staticmethod
-    def _seed(query_text: str) -> int:
-        return int(hashlib.md5(query_text.encode("utf-8")).hexdigest()[:6], 16) % 10000
 
     @staticmethod
     def _category_path(query_text: str) -> str:

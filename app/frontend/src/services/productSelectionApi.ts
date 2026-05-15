@@ -1,5 +1,11 @@
 import { ApiError } from './api'
 import type {
+  ProductSelectionAutomationRun,
+  ProductSelectionAutomationRunCreateRequest,
+  ProductSelectionAutomationRunResult,
+  ProductSelectionOperationsRun,
+  ProductSelectionOperationsRunCreateRequest,
+  ProductSelectionOperationsRunResult,
   ProductSelectionOpportunityDetail,
   ProductSelectionOpportunityFilters,
   ProductSelectionOpportunityListResponse,
@@ -119,6 +125,50 @@ class ProductSelectionApiService {
 
   getWorkspace(): Promise<ProductSelectionWorkspaceResponse> {
     return this.request<ProductSelectionWorkspaceResponse>('/api/product-selection/workspace')
+  }
+
+  createAutomationRun(
+    payload: ProductSelectionAutomationRunCreateRequest = {}
+  ): Promise<ProductSelectionAutomationRunResult> {
+    return this.request<ProductSelectionAutomationRunResult>(
+      '/api/product-selection/automation/runs',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    )
+  }
+
+  listAutomationRuns(limit?: number): Promise<ProductSelectionAutomationRun[]> {
+    return this.request<ProductSelectionAutomationRun[]>(
+      `/api/product-selection/automation/runs${this.buildQueryString({ limit })}`
+    )
+  }
+
+  getAutomationRun(jobId: string): Promise<ProductSelectionAutomationRun> {
+    return this.request<ProductSelectionAutomationRun>(`/api/product-selection/automation/runs/${jobId}`)
+  }
+
+  createOperationsRun(
+    payload: ProductSelectionOperationsRunCreateRequest = {}
+  ): Promise<ProductSelectionOperationsRunResult> {
+    return this.request<ProductSelectionOperationsRunResult>(
+      '/api/product-selection/operations/runs',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    )
+  }
+
+  listOperationsRuns(limit?: number): Promise<ProductSelectionOperationsRun[]> {
+    return this.request<ProductSelectionOperationsRun[]>(
+      `/api/product-selection/operations/runs${this.buildQueryString({ limit })}`
+    )
+  }
+
+  getOperationsRun(jobId: string): Promise<ProductSelectionOperationsRun> {
+    return this.request<ProductSelectionOperationsRun>(`/api/product-selection/operations/runs/${jobId}`)
   }
 }
 

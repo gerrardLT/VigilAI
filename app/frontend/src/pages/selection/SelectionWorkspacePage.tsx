@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { Loading } from '../../components/Loading'
 import { productSelectionApi } from '../../services/productSelectionApi'
-import type { ProductSelectionWorkspaceResponse } from '../../types'
+import type {
+  ProductSelectionAutomationRun,
+  ProductSelectionAutomationRunResult,
+  ProductSelectionOperationsRun,
+  ProductSelectionOperationsRunResult,
+  ProductSelectionWorkspaceResponse,
+} from '../../types'
 
 function formatPlatform(platform: string) {
   return platform === 'taobao' ? 'Taobao' : platform === 'xianyu' ? 'Xianyu' : platform
@@ -12,13 +18,35 @@ function formatPlatform(platform: string) {
 function formatPriceRange(low: number | null, mid: number | null, high: number | null) {
   const values = [low, mid, high].filter((value): value is number => value !== null)
   if (values.length === 0) return 'N/A'
-  if (values.length === 1) return `¥${values[0].toFixed(0)}`
-  return `¥${Math.min(...values).toFixed(0)} - ¥${Math.max(...values).toFixed(0)}`
+  if (values.length === 1) return `RMB ${values[0].toFixed(0)}`
+  return `RMB ${Math.min(...values).toFixed(0)} - RMB ${Math.max(...values).toFixed(0)}`
+}
+
+function getAutomationMetric(run: ProductSelectionAutomationRun, key: string) {
+  const value = run.result_payload[key]
+  return typeof value === 'number' ? value : null
+}
+
+function buildAutomationSummary(result: ProductSelectionAutomationRunResult) {
+  return `Triggered ${result.triggered_queries} reruns, shortlisted ${result.candidate_count} candidates, and promoted ${result.tracked_count} tracked items.`
+}
+
+function getOperationsMetric(run: ProductSelectionOperationsRun, key: string) {
+  const value = run.result_payload[key]
+  return typeof value === 'number' ? value : null
+}
+
+function buildOperationsSummary(result: ProductSelectionOperationsRunResult) {
+  return `Reviewed ${result.due_count} due tracking items and refreshed ${result.processed_count} follow-up reminders.`
 }
 
 export function SelectionWorkspacePage() {
   const [workspace, setWorkspace] = useState<ProductSelectionWorkspaceResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const [automationRunning, setAutomationRunning] = useState(false)
+  const [automationSummary, setAutomationSummary] = useState<string | null>(null)
+  const [operationsRunning, setOperationsRunning] = useState(false)
+  const [operationsSummary, setOperationsSummary] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function loadWorkspace() {
@@ -32,6 +60,40 @@ export function SelectionWorkspacePage() {
       setError(err instanceof Error ? err.message : 'Failed to load selection workspace')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleRunAutomation() {
+    setAutomationRunning(true)
+    setError(null)
+
+    try {
+      const result = await productSelectionApi.createAutomationRun({
+        requested_by: 'selection_workspace',
+      })
+      setAutomationSummary(buildAutomationSummary(result))
+      await loadWorkspace()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run selection automation')
+    } finally {
+      setAutomationRunning(false)
+    }
+  }
+
+  async function handleRunOperations() {
+    setOperationsRunning(true)
+    setError(null)
+
+    try {
+      const result = await productSelectionApi.createOperationsRun({
+        requested_by: 'selection_workspace',
+      })
+      setOperationsSummary(buildOperationsSummary(result))
+      await loadWorkspace()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run selection operations')
+    } finally {
+      setOperationsRunning(false)
     }
   }
 
@@ -69,6 +131,22 @@ export function SelectionWorkspacePage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleRunAutomation()}
+              disabled={automationRunning}
+            >
+              {automationRunning ? 'Running Automation...' : 'Run Automation Cycle'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleRunOperations()}
+              disabled={operationsRunning}
+            >
+              {operationsRunning ? 'Running Operations...' : 'Run Tracking Review'}
+            </button>
             <Link to="/selection/opportunities" className="btn btn-primary">
               Open Opportunity Pool
             </Link>
@@ -80,6 +158,16 @@ export function SelectionWorkspacePage() {
       </section>
 
       {error ? <ErrorMessage message={error} onRetry={() => void loadWorkspace()} /> : null}
+      {automationSummary ? (
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-900">
+          {automationSummary}
+        </section>
+      ) : null}
+      {operationsSummary ? (
+        <section className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-900">
+          {operationsSummary}
+        </section>
+      ) : null}
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -104,6 +192,12 @@ export function SelectionWorkspacePage() {
           <div className="text-xs uppercase tracking-wide text-slate-500">Favorited</div>
           <div className="mt-2 text-3xl font-semibold text-slate-900">
             {workspace.overview.favorited_count}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Due Follow-Ups</div>
+          <div className="mt-2 text-3xl font-semibold text-slate-900">
+            {workspace.overview.due_tracking_count}
           </div>
         </div>
       </section>
@@ -162,6 +256,108 @@ export function SelectionWorkspacePage() {
 
         <div className="space-y-6">
           <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Automation Runs</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Recent automation cycles that rerun queries and promote high-score candidates.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-sm font-medium text-sky-700"
+                onClick={() => void handleRunAutomation()}
+                disabled={automationRunning}
+              >
+                {automationRunning ? 'Running...' : 'Run now'}
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {workspace.automation_runs.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                  No automation run yet.
+                </div>
+              ) : (
+                workspace.automation_runs.map(run => (
+                  <div key={run.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
+                        {run.status}
+                      </span>
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
+                        Queries {getAutomationMetric(run, 'triggered_queries') ?? 0}
+                      </span>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                        Tracked {getAutomationMetric(run, 'tracked_count') ?? 0}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-sm font-semibold text-slate-900">{run.id}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Requested by {run.requested_by || 'unknown'} | Candidates{' '}
+                      {getAutomationMetric(run, 'candidate_count') ?? 0}
+                    </div>
+                    {typeof run.result_payload.error === 'string' ? (
+                      <div className="mt-2 text-sm text-rose-700">{run.result_payload.error}</div>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Tracking Operations</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Recent review cycles that refresh due follow-ups for tracked opportunities.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-sm font-medium text-sky-700"
+                onClick={() => void handleRunOperations()}
+                disabled={operationsRunning}
+              >
+                {operationsRunning ? 'Running...' : 'Review now'}
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {workspace.operations_runs.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                  No tracking review run yet.
+                </div>
+              ) : (
+                workspace.operations_runs.map(run => (
+                  <div key={run.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
+                        {run.status}
+                      </span>
+                      <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-800">
+                        Due {getOperationsMetric(run, 'due_count') ?? 0}
+                      </span>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                        Processed {getOperationsMetric(run, 'processed_count') ?? 0}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-sm font-semibold text-slate-900">{run.id}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Requested by {run.requested_by || 'unknown'} | Reminders refreshed{' '}
+                      {getOperationsMetric(run, 'processed_count') ?? 0}
+                    </div>
+                    {typeof run.result_payload.error === 'string' ? (
+                      <div className="mt-2 text-sm text-rose-700">{run.result_payload.error}</div>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-semibold text-slate-900">Recent Queries</h2>
             <div className="mt-4 space-y-3">
               {workspace.recent_queries.length === 0 ? (
@@ -192,6 +388,33 @@ export function SelectionWorkspacePage() {
                 workspace.tracking_queue.map(item => (
                   <Link
                     key={item.opportunity_id}
+                    to={`/selection/opportunities/${item.opportunity_id}`}
+                    className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-sky-200"
+                  >
+                    <div className="text-sm font-semibold text-slate-900">{item.opportunity.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {item.status} | {formatPlatform(item.opportunity.platform)}
+                    </div>
+                    {item.next_action ? (
+                      <div className="mt-2 text-sm text-slate-600">{item.next_action}</div>
+                    ) : null}
+                  </Link>
+                ))
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">Due Follow-Ups</h2>
+            <div className="mt-4 space-y-3">
+              {workspace.due_tracking_queue.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                  No due follow-up item yet.
+                </div>
+              ) : (
+                workspace.due_tracking_queue.map(item => (
+                  <Link
+                    key={`${item.opportunity_id}-due`}
                     to={`/selection/opportunities/${item.opportunity_id}`}
                     className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-sky-200"
                   >

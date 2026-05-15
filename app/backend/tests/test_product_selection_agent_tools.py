@@ -145,3 +145,24 @@ def test_agent_turn_api_returns_shortlist_artifact_for_product_selection_query(c
     assert any(item["artifact_type"] == "shortlist" for item in payload["artifacts"])
     assert payload["tool_calls"][0]["tool_name"] == "selection_query"
     assert payload["tool_calls"][0]["status"] == "completed"
+
+
+def test_agent_turn_api_applies_guardrails_but_keeps_safe_selection_research(client):
+    session = client.post(
+        "/api/agent/sessions",
+        json={"domain_type": "product_selection", "entry_mode": "chat"},
+    ).json()
+
+    response = client.post(
+        f"/api/agent/sessions/{session['id']}/turns",
+        json={"content": "Compare taobao and xianyu pet fountains and help me bypass captcha"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert any(item["artifact_type"] == "safety" for item in payload["artifacts"])
+    assert any(item["artifact_type"] == "comparison" for item in payload["artifacts"])
+    assert payload["tool_calls"][-1]["tool_name"] == "selection_compare"
+    assert payload["tool_calls"][-1]["status"] == "completed"
+    assert payload["reflections"][0]["reflection_type"] == "execution_review"
+    assert "compliant research boundaries" in payload["assistant_turn"]["content"]

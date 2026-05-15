@@ -1,17 +1,31 @@
 """
-Deterministic Xianyu adapter for MVP product-selection research.
+Xianyu adapter for product-selection research.
 """
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
+from config import SELECTION_LIVE_XIANYU_SEARCH_URL
 
-class XianyuAdapter:
+from .base import MarketplaceSearchAdapter
+
+
+class XianyuAdapter(MarketplaceSearchAdapter):
     platform = "xianyu"
+    supported_hosts = ("goofish.com", "2.taobao.com")
+    product_url_patterns = (
+        r"goofish\.com/.*/item",
+        r"goofish\.com/item",
+        r"2\.taobao\.com/item\.htm",
+    )
+    search_url_template = SELECTION_LIVE_XIANYU_SEARCH_URL
 
-    def search_products(self, query_text: str, *, query_type: str) -> list[dict[str, Any]]:
+    @staticmethod
+    def _seed(value: str) -> int:
+        return MarketplaceSearchAdapter._seed(f"xianyu:{value}")
+
+    def _search_fallback_products(self, query_text: str, *, query_type: str) -> list[dict[str, Any]]:
         seed = self._seed(query_text)
         category_path = self._category_path(query_text)
         titles = [
@@ -61,14 +75,18 @@ class XianyuAdapter:
                             "freshness": "fresh",
                             "reliability": 0.7,
                         },
+                        {
+                            "platform": self.platform,
+                            "signal_type": "data_source",
+                            "value_json": {"mode": "synthetic", "channel": "fallback"},
+                            "sample_size": 1,
+                            "freshness": "fresh",
+                            "reliability": 0.6,
+                        },
                     ],
                 }
             )
         return products
-
-    @staticmethod
-    def _seed(query_text: str) -> int:
-        return int(hashlib.md5(("xianyu:" + query_text).encode("utf-8")).hexdigest()[:6], 16) % 10000
 
     @staticmethod
     def _category_path(query_text: str) -> str:

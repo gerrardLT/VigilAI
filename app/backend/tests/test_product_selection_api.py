@@ -5,6 +5,7 @@ Product-selection API tests.
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 import uuid
 
@@ -134,3 +135,81 @@ def test_workspace_and_tracking_list_summarize_selection_state(client):
     assert workspace_payload["overview"]["tracked_count"] == 1
     assert workspace_payload["overview"]["favorited_count"] == 1
     assert workspace_payload["top_opportunities"]
+
+
+def test_product_selection_automation_run_endpoints_create_and_list_runs(client):
+    client.post(
+        "/api/product-selection/research-jobs",
+        json={
+            "query_type": "keyword",
+            "query_text": "宠物饮水机",
+            "platform_scope": "both",
+        },
+    )
+
+    create_response = client.post(
+        "/api/product-selection/automation/runs",
+        json={
+            "query_limit": 1,
+            "max_tracked_items": 2,
+            "min_opportunity_score": 0,
+            "min_confidence_score": 0,
+            "requested_by": "manual",
+        },
+    )
+    assert create_response.status_code == 200
+    payload = create_response.json()
+    assert payload["job"]["job_type"] == "selection_automation"
+    assert payload["tracked_count"] >= 1
+
+    list_response = client.get("/api/product-selection/automation/runs")
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["id"] == payload["job"]["id"]
+
+    detail_response = client.get(f"/api/product-selection/automation/runs/{payload['job']['id']}")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["result_payload"]["tracked_count"] == payload["tracked_count"]
+
+
+def test_product_selection_operations_run_endpoints_process_due_tracking_items(client):
+    job_payload = create_research_job(client, query_text="desk fan")
+    opportunity_id = job_payload["items"][0]["id"]
+
+    tracking_response = client.post(
+        f"/api/product-selection/tracking/{opportunity_id}",
+        json={"status": "tracking", "next_action": "Review supply stability"},
+    )
+    assert tracking_response.status_code == 200
+
+    conn = sqlite3.connect(app.state.data_manager.db_path)
+    try:
+        conn.execute(
+            "UPDATE selection_tracking_items SET remind_at = ? WHERE opportunity_id = ?",
+            ("2024-01-01T00:00:00+00:00", opportunity_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    create_response = client.post(
+        "/api/product-selection/operations/runs",
+        json={
+            "max_items": 2,
+            "stale_after_hours": 48,
+            "remind_after_hours": 12,
+            "requested_by": "manual",
+        },
+    )
+    assert create_response.status_code == 200
+    payload = create_response.json()
+    assert payload["job"]["job_type"] == "selection_tracking_ops"
+    assert payload["processed_count"] == 1
+    assert payload["processed_items"][0]["follow_up_reason"] == "reminder_due"
+
+    list_response = client.get("/api/product-selection/operations/runs")
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["id"] == payload["job"]["id"]
+
+    detail_response = client.get(f"/api/product-selection/operations/runs/{payload['job']['id']}")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["result_payload"]["processed_count"] == payload["processed_count"]

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, Field
+
 if TYPE_CHECKING:
     from analysis.run_manager import AnalysisRunManager
     from data_manager import DataManager
@@ -56,6 +58,16 @@ _SELECTION_TAOBAO_KEYWORDS = ("taobao", "\u6dd8\u5b9d")
 _SELECTION_XIANYU_KEYWORDS = ("xianyu", "\u95f2\u9c7c")
 
 
+class ToolSelection(BaseModel):
+    tool_name: str
+    intent: str
+    rationale: str
+    priority: int = 1
+    stage: str = "analysis"
+    access_mode: str = "read_only"
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
 class ToolRouter:
     def __init__(
         self,
@@ -98,6 +110,79 @@ class ToolRouter:
             ordered_tools.append("opportunity_next_action")
 
         return ordered_tools or ["opportunity_search"]
+
+    def explain_selection(
+        self,
+        *,
+        domain_type: str,
+        user_message: str,
+        tool_names: list[str],
+    ) -> list[ToolSelection]:
+        normalized_message = (user_message or "").lower()
+        selections: list[ToolSelection] = []
+
+        for priority, tool_name in enumerate(tool_names, start=1):
+            selections.append(
+                ToolSelection(
+                    tool_name=tool_name,
+                    intent=self._infer_intent(tool_name),
+                    rationale=self._infer_rationale(
+                        domain_type=domain_type,
+                        normalized_message=normalized_message,
+                        tool_name=tool_name,
+                    ),
+                    priority=priority,
+                    stage=self._infer_stage(tool_name),
+                    access_mode="read_only",
+                    metadata={"domain_type": domain_type},
+                )
+            )
+
+        return selections
+
+    @staticmethod
+    def _infer_intent(tool_name: str) -> str:
+        intent_map = {
+            "opportunity_search": "discovery",
+            "opportunity_explain": "assessment",
+            "opportunity_next_action": "workflow",
+            "selection_query": "candidate_generation",
+            "selection_compare": "cross_platform_comparison",
+            "general_reasoning": "general_reasoning",
+        }
+        return intent_map.get(tool_name, "general_reasoning")
+
+    @staticmethod
+    def _infer_stage(tool_name: str) -> str:
+        if tool_name in {"opportunity_search", "selection_query"}:
+            return "discovery"
+        if tool_name in {"opportunity_explain", "selection_compare"}:
+            return "analysis"
+        if tool_name == "opportunity_next_action":
+            return "recommendation"
+        return "analysis"
+
+    def _infer_rationale(
+        self,
+        *,
+        domain_type: str,
+        normalized_message: str,
+        tool_name: str,
+    ) -> str:
+        if tool_name == "opportunity_search":
+            if any(token in normalized_message for token in _OPPORTUNITY_SEARCH_KEYWORDS):
+                return "The message asks for finding or filtering opportunity candidates."
+            return "Opportunity search is the default first step when no narrower tool signal is present."
+        if tool_name == "opportunity_explain":
+            return "The message asks for explanation, value assessment, or detailed reasoning."
+        if tool_name == "opportunity_next_action":
+            return "The message asks for follow-up workflow guidance or a next step."
+        if tool_name == "selection_compare":
+            return "The message asks for cross-platform comparison or references both Taobao and Xianyu."
+        if tool_name == "selection_query":
+            if domain_type == "product_selection":
+                return "The message asks for shortlist generation within the product-selection domain."
+        return "The message requires general reasoning support."
 
 
 def build_default_registry(
