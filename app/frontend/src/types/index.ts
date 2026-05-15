@@ -74,10 +74,24 @@ export type {
 } from './productSelection'
 
 export type {
+  RewardCrawlJobItem,
+  RewardOpportunityEvidenceItem,
   RewardOpportunityItem,
   RewardOpportunityListResponse,
   RewardOpportunityOperationsResponse,
   RewardOpportunityOverview,
+  RewardScoutSettingsResponse,
+  RewardSourcePauseResponse,
+  RewardSourceDiscoveryItem,
+  RewardSourceDiscoveryResponse,
+  RewardOpportunitySyncResponse,
+  RewardSourceAuditItem,
+  RewardSourceDetailResponse,
+  RewardSourceSchedule,
+  RewardDiscoveryIgnoreItem,
+  RewardHealthTrendPoint,
+  RewardSourceSyncResult,
+  RewardSourceFeedItem,
 } from './rewardOpportunity'
 
 export type Category =

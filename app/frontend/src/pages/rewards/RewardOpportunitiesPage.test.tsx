@@ -4,9 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RewardOpportunitiesPage from './RewardOpportunitiesPage'
 
 const rewardApiMocks = vi.hoisted(() => ({
-  getOverview: vi.fn(),
-  getOpportunities: vi.fn(),
-  getOperations: vi.fn(),
+  listOpportunities: vi.fn(),
 }))
 
 vi.mock('../../services/rewardOpportunityApi', () => ({
@@ -16,13 +14,7 @@ vi.mock('../../services/rewardOpportunityApi', () => ({
 describe('RewardOpportunitiesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    rewardApiMocks.getOverview.mockResolvedValue({
-      source_count: 1,
-      opportunity_count: 1,
-      candidate_count: 1,
-      high_value_count: 1,
-    })
-    rewardApiMocks.getOpportunities.mockResolvedValue({
+    rewardApiMocks.listOpportunities.mockResolvedValue({
       items: [
         {
           id: 'reward-1',
@@ -31,18 +23,15 @@ describe('RewardOpportunitiesPage', () => {
           source_url: 'https://example.com/post/1',
           ai_stage_2_label: '高价值',
           ai_confidence: 0.82,
+          ai_summary: 'Clear invite reward.',
           created_at: '2026-05-01T10:00:00Z',
         },
       ],
       total: 1,
     })
-    rewardApiMocks.getOperations.mockResolvedValue({
-      sources: [],
-      recent_jobs: [],
-    })
   })
 
-  it('renders reward opportunities table', async () => {
+  it('renders reward opportunities list', async () => {
     render(
       <MemoryRouter>
         <RewardOpportunitiesPage />
@@ -50,11 +39,12 @@ describe('RewardOpportunitiesPage', () => {
     )
 
     await waitFor(() => {
-      expect(rewardApiMocks.getOpportunities).toHaveBeenCalled()
+      expect(rewardApiMocks.listOpportunities).toHaveBeenCalled()
     })
 
     expect(await screen.findByTestId('reward-opportunities-page')).toBeInTheDocument()
     expect(screen.getByText('Invite friends and get $25')).toBeInTheDocument()
-    expect(screen.getByText('82%')).toBeInTheDocument()
+    expect(screen.getByText('置信度 82%')).toBeInTheDocument()
+    expect(screen.getAllByText('高价值').length).toBeGreaterThan(0)
   })
 })

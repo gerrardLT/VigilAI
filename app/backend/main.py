@@ -17,7 +17,7 @@ from agent_platform.conversation_engine import ConversationEngine
 from agent_platform.repository import AgentPlatformRepository
 from agent_platform.tool_router import ToolRouter, build_default_registry
 from api import app
-from config import API_HOST, API_PORT, DATA_DIR, LOG_LEVEL, LOG_FORMAT
+from config import API_HOST, API_PORT, DATA_DIR, ENABLE_REWARD_SCHEDULER, LOG_LEVEL, LOG_FORMAT
 from data_manager import DataManager
 from reward_opportunity.repository import RewardOpportunityRepository
 from reward_opportunity.service import RewardOpportunityService
@@ -79,10 +79,11 @@ class VigilAI:
         app.state.reward_opportunity_service = RewardOpportunityService(app.state.reward_opportunity_repository)
         self.scheduler.reward_opportunity_service = app.state.reward_opportunity_service
         
-        # 暂时禁用定时任务调度器，仅支持手动刷新
-        # logger.info("Starting scheduler...")
-        # self.scheduler.start()
-        logger.info("Scheduler disabled - manual refresh only")
+        if ENABLE_REWARD_SCHEDULER:
+            logger.info("Starting scheduler...")
+            self.scheduler.start()
+        else:
+            logger.info("Reward scheduler disabled via ENABLE_REWARD_SCHEDULER=false")
         
         # 不再自动触发初始数据采集，改为前端手动触发
         # asyncio.create_task(self._initial_refresh())

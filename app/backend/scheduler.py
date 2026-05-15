@@ -364,6 +364,9 @@ class TaskScheduler:
         logger.info(f"Registered {len(self.scrapers)} scraper jobs")
 
     def register_reward_opportunity_jobs(self) -> None:
+        existing = self.scheduler.get_job("reward-opportunity-source-sync")
+        if existing is not None:
+            self.scheduler.remove_job("reward-opportunity-source-sync")
         self.scheduler.add_job(
             self.run_reward_source_sync,
             "interval",
@@ -375,7 +378,7 @@ class TaskScheduler:
     def run_reward_source_sync(self) -> None:
         if not self.reward_opportunity_service:
             return
-        self.reward_opportunity_service.get_overview()
+        self.reward_opportunity_service.sync_sources()
     
     async def _run_scraper(self, source_id: str):
         """

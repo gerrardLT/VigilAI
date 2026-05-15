@@ -3,15 +3,9 @@ import { Link, useLocation } from 'react-router-dom'
 import { APP_NAME } from '../utils/constants'
 
 const navLinks = [
-  { path: '/agent', label: '智能助手' },
-  { path: '/selection/workspace', label: '选品' },
-  { path: '/rewards/workspace', label: '奖励' },
-  { path: '/', label: '工作台' },
-  { path: '/activities', label: '机会池' },
-  { path: '/analysis/results', label: '分析结果' },
-  { path: '/analysis/templates', label: '分析模板' },
-  { path: '/tracking', label: '跟进' },
-  { path: '/digests', label: '日报' },
+  { path: '/agent', label: '智能助手工作台' },
+  { path: '/rewards/overview', label: '奖励活动发现' },
+  { path: '/selection/workspace', label: '选品工作台' },
   { path: '/sources', label: '来源' },
 ]
 
@@ -19,9 +13,7 @@ function useIsActivePath() {
   const location = useLocation()
 
   return (path: string) => {
-    if (path === '/') {
-      return location.pathname === '/' || location.pathname === '/workspace'
-    }
+    if (path === '/agent' && location.pathname === '/') return true
     return location.pathname.startsWith(path)
   }
 }
@@ -32,12 +24,12 @@ export function Header() {
   return (
     <header className="border-b border-gray-200 bg-white shadow-sm">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link to="/" aria-label={`${APP_NAME} 首页`} className="flex items-center gap-2">
+        <Link to="/agent" aria-label={`${APP_NAME} home`} className="flex items-center gap-2">
           <span className="text-2xl">V</span>
           <span className="text-xl font-bold text-gray-900">{APP_NAME}</span>
         </Link>
 
-        <nav aria-label="主导航" className="hidden items-center gap-1 md:flex">
+        <nav aria-label="Primary navigation" className="hidden items-center gap-1 md:flex">
           {navLinks.map(link => (
             <Link
               key={link.path}
@@ -76,7 +68,7 @@ function MobileMenu() {
     <div className="relative">
       <button
         type="button"
-        aria-label={isOpen ? '关闭导航菜单' : '打开导航菜单'}
+        aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
         aria-expanded={isOpen}
         aria-controls={menuId}
         onClick={() => setIsOpen(current => !current)}
@@ -89,7 +81,7 @@ function MobileMenu() {
       {isOpen ? (
         <nav
           id={menuId}
-          aria-label="移动端导航"
+          aria-label="Mobile navigation"
           className="absolute right-0 top-full z-20 mt-2 w-52 rounded-lg border border-gray-200 bg-white py-2 shadow-lg"
         >
           {navLinks.map(link => (

@@ -24,7 +24,19 @@ describe('RewardOpportunityDetailPage', () => {
       reward_type: 'cash',
       reward_value_text: '$25',
       action_required: 'Invite three friends',
-      ai_summary: '奖励明确且动作明确',
+      ai_summary: 'Clear reward with action.',
+      ai_risk_flags: ['deadline_missing'],
+      ai_missing_evidence: ['rule_or_faq'],
+      evidence: [
+        {
+          id: 'ev-1',
+          opportunity_id: 'reward-1',
+          evidence_type: 'reward',
+          snippet: 'Receive a $25 cash reward.',
+          source_url: 'https://example.com/post/1',
+          created_at: '2026-05-01T10:00:00Z',
+        },
+      ],
       created_at: '2026-05-01T10:00:00Z',
     })
   })
@@ -45,5 +57,7 @@ describe('RewardOpportunityDetailPage', () => {
     expect(await screen.findByTestId('reward-opportunity-detail-page')).toBeInTheDocument()
     expect(screen.getByText('Invite friends and get $25')).toBeInTheDocument()
     expect(screen.getByText('Invite three friends')).toBeInTheDocument()
+    expect(screen.getByText('风险标记')).toBeInTheDocument()
+    expect(screen.getByText('deadline_missing')).toBeInTheDocument()
   })
 })

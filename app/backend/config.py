@@ -19,10 +19,21 @@ FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY", "")
 FIRECRAWL_ENABLED = bool(FIRECRAWL_API_KEY)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
+DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
 AI_FILTER_ENABLED = os.getenv("AI_FILTER_ENABLED", "false").lower() == "true"
 AI_FILTER_MODEL = os.getenv("AI_FILTER_MODEL", "gpt-4.1-mini")
 AI_FILTER_MAX_CANDIDATES = int(os.getenv("AI_FILTER_MAX_CANDIDATES", "200"))
 AI_FILTER_TIMEOUT_SECONDS = float(os.getenv("AI_FILTER_TIMEOUT_SECONDS", "30"))
+REWARD_AGENT_PROVIDER = os.getenv("REWARD_AGENT_PROVIDER", "openai").lower()
+REWARD_AGENT_MODEL = os.getenv("REWARD_AGENT_MODEL", "qwen-plus" if REWARD_AGENT_PROVIDER == "qwen" else AI_FILTER_MODEL)
+REWARD_AGENT_MODEL_REQUIRED = os.getenv("REWARD_AGENT_MODEL_REQUIRED", "true").lower() == "true"
+REWARD_AGENT_TIMEOUT_SECONDS = float(os.getenv("REWARD_AGENT_TIMEOUT_SECONDS", "30"))
+REWARD_AGENT_ALLOW_BASELINE_FALLBACK = os.getenv("REWARD_AGENT_ALLOW_BASELINE_FALLBACK", "false").lower() == "true"
+REWARD_AGENT_LANGSMITH_ENABLED = os.getenv("REWARD_AGENT_LANGSMITH_ENABLED", "false").lower() == "true"
+REWARD_AGENT_BROWSER_ENABLED = os.getenv("REWARD_AGENT_BROWSER_ENABLED", "true").lower() == "true"
+REWARD_AGENT_ALLOW_MOCK_DOCUMENTS = os.getenv("REWARD_AGENT_ALLOW_MOCK_DOCUMENTS", "false").lower() == "true"
+A2A_BASE_URL = os.getenv("A2A_BASE_URL", "http://localhost:8000")
 
 # 详情页抓取配置
 FETCH_DETAIL_CONTENT = os.getenv("FETCH_DETAIL_CONTENT", "false").lower() == "true"  # 是否抓取详情页内容
@@ -32,6 +43,7 @@ DETAIL_FETCH_DELAY = float(os.getenv("DETAIL_FETCH_DELAY", "2.0"))  # 详情页�
 # API配置
 API_HOST = "0.0.0.0"
 API_PORT = 8000
+ENABLE_REWARD_SCHEDULER = os.getenv("ENABLE_REWARD_SCHEDULER", "false").lower() == "true"
 
 # 数据目录
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")

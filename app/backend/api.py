@@ -1,4 +1,4 @@
-"""
+﻿"""
 REST API for VigilAI.
 """
 
@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 
 from agent_platform.artifact_service import ArtifactService
 from agent_platform.conversation_engine import ConversationEngine
@@ -16,19 +16,15 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from analysis.run_manager import AnalysisRunManager
-from analysis.review_service import ReviewService
-from analysis.opportunity_ai_filter import OpportunityAiFilterError, filter_opportunities_with_ai
 from config import (
-    AI_FILTER_MAX_CANDIDATES,
-    ANALYSIS_SCHEDULE_MAX_ITEMS,
-    ANALYSIS_SCHEDULE_STALE_HOURS,
+    A2A_BASE_URL,
     SOURCES_CONFIG,
 )
 from product_selection.repository import ProductSelectionRepository
 from product_selection.service import ProductSelectionService
 from reward_opportunity.repository import RewardOpportunityRepository
 from reward_opportunity.service import RewardOpportunityService
+from reward_opportunity.a2a import build_a2a_task_response, build_reward_agent_cards, get_reward_agent_card
 
 logger = logging.getLogger(__name__)
 
@@ -52,114 +48,45 @@ class RefreshResponse(BaseModel):
     message: str
 
 
-class AnalysisRunResponse(BaseModel):
-    success: bool
-    processed: int
-
-
-class AnalysisTemplatePreviewResponse(BaseModel):
-    template_id: str
-    total: int
-    passed: int
-    watch: int
-    rejected: int
-
-
-class AnalysisTemplatePreviewResultItemResponse(BaseModel):
-    activity_id: str
-    status: str
-    failed_layer: Optional[str] = None
-    summary_reasons: List[str] = []
-    layer_results: List[dict] = []
-
-
-class AnalysisTemplatePreviewResultsResponse(AnalysisTemplatePreviewResponse):
-    items: List[AnalysisTemplatePreviewResultItemResponse] = []
-
-
-class TrackingUpsertRequest(BaseModel):
-    is_favorited: Optional[bool] = None
-    status: Optional[str] = None
-    stage: Optional[str] = None
-    notes: Optional[str] = None
-    next_action: Optional[str] = None
-    remind_at: Optional[str] = None
-    block_reason: Optional[str] = None
-    abandon_reason: Optional[str] = None
-
-
-class DigestGenerateRequest(BaseModel):
-    digest_date: Optional[str] = None
-
-
-class DigestSendRequest(BaseModel):
-    send_channel: str = "manual"
-
-
-class DigestCandidateRequest(BaseModel):
-    digest_date: Optional[str] = None
-
-
-class AnalysisTemplateCreateRequest(BaseModel):
+class RewardSourceImportRequest(BaseModel):
     name: str
-    slug: Optional[str] = None
-    description: Optional[str] = None
-    is_default: bool = False
-    preference_profile: Optional[Literal["money_first", "balanced", "safety_first"]] = None
-    risk_tolerance: Optional[Literal["conservative", "balanced", "aggressive"]] = None
-    research_mode: Optional[Literal["off", "shallow", "layered", "deep"]] = None
-    tags: List[str] = []
-    layers: List[dict] = []
-    sort_fields: List[str] = []
+    entry_url: str
+    source_type: str = "web"
+    source_platform: Optional[str] = None
+    discovery_queries: List[str] = []
 
 
-class AnalysisTemplateDuplicateRequest(BaseModel):
-    name: str
+class RewardScoutSettingsRequest(BaseModel):
+    query_templates: List[str] = []
 
 
-class AnalysisTemplateUpdateRequest(BaseModel):
+class A2AMessageRequest(BaseModel):
+    id: str = "reward-task"
+    params: dict = {}
+
+
+class RewardSourceUpdateRequest(BaseModel):
     name: Optional[str] = None
-    slug: Optional[str] = None
-    description: Optional[str] = None
-    preference_profile: Optional[Literal["money_first", "balanced", "safety_first"]] = None
-    risk_tolerance: Optional[Literal["conservative", "balanced", "aggressive"]] = None
-    research_mode: Optional[Literal["off", "shallow", "layered", "deep"]] = None
-    tags: Optional[List[str]] = None
-    layers: Optional[List[dict]] = None
-    sort_fields: Optional[List[str]] = None
+    source_type: Optional[str] = None
+    source_platform: Optional[str] = None
+    entry_url: Optional[str] = None
+    merge_group_key: Optional[str] = None
+    preferred_entry_url: Optional[str] = None
 
 
-class AnalysisTemplatePreviewRequest(BaseModel):
-    id: Optional[str] = None
-    name: str
-    slug: Optional[str] = None
-    description: Optional[str] = None
-    preference_profile: Optional[Literal["money_first", "balanced", "safety_first"]] = None
-    risk_tolerance: Optional[Literal["conservative", "balanced", "aggressive"]] = None
-    research_mode: Optional[Literal["off", "shallow", "layered", "deep"]] = None
-    tags: List[str] = []
-    layers: List[dict] = []
-    sort_fields: List[str] = []
-    activity_ids: List[str] = []
+class RewardSourceScheduleRequest(BaseModel):
+    auto_sync_enabled: bool
+    sync_interval_minutes: int
 
 
-class AgentAnalysisJobCreateRequest(BaseModel):
-    scope_type: Literal["single", "batch"]
-    trigger_type: Literal["manual", "scheduled"]
-    activity_ids: List[str] = []
-    template_id: Optional[str] = None
-    requested_by: Optional[str] = None
+class RewardRecommendedActionRequest(BaseModel):
+    action: str
 
 
-class AgentAnalysisReviewRequest(BaseModel):
-    review_note: Optional[str] = None
-    reviewed_by: Optional[str] = None
-    edited_snapshot: Optional[dict] = None
-
-
-class OpportunityAiFilterRequest(BaseModel):
-    base_filters: Dict[str, Any] = {}
-    query: str
+class RewardDiscoveryIgnoreRequest(BaseModel):
+    dedupe_key: str
+    entry_url: str
+    reason: Optional[str] = None
 
 
 class AgentSessionCreateRequest(BaseModel):
@@ -531,13 +458,176 @@ async def get_reward_opportunity_overview(request: Request):
 
 
 @app.get("/api/reward-opportunities")
-async def list_reward_opportunities(request: Request):
-    return _get_reward_opportunity_service(request).list_opportunities()
+async def list_reward_opportunities(
+    request: Request,
+    classification: str | None = Query(None),
+    source_platform: str | None = Query(None),
+    opportunity_type: str | None = Query(None),
+    reward_type: str | None = Query(None),
+    evidence_status: str | None = Query(None),
+    sort_by: str = Query("created_at"),
+):
+    return _get_reward_opportunity_service(request).list_opportunities(
+        classification=classification,
+        source_platform=source_platform,
+        opportunity_type=opportunity_type,
+        reward_type=reward_type,
+        evidence_status=evidence_status,
+        sort_by=sort_by,
+    )
 
 
 @app.get("/api/reward-opportunities/operations")
 async def get_reward_opportunity_operations(request: Request):
     return _get_reward_opportunity_service(request).get_operations()
+
+
+@app.get("/api/reward-opportunities/discovery")
+async def get_reward_opportunity_source_discovery(request: Request):
+    return _get_reward_opportunity_service(request).get_source_discovery()
+
+
+@app.get("/api/reward-opportunities/discovery/settings")
+async def get_reward_opportunity_scout_settings(request: Request):
+    return _get_reward_opportunity_service(request).get_scout_settings()
+
+
+@app.put("/api/reward-opportunities/discovery/settings")
+async def update_reward_opportunity_scout_settings(request: Request, payload: RewardScoutSettingsRequest):
+    return _get_reward_opportunity_service(request).update_scout_settings(payload.query_templates)
+
+
+@app.post("/api/reward-opportunities/discovery/import")
+async def import_reward_opportunity_source(request: Request, payload: RewardSourceImportRequest):
+    try:
+        return _get_reward_opportunity_service(request).import_discovered_source(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/reward-opportunities/discovery/ignore")
+async def ignore_reward_opportunity_discovery_candidate(request: Request, payload: RewardDiscoveryIgnoreRequest):
+    try:
+        return _get_reward_opportunity_service(request).ignore_discovery_candidate(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/reward-opportunities/discovery/unignore")
+async def unignore_reward_opportunity_discovery_candidate(request: Request, payload: RewardDiscoveryIgnoreRequest):
+    try:
+        return _get_reward_opportunity_service(request).unignore_discovery_candidate(payload.dedupe_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/reward-opportunities/sync")
+async def sync_reward_opportunities(request: Request):
+    return _get_reward_opportunity_service(request).sync_sources()
+
+
+@app.post("/api/reward-opportunities/sync/{source_feed_id}")
+async def sync_single_reward_opportunity_source(request: Request, source_feed_id: str):
+    try:
+        return _get_reward_opportunity_service(request).sync_single_source(source_feed_id, mode="manual_single")
+    except ValueError as exc:
+        status_code = 400 if str(exc) == "source feed is paused" else 404
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+
+@app.post("/api/reward-opportunities/sources/{source_feed_id}/pause")
+async def pause_reward_opportunity_source(request: Request, source_feed_id: str):
+    try:
+        return _get_reward_opportunity_service(request).set_source_feed_paused(source_feed_id, True)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/reward-opportunities/sources/{source_feed_id}/resume")
+async def resume_reward_opportunity_source(request: Request, source_feed_id: str):
+    try:
+        return _get_reward_opportunity_service(request).set_source_feed_paused(source_feed_id, False)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/reward-opportunities/sources/{source_feed_id}")
+async def get_reward_opportunity_source_detail(request: Request, source_feed_id: str):
+    try:
+        return _get_reward_opportunity_service(request).get_source_detail(source_feed_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.put("/api/reward-opportunities/sources/{source_feed_id}")
+async def update_reward_opportunity_source(request: Request, source_feed_id: str, payload: RewardSourceUpdateRequest):
+    try:
+        return _get_reward_opportunity_service(request).update_source(source_feed_id, payload.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.put("/api/reward-opportunities/sources/{source_feed_id}/schedule")
+async def update_reward_opportunity_source_schedule(
+    request: Request, source_feed_id: str, payload: RewardSourceScheduleRequest
+):
+    try:
+        return _get_reward_opportunity_service(request).update_source_schedule(source_feed_id, payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/reward-opportunities/sources/{source_feed_id}/recommended-action")
+async def execute_reward_opportunity_source_action(
+    request: Request, source_feed_id: str, payload: RewardRecommendedActionRequest
+):
+    try:
+        return _get_reward_opportunity_service(request).execute_recommended_action(source_feed_id, payload.action)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/a2a")
+async def list_reward_a2a_agent_cards():
+    return {"agents": build_reward_agent_cards(A2A_BASE_URL)}
+
+
+@app.get("/a2a/{agent_name}/.well-known/agent-card.json")
+async def get_reward_a2a_agent_card(agent_name: str):
+    try:
+        return get_reward_agent_card(A2A_BASE_URL, agent_name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/a2a/{agent_name}")
+async def send_reward_a2a_message(request: Request, agent_name: str, payload: A2AMessageRequest):
+    from reward_opportunity.agent_loop import run_investigation_cycle
+    from reward_opportunity.browser_collector import BrowserCollectConstraints, browser_collect
+
+    data = payload.params.get("data") or payload.params
+    try:
+        if agent_name == "RewardScoutAgent":
+            result = _get_reward_opportunity_service(request).get_source_discovery()
+        elif agent_name == "RewardBrowserInvestigatorAgent":
+            result = browser_collect(
+                str(data["url"]),
+                str(data.get("objective") or "Collect reward opportunity evidence"),
+                constraints=BrowserCollectConstraints(allowed_domains=list(data.get("allowed_domains") or [])),
+            )
+        elif agent_name == "RewardVerdictAgent":
+            result = run_investigation_cycle(
+                candidate=dict(data.get("candidate") or {}),
+                evidence_bundle=dict(data.get("evidence_bundle") or {}),
+                max_rounds=int(data.get("max_rounds") or 0),
+            )
+        else:
+            raise KeyError(f"Unknown reward agent: {agent_name}")
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return build_a2a_task_response(payload.id, result)
 
 
 @app.get("/api/reward-opportunities/{opportunity_id}")
@@ -546,142 +636,6 @@ async def get_reward_opportunity_detail(request: Request, opportunity_id: str):
     if detail is None:
         raise HTTPException(status_code=404, detail="Reward opportunity not found")
     return detail
-
-
-@app.get("/api/activities")
-async def list_activities(
-    request: Request,
-    category: Optional[str] = Query(None),
-    source_id: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    analysis_status: Optional[str] = Query(None),
-    deadline_level: Optional[str] = Query(None),
-    trust_level: Optional[str] = Query(None),
-    prize_range: Optional[str] = Query(None),
-    solo_friendliness: Optional[str] = Query(None),
-    reward_clarity: Optional[str] = Query(None),
-    effort_level: Optional[str] = Query(None),
-    remote_mode: Optional[str] = Query(None),
-    is_tracking: Optional[bool] = Query(None),
-    is_favorited: Optional[bool] = Query(None),
-    sort_by: str = Query("created_at"),
-    sort_order: str = Query("desc"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-):
-    filters = {}
-    if category:
-        filters["category"] = category
-    if source_id:
-        filters["source_id"] = source_id
-    if status:
-        filters["status"] = status
-    if search:
-        filters["search"] = search
-    if analysis_status:
-        filters["analysis_status"] = analysis_status
-    if deadline_level:
-        filters["deadline_level"] = deadline_level
-    if trust_level:
-        filters["trust_level"] = trust_level
-    if prize_range:
-        filters["prize_range"] = prize_range
-    if solo_friendliness:
-        filters["solo_friendliness"] = solo_friendliness
-    if reward_clarity:
-        filters["reward_clarity"] = reward_clarity
-    if effort_level:
-        filters["effort_level"] = effort_level
-    if remote_mode:
-        filters["remote_mode"] = remote_mode
-    if is_tracking is not None:
-        filters["is_tracking"] = is_tracking
-    if is_favorited is not None:
-        filters["is_favorited"] = is_favorited
-    activities, total = request.app.state.data_manager.get_activities(
-        filters=filters,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        page=page,
-        page_size=page_size,
-    )
-    return {
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "items": [_serialize_model(activity) for activity in activities],
-    }
-
-
-@app.get("/api/activities/{activity_id}")
-async def get_activity(request: Request, activity_id: str):
-    detail = request.app.state.data_manager.get_activity_detail(activity_id)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Activity not found")
-    return detail
-
-
-@app.post("/api/activities/ai-filter")
-async def ai_filter_activities(request: Request, payload: OpportunityAiFilterRequest):
-    base_filters = dict(payload.base_filters or {})
-    query = payload.query.strip()
-    if not query:
-        raise HTTPException(status_code=400, detail="请输入 AI 精筛条件。")
-
-    sort_by = str(base_filters.pop("sort_by", "score"))
-    sort_order = str(base_filters.pop("sort_order", "desc"))
-    base_filters.pop("page", None)
-    base_filters.pop("page_size", None)
-
-    candidates, total = request.app.state.data_manager.get_activities(
-        filters=base_filters,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        page=1,
-        page_size=AI_FILTER_MAX_CANDIDATES + 1,
-    )
-
-    if total > AI_FILTER_MAX_CANDIDATES:
-        raise HTTPException(
-            status_code=400,
-            detail="当前候选机会过多，请先通过分类、截止时间、奖金区间等条件缩小范围后再进行 AI 精筛。",
-        )
-
-    try:
-        result = filter_opportunities_with_ai(candidates=candidates, query=query)
-    except ValueError as exc:
-        if "candidate limit" in str(exc):
-            raise HTTPException(
-                status_code=400,
-                detail="当前候选机会过多，请先通过分类、截止时间、奖金区间等条件缩小范围后再进行 AI 精筛。",
-            ) from exc
-        raise
-    except OpportunityAiFilterError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    candidates_by_id = {activity.id: activity for activity in candidates}
-    merged_items = []
-    for item in result["items"]:
-        activity = candidates_by_id.get(item["id"])
-        if activity is None:
-            continue
-        merged_items.append(
-            {
-                **_serialize_model(activity),
-                "ai_match_reason": item["ai_match_reason"],
-                "ai_match_confidence": item["ai_match_confidence"],
-                "uncertainties": item.get("uncertainties", []),
-            }
-        )
-
-    return {
-        **result,
-        "items": merged_items,
-        "matched_count": len(merged_items),
-        "discarded_count": max(total - len(merged_items), 0),
-        "candidate_count": total,
-    }
 
 
 @app.get("/api/sources")
@@ -718,325 +672,6 @@ async def refresh_all_sources(request: Request):
     return RefreshResponse(success=True, message="All sources refresh started")
 
 
-@app.get("/api/stats")
-async def get_stats(request: Request):
-    return request.app.state.data_manager.get_stats().model_dump(mode="json")
-
-
-@app.get("/api/analysis/templates")
-async def list_analysis_templates(request: Request):
-    return request.app.state.data_manager.get_analysis_templates()
-
-
-@app.get("/api/analysis/templates/default")
-async def get_default_analysis_template(request: Request):
-    template = request.app.state.data_manager.get_default_analysis_template()
-    if template is None:
-        raise HTTPException(status_code=404, detail="Default analysis template not found")
-    return template
-
-
-@app.post("/api/analysis/templates")
-async def create_analysis_template(request: Request, payload: AnalysisTemplateCreateRequest):
-    return request.app.state.data_manager.create_analysis_template(payload.model_dump(exclude_none=True))
-
-
-@app.post("/api/analysis/templates/{template_id}/duplicate")
-async def duplicate_analysis_template(
-    request: Request,
-    template_id: str,
-    payload: AnalysisTemplateDuplicateRequest,
-):
-    try:
-        return request.app.state.data_manager.duplicate_analysis_template(template_id, payload.name)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.post("/api/analysis/templates/{template_id}/activate")
-async def activate_analysis_template(request: Request, template_id: str):
-    try:
-        return request.app.state.data_manager.set_default_analysis_template(template_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.patch("/api/analysis/templates/{template_id}")
-async def update_analysis_template(
-    request: Request,
-    template_id: str,
-    payload: AnalysisTemplateUpdateRequest,
-):
-    try:
-        return request.app.state.data_manager.update_analysis_template(
-            template_id,
-            payload.model_dump(exclude_none=True),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.delete("/api/analysis/templates/{template_id}")
-async def delete_analysis_template(request: Request, template_id: str):
-    try:
-        request.app.state.data_manager.delete_analysis_template(template_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"success": True}
-
-
-@app.post("/api/analysis/templates/preview", response_model=AnalysisTemplatePreviewResponse)
-async def preview_analysis_template_payload(
-    request: Request,
-    payload: AnalysisTemplatePreviewRequest,
-):
-    return request.app.state.data_manager.preview_analysis_template_payload(
-        payload.model_dump(exclude_none=True)
-    )
-
-
-@app.post("/api/analysis/templates/preview/results", response_model=AnalysisTemplatePreviewResultsResponse)
-async def preview_analysis_template_payload_results(
-    request: Request,
-    payload: AnalysisTemplatePreviewRequest,
-):
-    return request.app.state.data_manager.preview_analysis_template_payload_results(
-        payload.model_dump(exclude_none=True)
-    )
-
-
-@app.get("/api/analysis/templates/{template_id}/preview", response_model=AnalysisTemplatePreviewResponse)
-async def preview_analysis_template(request: Request, template_id: str):
-    try:
-        return request.app.state.data_manager.preview_analysis_template(template_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.post("/api/analysis/run", response_model=AnalysisRunResponse)
-async def run_analysis_for_all_activities(request: Request):
-    processed = request.app.state.data_manager.rerun_analysis_for_all_activities()
-    return AnalysisRunResponse(success=True, processed=processed)
-
-
-@app.get("/api/analysis/results")
-async def list_analysis_results(
-    request: Request,
-    analysis_status: Optional[str] = Query(None),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-):
-    return request.app.state.data_manager.get_analysis_results(
-        analysis_status=analysis_status,
-        page=page,
-        page_size=page_size,
-    )
-
-
-@app.get("/api/analysis/results/{activity_id}")
-async def get_analysis_result_detail(request: Request, activity_id: str):
-    detail = request.app.state.data_manager.get_activity_detail(activity_id)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Analysis result not found")
-    return detail
-
-
-@app.post("/api/agent-analysis/jobs")
-async def create_agent_analysis_job(request: Request, payload: AgentAnalysisJobCreateRequest):
-    run_manager = getattr(request.app.state, "analysis_run_manager", None)
-    if run_manager is None or getattr(run_manager, "data_manager", None) is not request.app.state.data_manager:
-        run_manager = AnalysisRunManager(data_manager=request.app.state.data_manager)
-        request.app.state.analysis_run_manager = run_manager
-
-    try:
-        if payload.scope_type == "single" and payload.trigger_type == "manual":
-            if len(payload.activity_ids) != 1:
-                raise HTTPException(status_code=400, detail="Manual single-item jobs require exactly one activity id")
-            return run_manager.run_single_job(
-                activity_id=payload.activity_ids[0],
-                template_id=payload.template_id,
-                requested_by=payload.requested_by,
-                trigger_type=payload.trigger_type,
-            )
-        if payload.scope_type == "batch":
-            return run_manager.run_batch_job(
-                template_id=payload.template_id,
-                requested_by=payload.requested_by,
-                trigger_type=payload.trigger_type,
-                activity_ids=payload.activity_ids or None,
-                max_items=ANALYSIS_SCHEDULE_MAX_ITEMS,
-                stale_before_hours=ANALYSIS_SCHEDULE_STALE_HOURS,
-            )
-        raise HTTPException(status_code=400, detail="Unsupported agent-analysis job mode")
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.get("/api/agent-analysis/jobs")
-async def list_agent_analysis_jobs(request: Request):
-    return request.app.state.data_manager.list_analysis_jobs()
-
-
-@app.get("/api/agent-analysis/jobs/{job_id}")
-async def get_agent_analysis_job(request: Request, job_id: str):
-    detail = request.app.state.data_manager.get_analysis_job_detail(job_id)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Agent analysis job not found")
-    return detail
-
-
-@app.get("/api/agent-analysis/items/{item_id}")
-async def get_agent_analysis_item(request: Request, item_id: str):
-    detail = request.app.state.data_manager.get_analysis_item_detail(item_id)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Agent analysis item not found")
-    return detail
-
-
-@app.post("/api/agent-analysis/items/{item_id}/approve")
-async def approve_agent_analysis_item(
-    request: Request,
-    item_id: str,
-    payload: AgentAnalysisReviewRequest,
-):
-    review_service = getattr(request.app.state, "review_service", None)
-    if review_service is None or getattr(review_service, "data_manager", None) is not request.app.state.data_manager:
-        review_service = ReviewService(data_manager=request.app.state.data_manager)
-        request.app.state.review_service = review_service
-
-    try:
-        result = review_service.approve_item(
-            item_id,
-            review_note=payload.review_note,
-            reviewed_by=payload.reviewed_by,
-            edited_snapshot=payload.edited_snapshot,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return result.model_dump(mode="json")
-
-
-@app.post("/api/agent-analysis/items/{item_id}/reject")
-async def reject_agent_analysis_item(
-    request: Request,
-    item_id: str,
-    payload: AgentAnalysisReviewRequest,
-):
-    review_service = getattr(request.app.state, "review_service", None)
-    if review_service is None or getattr(review_service, "data_manager", None) is not request.app.state.data_manager:
-        review_service = ReviewService(data_manager=request.app.state.data_manager)
-        request.app.state.review_service = review_service
-
-    try:
-        result = review_service.reject_item(
-            item_id,
-            review_note=payload.review_note,
-            reviewed_by=payload.reviewed_by,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return result.model_dump(mode="json")
-
-
-@app.get("/api/workspace")
-async def get_workspace(request: Request):
-    return request.app.state.data_manager.get_workspace()
-
-
-@app.get("/api/tracking")
-async def get_tracking(request: Request, status: Optional[str] = Query(None)):
-    return request.app.state.data_manager.get_tracking_items(status=status)
-
-
-@app.post("/api/tracking/{activity_id}")
-async def create_tracking(request: Request, activity_id: str, payload: TrackingUpsertRequest):
-    try:
-        tracking = request.app.state.data_manager.upsert_tracking_item(activity_id, payload.model_dump(exclude_none=True))
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return tracking.model_dump()
-
-
-@app.patch("/api/tracking/{activity_id}")
-async def update_tracking(request: Request, activity_id: str, payload: TrackingUpsertRequest):
-    try:
-        tracking = request.app.state.data_manager.upsert_tracking_item(activity_id, payload.model_dump(exclude_none=True))
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return tracking.model_dump()
-
-
-@app.delete("/api/tracking/{activity_id}")
-async def delete_tracking(request: Request, activity_id: str):
-    deleted = request.app.state.data_manager.delete_tracking_item(activity_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Tracking item not found")
-    return {"success": True}
-
-
-@app.get("/api/digests")
-async def list_digests(request: Request):
-    return [_serialize_model(digest) for digest in request.app.state.data_manager.get_digests()]
-
-
-@app.get("/api/digests/candidates")
-async def list_digest_candidates(request: Request, digest_date: Optional[str] = Query(None)):
-    candidates = request.app.state.data_manager.get_digest_candidates(digest_date)
-    return [_serialize_model(candidate) for candidate in candidates]
-
-
-@app.post("/api/digests/candidates/{activity_id}")
-async def add_digest_candidate(
-    request: Request,
-    activity_id: str,
-    payload: Optional[DigestCandidateRequest] = None,
-):
-    try:
-        success = request.app.state.data_manager.add_digest_candidate(
-            activity_id,
-            payload.digest_date if payload else None,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {"success": success}
-
-
-@app.delete("/api/digests/candidates/{activity_id}")
-async def remove_digest_candidate(
-    request: Request,
-    activity_id: str,
-    digest_date: Optional[str] = Query(None),
-):
-    deleted = request.app.state.data_manager.remove_digest_candidate(activity_id, digest_date)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Digest candidate not found")
-    return {"success": True}
-
-
-@app.get("/api/digests/{digest_id}")
-async def get_digest(request: Request, digest_id: str):
-    digest = request.app.state.data_manager.get_digest_by_id(digest_id)
-    if digest is None:
-        raise HTTPException(status_code=404, detail="Digest not found")
-    return digest.model_dump()
-
-
-@app.post("/api/digests/generate")
-async def generate_digest(request: Request, payload: Optional[DigestGenerateRequest] = None):
-    digest_date = payload.digest_date if payload else None
-    digest = request.app.state.data_manager.generate_digest(digest_date)
-    return digest.model_dump()
-
-
-@app.post("/api/digests/{digest_id}/send")
-async def send_digest(request: Request, digest_id: str, payload: DigestSendRequest):
-    try:
-        digest = request.app.state.data_manager.mark_digest_sent(digest_id, payload.send_channel)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return digest.model_dump()
-
-
 @app.get("/api/categories")
 async def list_categories():
     from models import Category
@@ -1062,3 +697,5 @@ async def log_requests(request: Request, call_next):
         duration,
     )
     return response
+
+

@@ -1,25 +1,19 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import WorkspacePage from './pages/WorkspacePage'
 import AgentWorkspacePage from './pages/AgentWorkspacePage'
-import ActivitiesPage from './pages/ActivitiesPage'
-import ActivityDetailPage from './pages/ActivityDetailPage'
-import TrackingPage from './pages/TrackingPage'
-import DigestsPage from './pages/DigestsPage'
 import SourcesPage from './pages/SourcesPage'
-import DashboardPage from './pages/DashboardPage'
-import AnalysisTemplatesPage from './pages/AnalysisTemplatesPage'
-import AnalysisResultsPage from './pages/AnalysisResultsPage'
 import NotFoundPage from './pages/NotFoundPage'
 import SelectionWorkspacePage from './pages/selection/SelectionWorkspacePage'
 import SelectionOpportunitiesPage from './pages/selection/SelectionOpportunitiesPage'
 import SelectionOpportunityDetailPage from './pages/selection/SelectionOpportunityDetailPage'
 import SelectionComparePage from './pages/selection/SelectionComparePage'
 import SelectionTrackingPage from './pages/selection/SelectionTrackingPage'
-import RewardWorkspacePage from './pages/rewards/RewardWorkspacePage'
-import RewardOpportunitiesPage from './pages/rewards/RewardOpportunitiesPage'
-import RewardOpportunityDetailPage from './pages/rewards/RewardOpportunityDetailPage'
+import RewardOverviewPage from './pages/reward/RewardOverviewPage'
+import RewardOpportunitiesPage from './pages/reward/RewardOpportunitiesPage'
+import RewardOpportunityDetailPage from './pages/reward/RewardOpportunityDetailPage'
+import RewardOperationsPage from './pages/reward/RewardOperationsPage'
+import RewardSourceDetailPage from './pages/reward/RewardSourceDetailPage'
 
 function App() {
   return (
@@ -27,25 +21,22 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<WorkspacePage />} />
-            <Route path="workspace" element={<WorkspacePage />} />
+            <Route index element={<Navigate to="agent" replace />} />
             <Route path="agent" element={<AgentWorkspacePage />} />
-            <Route path="activities" element={<ActivitiesPage />} />
-            <Route path="activities/:id" element={<ActivityDetailPage />} />
-            <Route path="analysis/results" element={<AnalysisResultsPage />} />
-            <Route path="analysis/templates" element={<AnalysisTemplatesPage />} />
-            <Route path="tracking" element={<TrackingPage />} />
-            <Route path="digests" element={<DigestsPage />} />
             <Route path="sources" element={<SourcesPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="selection/workspace" element={<SelectionWorkspacePage />} />
             <Route path="selection/opportunities" element={<SelectionOpportunitiesPage />} />
             <Route path="selection/opportunities/:id" element={<SelectionOpportunityDetailPage />} />
             <Route path="selection/compare" element={<SelectionComparePage />} />
             <Route path="selection/tracking" element={<SelectionTrackingPage />} />
-            <Route path="rewards/workspace" element={<RewardWorkspacePage />} />
-            <Route path="rewards/opportunities" element={<RewardOpportunitiesPage />} />
-            <Route path="rewards/opportunities/:id" element={<RewardOpportunityDetailPage />} />
+            <Route path="rewards">
+              <Route index element={<Navigate to="overview" replace />} />
+              <Route path="overview" element={<RewardOverviewPage />} />
+              <Route path="opportunities" element={<RewardOpportunitiesPage />} />
+              <Route path="opportunities/:id" element={<RewardOpportunityDetailPage />} />
+              <Route path="operations" element={<RewardOperationsPage />} />
+              <Route path="sources/:id" element={<RewardSourceDetailPage />} />
+            </Route>
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

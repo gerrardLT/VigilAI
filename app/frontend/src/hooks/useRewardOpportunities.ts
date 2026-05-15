@@ -1,45 +1,42 @@
 import { useCallback, useEffect, useState } from 'react'
 import { rewardOpportunityApi } from '../services/rewardOpportunityApi'
-import type {
-  RewardOpportunityItem,
-  RewardOpportunityOperationsResponse,
-  RewardOpportunityOverview,
-} from '../types'
+import type { RewardOpportunityItem } from '../types'
 
 export function useRewardOpportunities() {
-  const [overview, setOverview] = useState<RewardOpportunityOverview | null>(null)
   const [items, setItems] = useState<RewardOpportunityItem[]>([])
-  const [operations, setOperations] = useState<RewardOpportunityOperationsResponse | null>(null)
+  const [total, setTotal] = useState(0)
+  const [filters, setFilters] = useState({
+    classification: '',
+    source_platform: '',
+    opportunity_type: '',
+    reward_type: '',
+    evidence_status: '',
+    sort_by: 'created_at',
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const loadWorkspace = useCallback(async () => {
+  const loadOpportunities = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [nextOverview, nextList, nextOperations] = await Promise.all([
-        rewardOpportunityApi.getOverview(),
-        rewardOpportunityApi.getOpportunities(),
-        rewardOpportunityApi.getOperations(),
-      ])
-      setOverview(nextOverview)
-      setItems(nextList.items)
-      setOperations(nextOperations)
+      const response = await rewardOpportunityApi.listOpportunities(filters)
+      setItems(response.items)
+      setTotal(response.total)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载奖励工作台失败')
-      setOverview(null)
+      setError(err instanceof Error ? err.message : '加载奖励活动机会库失败')
       setItems([])
-      setOperations(null)
+      setTotal(0)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filters])
 
   useEffect(() => {
-    void loadWorkspace()
-  }, [loadWorkspace])
+    void loadOpportunities()
+  }, [loadOpportunities])
 
-  return { overview, items, operations, loading, error, reload: loadWorkspace }
+  return { items, total, filters, setFilters, loading, error, reload: loadOpportunities }
 }
 
 export default useRewardOpportunities

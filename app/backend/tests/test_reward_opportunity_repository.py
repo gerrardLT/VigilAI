@@ -55,3 +55,39 @@ def test_repository_persists_candidate_and_investigation(tmp_path):
     assert loaded["candidate_id"] == candidate_id
     assert loaded["actions"][0]["action_type"] == "open_link"
 
+
+def test_repository_persists_agent_run_steps_tool_calls_and_evaluator_snapshot(tmp_path):
+    repository = RewardOpportunityRepository(str(tmp_path / "reward.db"))
+    repository.ensure_schema()
+
+    run_id = repository.create_agent_run({"thread_id": "thread-1", "status": "running", "metadata": {"mode": "test"}})
+    repository.append_agent_step(
+        run_id,
+        {
+            "step_name": "evaluate_baseline",
+            "status": "completed",
+            "input_payload": {"candidate_id": "candidate-1"},
+            "output_payload": {"needs_investigation": True},
+            "latency_ms": 12,
+        },
+    )
+    repository.append_tool_call(
+        run_id,
+        {
+            "tool_name": "search_web",
+            "status": "completed",
+            "input_payload": {"query": "reward"},
+            "output_payload": {"ok": True},
+            "latency_ms": 5,
+        },
+    )
+    repository.append_evaluator_snapshot(run_id, {"source": "baseline", "ai_confidence": 0.7})
+    repository.update_agent_run(run_id, {"status": "completed"})
+
+    loaded = repository.get_agent_run(run_id)
+
+    assert loaded["status"] == "completed"
+    assert loaded["thread_id"] == "thread-1"
+    assert loaded["steps"][0]["step_name"] == "evaluate_baseline"
+    assert loaded["tool_calls"][0]["tool_name"] == "search_web"
+    assert loaded["evaluator_snapshots"][0]["payload"]["source"] == "baseline"
