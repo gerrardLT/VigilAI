@@ -19,16 +19,31 @@ from dataclasses import dataclass, field
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from agent_platform.repository import AgentPlatformRepository
 from analysis.run_manager import AnalysisRunManager
 from config import (
+    ANALYSIS_SCHEDULER_INTERVAL_MINUTES,
     ANALYSIS_SCHEDULE_MAX_ITEMS,
     ANALYSIS_SCHEDULE_STALE_HOURS,
     ANALYSIS_SCHEDULER_ENABLED,
-    SOURCES_CONFIG,
     PRIORITY_INTERVALS,
+    SELECTION_AUTOMATION_ENABLED,
+    SELECTION_AUTOMATION_INTERVAL_MINUTES,
+    SELECTION_AUTOMATION_MAX_TRACKED_ITEMS,
+    SELECTION_AUTOMATION_MIN_CONFIDENCE_SCORE,
+    SELECTION_AUTOMATION_MIN_OPPORTUNITY_SCORE,
+    SELECTION_AUTOMATION_MAX_QUERIES,
+    SELECTION_OPERATIONS_ENABLED,
+    SELECTION_OPERATIONS_INTERVAL_MINUTES,
+    SELECTION_OPERATIONS_MAX_ITEMS,
+    SELECTION_OPERATIONS_STALE_HOURS,
+    SELECTION_OPERATIONS_REMIND_AFTER_HOURS,
+    SOURCES_CONFIG,
 )
 from data_manager import DataManager
 from models import SourceStatus
+from product_selection.repository import ProductSelectionRepository
+from product_selection.service import ProductSelectionService
 from scrapers import (
     BaseScraper, RssScraper, WebScraper, 
     Web3Scraper, KaggleScraper, TechMediaScraper,
@@ -360,6 +375,45 @@ class TaskScheduler:
                 f"(priority: {priority})"
             )
         
+        if ANALYSIS_SCHEDULER_ENABLED:
+            self.scheduler.add_job(
+                self.run_scheduled_agent_analysis,
+                trigger=IntervalTrigger(minutes=ANALYSIS_SCHEDULER_INTERVAL_MINUTES),
+                id="scheduled_agent_analysis",
+                name="Scheduled Agent Analysis",
+                replace_existing=True,
+            )
+            logger.info(
+                "Registered scheduled agent-analysis job with interval %sm",
+                ANALYSIS_SCHEDULER_INTERVAL_MINUTES,
+            )
+
+        if SELECTION_AUTOMATION_ENABLED:
+            self.scheduler.add_job(
+                self.run_scheduled_product_selection_refresh,
+                trigger=IntervalTrigger(minutes=SELECTION_AUTOMATION_INTERVAL_MINUTES),
+                id="scheduled_product_selection_refresh",
+                name="Scheduled Product Selection Refresh",
+                replace_existing=True,
+            )
+            logger.info(
+                "Registered scheduled product-selection refresh with interval %sm",
+                SELECTION_AUTOMATION_INTERVAL_MINUTES,
+            )
+
+        if SELECTION_OPERATIONS_ENABLED:
+            self.scheduler.add_job(
+                self.run_scheduled_product_selection_operations,
+                trigger=IntervalTrigger(minutes=SELECTION_OPERATIONS_INTERVAL_MINUTES),
+                id="scheduled_product_selection_operations",
+                name="Scheduled Product Selection Operations",
+                replace_existing=True,
+            )
+            logger.info(
+                "Registered scheduled product-selection operations with interval %sm",
+                SELECTION_OPERATIONS_INTERVAL_MINUTES,
+            )
+
         logger.info(f"Registered {len(self.scrapers)} scraper jobs")
     
     async def _run_scraper(self, source_id: str):
@@ -507,6 +561,43 @@ class TaskScheduler:
             trigger_type="scheduled",
             max_items=ANALYSIS_SCHEDULE_MAX_ITEMS,
             stale_before_hours=ANALYSIS_SCHEDULE_STALE_HOURS,
+        )
+
+    async def run_scheduled_product_selection_refresh(self):
+        """Replay recent product-selection research queries on a schedule."""
+        if not SELECTION_AUTOMATION_ENABLED:
+            logger.info("Scheduled product-selection automation is disabled by configuration")
+            return {"triggered": 0, "jobs": []}
+
+        repository = ProductSelectionRepository(self.data_manager.db_path)
+        service = ProductSelectionService(
+            repository=repository,
+            agent_repository=AgentPlatformRepository(self.data_manager.db_path),
+        )
+        return service.run_automation_cycle(
+            query_limit=SELECTION_AUTOMATION_MAX_QUERIES,
+            max_tracked_items=SELECTION_AUTOMATION_MAX_TRACKED_ITEMS,
+            min_opportunity_score=SELECTION_AUTOMATION_MIN_OPPORTUNITY_SCORE,
+            min_confidence_score=SELECTION_AUTOMATION_MIN_CONFIDENCE_SCORE,
+            requested_by="scheduler",
+        )
+
+    async def run_scheduled_product_selection_operations(self):
+        """Review tracked product-selection items and advance follow-up reminders."""
+        if not SELECTION_OPERATIONS_ENABLED:
+            logger.info("Scheduled product-selection operations are disabled by configuration")
+            return {"due_count": 0, "processed_count": 0, "processed_items": []}
+
+        repository = ProductSelectionRepository(self.data_manager.db_path)
+        service = ProductSelectionService(
+            repository=repository,
+            agent_repository=AgentPlatformRepository(self.data_manager.db_path),
+        )
+        return service.run_operations_cycle(
+            max_items=SELECTION_OPERATIONS_MAX_ITEMS,
+            stale_after_hours=SELECTION_OPERATIONS_STALE_HOURS,
+            remind_after_hours=SELECTION_OPERATIONS_REMIND_AFTER_HOURS,
+            requested_by="scheduler",
         )
     
     def get_job_count(self) -> int:

@@ -2,7 +2,6 @@ export type ProductSelectionQueryType = 'keyword' | 'category' | 'listing_url'
 export type ProductSelectionPlatformScope = 'taobao' | 'xianyu' | 'both'
 export type ProductSelectionJobStatus = 'running' | 'completed' | 'failed'
 export type ProductSelectionTrackingStatus = 'saved' | 'tracking' | 'done' | 'archived'
-export type ProductSelectionSourceMode = 'live' | 'fallback' | 'mixed' | 'failed'
 export type ProductSelectionSortBy =
   | 'opportunity_score'
   | 'confidence_score'
@@ -18,6 +17,48 @@ export interface ProductSelectionResearchJob {
   status: ProductSelectionJobStatus
   created_at: string
   updated_at: string
+}
+
+export interface ProductSelectionAutomationRun {
+  id: string
+  session_id: string | null
+  domain_type: string
+  job_type: string
+  status: ProductSelectionJobStatus
+  requested_by: string | null
+  input_payload: Record<string, unknown>
+  result_payload: Record<string, unknown>
+  created_at: string
+  updated_at: string
+  finished_at: string | null
+}
+
+export type ProductSelectionOperationsRun = ProductSelectionAutomationRun
+
+export interface ProductSelectionAutomationTrackedItem {
+  opportunity_id: string
+  title: string
+  platform: string
+  opportunity_score: number | null
+  confidence_score: number | null
+  tracking_status: string
+  next_action: string | null
+}
+
+export interface ProductSelectionAutomationReplayJob {
+  query_text: string
+  platform_scope: string
+  job_id: string
+  item_count: number
+}
+
+export interface ProductSelectionOperationsProcessedItem {
+  opportunity_id: string
+  title: string
+  platform: string
+  follow_up_reason: string
+  next_action: string | null
+  remind_at: string | null
 }
 
 export interface ProductSelectionPriceBand {
@@ -37,10 +78,6 @@ export interface ProductSelectionOpportunity {
   price_low: number | null
   price_mid: number | null
   price_high: number | null
-  sales_volume: number | null
-  seller_count: number | null
-  seller_type: string | null
-  seller_name: string | null
   demand_score: number
   competition_score: number
   price_fit_score: number
@@ -52,8 +89,6 @@ export interface ProductSelectionOpportunity {
   reason_blocks: string[]
   recommended_action: string | null
   source_urls: string[]
-  source_mode: ProductSelectionSourceMode
-  source_diagnostics: Record<string, unknown>
   snapshot_at: string
   created_at: string
   updated_at: string
@@ -88,58 +123,16 @@ export interface ProductSelectionTrackingItem extends ProductSelectionTrackingSt
   opportunity: ProductSelectionOpportunity
 }
 
-export interface ProductSelectionTrackingFilters {
-  status?: ProductSelectionTrackingStatus
-  source_mode?: Exclude<ProductSelectionSourceMode, 'mixed'> | ''
-  fallback_reason?: string
-}
-
 export interface ProductSelectionOpportunityDetail extends ProductSelectionOpportunity {
   signals: ProductSelectionSignal[]
   tracking: ProductSelectionTrackingState | null
   query: ProductSelectionResearchJob | null
-  source_summary?: ProductSelectionSourceSummary
-}
-
-export interface ProductSelectionSourceSummary {
-  overall_mode: ProductSelectionSourceMode
-  mode_counts: {
-    live: number
-    fallback: number
-  }
-  fallback_used: boolean
-  fallback_reasons: string[]
-  adapter_runs: Array<{
-    platform: string
-    mode: ProductSelectionSourceMode
-    diagnostics: Record<string, unknown>
-    item_count: number
-  }>
-  extraction_stats_summary: {
-    http_candidates_seen: number
-    platform_candidates_seen: number
-    accepted_candidates: number
-    accepted_with_price: number
-    accepted_without_price: number
-    rejected_non_listing_url: number
-    rejected_noise_title: number
-    rejected_query_miss: number
-    rejected_duplicate_url: number
-  }
-  seller_mix: {
-    enterprise: number
-    personal: number
-    unknown: number
-    with_sales_volume: number
-    with_seller_count: number
-  }
 }
 
 export interface ProductSelectionResearchJobResponse {
   job: ProductSelectionResearchJob
   total: number
   items: ProductSelectionOpportunity[]
-  source_summary: ProductSelectionSourceSummary
 }
 
 export interface ProductSelectionOpportunityListResponse {
@@ -147,7 +140,6 @@ export interface ProductSelectionOpportunityListResponse {
   page: number
   page_size: number
   items: ProductSelectionOpportunity[]
-  source_summary: ProductSelectionSourceSummary
 }
 
 export interface ProductSelectionWorkspaceOverview {
@@ -155,6 +147,7 @@ export interface ProductSelectionWorkspaceOverview {
   opportunity_count: number
   tracked_count: number
   favorited_count: number
+  due_tracking_count: number
 }
 
 export interface ProductSelectionWorkspacePlatformBreakdown {
@@ -167,20 +160,47 @@ export interface ProductSelectionWorkspaceResponse {
   recent_queries: ProductSelectionResearchJob[]
   top_opportunities: ProductSelectionOpportunity[]
   tracking_queue: ProductSelectionTrackingItem[]
+  due_tracking_queue: ProductSelectionTrackingItem[]
   platform_breakdown: ProductSelectionWorkspacePlatformBreakdown[]
-  source_summary: ProductSelectionSourceSummary
-  top_opportunities_source_summary: ProductSelectionSourceSummary
-  tracking_queue_source_summary: ProductSelectionSourceSummary
+  automation_runs: ProductSelectionAutomationRun[]
+  operations_runs: ProductSelectionOperationsRun[]
 }
 
 export interface ProductSelectionResearchJobCreateRequest {
   query_type: ProductSelectionQueryType
   query_text: string
   platform_scope: ProductSelectionPlatformScope
-  rendered_snapshot_html?: string
-  rendered_snapshot_path?: string
-  detail_snapshot_htmls?: string[]
-  detail_snapshot_manifest_path?: string
+}
+
+export interface ProductSelectionAutomationRunCreateRequest {
+  query_limit?: number
+  max_tracked_items?: number
+  min_opportunity_score?: number
+  min_confidence_score?: number
+  requested_by?: string
+}
+
+export interface ProductSelectionAutomationRunResult {
+  job: ProductSelectionAutomationRun
+  triggered_queries: number
+  rerun_jobs: ProductSelectionAutomationReplayJob[]
+  candidate_count: number
+  tracked_count: number
+  tracked_items: ProductSelectionAutomationTrackedItem[]
+}
+
+export interface ProductSelectionOperationsRunCreateRequest {
+  max_items?: number
+  stale_after_hours?: number
+  remind_after_hours?: number
+  requested_by?: string
+}
+
+export interface ProductSelectionOperationsRunResult {
+  job: ProductSelectionOperationsRun
+  due_count: number
+  processed_count: number
+  processed_items: ProductSelectionOperationsProcessedItem[]
 }
 
 export interface ProductSelectionOpportunityFilters {
@@ -188,8 +208,6 @@ export interface ProductSelectionOpportunityFilters {
   platform?: string
   search?: string
   risk_tag?: string
-  source_mode?: Exclude<ProductSelectionSourceMode, 'mixed'> | ''
-  fallback_reason?: string
   sort_by?: ProductSelectionSortBy
   sort_order?: 'asc' | 'desc'
   page?: number
