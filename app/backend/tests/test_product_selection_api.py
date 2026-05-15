@@ -173,6 +173,13 @@ def test_opportunity_detail_and_tracking_round_trip(client):
     assert refreshed_detail.json()["tracking"]["next_action"] == "Sample 20 competing SKUs."
 
 
+def test_missing_product_selection_opportunity_returns_localized_error(client):
+    response = client.get(f"/api/product-selection/opportunities/{uuid.uuid4().hex}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "选品机会不存在"
+
+
 def test_workspace_and_tracking_list_summarize_selection_state(client):
     job_payload = create_research_job(client, query_text="desk fan")
     tracked_id = job_payload["items"][0]["id"]

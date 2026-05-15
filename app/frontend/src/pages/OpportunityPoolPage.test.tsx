@@ -393,7 +393,7 @@ describe('Opportunity pool page', () => {
 
   it('renders the V2 opportunity pool and supports batch tracking/favorite actions', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )
@@ -430,7 +430,7 @@ describe('Opportunity pool page', () => {
 
   it('shows the active AI template and lets the user switch analysis status filters', () => {
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )
@@ -446,7 +446,7 @@ describe('Opportunity pool page', () => {
 
   it('applies temporary rule adjustments and refreshes the visible AI verdicts', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )
@@ -476,7 +476,7 @@ describe('Opportunity pool page', () => {
     vi.spyOn(window, 'prompt').mockReturnValue('Adjusted quick money')
 
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )
@@ -510,7 +510,7 @@ describe('Opportunity pool page', () => {
 
   it('allows switching the active template from the opportunity pool', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )
@@ -526,7 +526,7 @@ describe('Opportunity pool page', () => {
 
   it('shows the latest batch job banner and draft-only filters', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )
@@ -538,7 +538,7 @@ describe('Opportunity pool page', () => {
 
   it('supports batch approval from the opportunity pool', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )
@@ -557,7 +557,7 @@ describe('Opportunity pool page', () => {
 
   it('renders the new Chinese fixed filters and applies them', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )
@@ -579,7 +579,7 @@ describe('Opportunity pool page', () => {
 
   it('applies AI filtering and only renders matched opportunities', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities']}>
+      <MemoryRouter initialEntries={['/opportunity/activities']}>
         <ActivitiesPage />
       </MemoryRouter>
     )

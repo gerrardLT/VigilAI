@@ -4,25 +4,25 @@ import { describe, expect, it } from 'vitest'
 import { Header } from './Header'
 
 describe('Header', () => {
-  it('supports toggling the mobile menu with Chinese accessibility labels', () => {
+  it('supports toggling the mobile menu for the system-level entry nav', () => {
     render(
-      <MemoryRouter initialEntries={['/workspace']}>
+      <MemoryRouter initialEntries={['/opportunity/workspace']}>
         <Header />
       </MemoryRouter>
     )
 
-    const menuButton = screen.getByRole('button', { name: '打开导航菜单' })
+    const menuButton = screen.getByRole('button', { name: '打开VigilAI导航菜单' })
     expect(menuButton).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('navigation', { name: '移动端导航菜单' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'VigilAI移动端导航菜单' })).not.toBeInTheDocument()
 
     fireEvent.click(menuButton)
 
     expect(menuButton).toHaveAttribute('aria-expanded', 'true')
-    const mobileMenu = screen.getByRole('navigation', { name: '移动端导航菜单' })
-    expect(within(mobileMenu).getByRole('link', { name: '模板中心' })).toBeInTheDocument()
+    const mobileMenu = screen.getByRole('navigation', { name: 'VigilAI移动端导航菜单' })
+    expect(within(mobileMenu).getByRole('link', { name: '旧机会系统' })).toBeInTheDocument()
 
-    fireEvent.click(within(mobileMenu).getByRole('link', { name: '分析结果' }))
+    fireEvent.click(within(mobileMenu).getByRole('link', { name: 'Agent 平台' }))
 
-    expect(screen.queryByRole('navigation', { name: '移动端导航菜单' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'VigilAI移动端导航菜单' })).not.toBeInTheDocument()
   })
 })

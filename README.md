@@ -7,6 +7,13 @@ VigilAI is now structured as a shared agent platform with two bounded contexts:
 
 The system keeps the legacy opportunity workbench intact while introducing a unified `/agent` entry that can route work into either domain.
 
+Canonical structured routes now live under:
+
+- `/opportunity/*` for the legacy opportunity workbench
+- `/selection/*` for the product-selection workbench
+
+Legacy flat routes such as `/workspace` and `/activities` still exist as compatibility redirects, but they are no longer the canonical paths.
+
 ## Architecture Summary
 
 ### Backend
@@ -24,13 +31,17 @@ The system keeps the legacy opportunity workbench intact while introducing a uni
 
 ### Frontend
 
+- `/`
+  - system home
+- `/opportunity/*`
+  - structured opportunity workbench
 - `/agent`
   - shared agent workspace
   - domain switch between `opportunity` and `product_selection`
 - `/selection/*`
   - structured workbench for product-selection research
-- existing `/workspace`, `/activities`, `/tracking`, `/digests`, `/sources`, `/analysis/*`
-  - remain supported
+- legacy flat routes such as `/workspace`, `/activities`, `/tracking`, `/digests`, `/sources`, `/analysis/*`
+  - remain supported as redirects
 
 ## Compatibility Rules
 
@@ -63,6 +74,7 @@ The system keeps the legacy opportunity workbench intact while introducing a uni
 - `GET /api/activities`
 - `GET /api/activities/{activity_id}`
 - `POST /api/activities/ai-filter`
+- `GET /api/workspace`
 - `GET /api/tracking`
 - `POST /api/tracking/{activity_id}`
 - `PATCH /api/tracking/{activity_id}`
@@ -119,6 +131,12 @@ npm run dev
 ```
 
 Frontend default: `http://localhost:5173`
+
+## 当前文档
+
+- 当前架构说明：`docs/当前系统架构与技术实现说明.md`
+- 当前功能梳理：`docs/当前项目核心功能梳理.md`
+- 机会工作台深度拆解：`docs/opportunity_workspace_deep_dive.md`
 
 ## Verification
 

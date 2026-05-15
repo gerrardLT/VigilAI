@@ -10,6 +10,7 @@ import { api } from '../services/api'
 import type { AnalysisResultItem, AgentAnalysisJobSummary } from '../types'
 import { getAnalysisFieldLabel, getAnalysisStatusLabel, localizeAnalysisTemplate, localizeAnalysisText } from '../utils/analysisI18n'
 import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
+import { opportunityPaths } from '../routes/domainPaths'
 
 const STATUS_STYLES = {
   passed: 'bg-emerald-100 text-emerald-700',
@@ -188,10 +189,10 @@ export function AnalysisResultsPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/analysis/templates" className="btn btn-secondary">
+            <Link to={opportunityPaths.analysisTemplates} className="btn btn-secondary">
               去优化模板
             </Link>
-            <Link to="/activities?analysis_status=rejected" className="btn btn-secondary">
+            <Link to={`${opportunityPaths.activities}?analysis_status=rejected`} className="btn btn-secondary">
               查看被拦截的机会
             </Link>
           </div>
@@ -218,7 +219,7 @@ export function AnalysisResultsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Link to="/analysis/templates" className="btn btn-secondary">
+            <Link to={opportunityPaths.analysisTemplates} className="btn btn-secondary">
               去优化模板
             </Link>
             <button
@@ -335,7 +336,7 @@ export function AnalysisResultsPage() {
             const summaryReasons = (item.analysis_summary_reasons ?? []).map(reason => localizeAnalysisText(reason))
             const failedLayerLabel = item.analysis_failed_layer ? getAnalysisFieldLabel(item.analysis_failed_layer) : ''
             return (
-              <Link key={item.id} to={`/activities/${item.id}`} className="block rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md">
+              <Link key={item.id} to={opportunityPaths.activityDetail(item.id)} className="block rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">

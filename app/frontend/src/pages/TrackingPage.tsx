@@ -8,6 +8,7 @@ import type { TrackingItem, TrackingStageValue, TrackingUpsertRequest } from '..
 import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
 import { formatDateOnly, formatDateTime } from '../utils/formatDate'
 import { deriveTrackingStage, mapTrackingStageToStatus } from '../utils/trackingStage'
+import { opportunityPaths } from '../routes/domainPaths'
 
 const BATCH_SUGGESTION = '今晚前确认资格并整理材料'
 
@@ -218,7 +219,7 @@ export function TrackingPage() {
           <h1 className="text-2xl font-semibold text-slate-950">跟进页</h1>
           <p className="mt-1 text-sm text-slate-600">把待判断、提醒、截止和推进状态集中处理。</p>
         </div>
-        <Link to="/activities" className="btn btn-secondary">
+        <Link to={opportunityPaths.activities} className="btn btn-secondary">
           查看机会池
         </Link>
       </div>
@@ -237,7 +238,7 @@ export function TrackingPage() {
         >
           {closureFeedback}
           {closureFeedback.includes('放弃') && (
-            <Link to="/tracking?stage=dropped" className="ml-2 underline">
+            <Link to={`${opportunityPaths.tracking}?stage=dropped`} className="ml-2 underline">
               查看已放弃
             </Link>
           )}
@@ -320,7 +321,7 @@ export function TrackingPage() {
                         checked={selectedIds.includes(item.activity_id)}
                         onChange={() => toggleSelected(item.activity_id)}
                       />
-                      <Link to={`/activities/${item.activity.id}`} className="text-lg font-semibold text-slate-950 hover:text-primary-700">
+                      <Link to={opportunityPaths.activityDetail(item.activity.id)} className="text-lg font-semibold text-slate-950 hover:text-primary-700">
                         {buildActivityDisplayTitle(item.activity)}
                       </Link>
                     </div>
@@ -420,7 +421,7 @@ export function TrackingPage() {
           <section data-testid="tracking-alerts-panel" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-950">提醒面板</h2>
-              <Link to="/tracking" className="text-sm text-primary-700 hover:text-primary-800">
+              <Link to={opportunityPaths.tracking} className="text-sm text-primary-700 hover:text-primary-800">
                 查看全部
               </Link>
             </div>

@@ -138,8 +138,8 @@ def test_conversation_engine_returns_selection_shortlist_and_comparison_artifact
     assert reply.artifacts[0].artifact_type == "checklist"
     assert not any(artifact.artifact_type == "shortlist" for artifact in reply.artifacts)
     assert not any(artifact.artifact_type == "comparison" for artifact in reply.artifacts)
-    assert "margin, sell-through speed, or after-sales risk" in reply.assistant_turn
-    assert "I did not find a strong shortlist yet." in reply.assistant_turn
+    assert "利润空间、出单速度，还是售后风险" in reply.assistant_turn
+    assert "我暂时还没有筛出足够强的候选清单" in reply.assistant_turn
 
 
 def test_agent_turn_api_returns_shortlist_artifact_for_product_selection_query(client):
@@ -160,7 +160,7 @@ def test_agent_turn_api_returns_shortlist_artifact_for_product_selection_query(c
     assert not any(item["artifact_type"] == "shortlist" for item in payload["artifacts"])
     assert payload["tool_calls"][0]["tool_name"] == "selection_query"
     assert payload["tool_calls"][0]["status"] == "completed"
-    assert "I did not find a strong shortlist yet." in payload["assistant_turn"]["content"]
+    assert "我暂时还没有筛出足够强的候选清单" in payload["assistant_turn"]["content"]
 
 
 def test_live_adapter_classifies_shell_page_as_failed(monkeypatch):

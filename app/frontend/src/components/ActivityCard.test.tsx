@@ -192,7 +192,7 @@ describe('ActivityCard', () => {
 
     renderWithRouter(<ActivityCard activity={activity} />)
     const link = screen.getByRole('link')
-    expect(link).toHaveAttribute('href', `/activities/${activity.id}`)
+    expect(link).toHaveAttribute('href', `/opportunity/activities/${activity.id}`)
   })
 
   it('renders analysis verdict and folded reasons when AI analysis is available', () => {

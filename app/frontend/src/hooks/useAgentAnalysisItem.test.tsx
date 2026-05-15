@@ -161,4 +161,23 @@ describe('useAgentAnalysisReview', () => {
     expect(result.current.reviewing).toBe(false)
     expect(result.current.error).toBeNull()
   })
+
+  it('shows localized fallback errors when review actions fail', async () => {
+    apiMocks.approveAgentAnalysisItem.mockRejectedValueOnce('approve-failed')
+    apiMocks.rejectAgentAnalysisItem.mockRejectedValueOnce('reject-failed')
+
+    const { result } = renderHook(() => useAgentAnalysisReview())
+
+    await act(async () => {
+      await result.current.approveItem('item-1', { review_note: 'approved' })
+    })
+
+    expect(result.current.error).toBe('通过 Agent 分析项失败')
+
+    await act(async () => {
+      await result.current.rejectItem('item-1', { review_note: 'needs rewrite' })
+    })
+
+    expect(result.current.error).toBe('驳回 Agent 分析项失败')
+  })
 })

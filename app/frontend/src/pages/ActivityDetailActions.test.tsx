@@ -175,9 +175,9 @@ describe('ActivityDetailPage tracking actions', () => {
 
   it('adds the activity to tracking and favorites from the detail page', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities/activity-1']}>
+      <MemoryRouter initialEntries={['/opportunity/activities/activity-1']}>
         <Routes>
-          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+          <Route path="/opportunity/activities/:id" element={<ActivityDetailPage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -209,9 +209,9 @@ describe('ActivityDetailPage tracking actions', () => {
 
   it('adds the activity to today digest candidates from the detail page', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities/activity-1']}>
+      <MemoryRouter initialEntries={['/opportunity/activities/activity-1']}>
         <Routes>
-          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+          <Route path="/opportunity/activities/:id" element={<ActivityDetailPage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -229,9 +229,9 @@ describe('ActivityDetailPage tracking actions', () => {
 
   it('renders the analysis verdict and folded reasons from the detail payload', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities/activity-1']}>
+      <MemoryRouter initialEntries={['/opportunity/activities/activity-1']}>
         <Routes>
-          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+          <Route path="/opportunity/activities/:id" element={<ActivityDetailPage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -246,15 +246,15 @@ describe('ActivityDetailPage tracking actions', () => {
     expect(screen.getByTestId('activity-analysis-fields')).toBeInTheDocument()
     expect(screen.getByTestId('activity-analysis-adjust-link')).toHaveAttribute(
       'href',
-      '/activities?analysis_status=passed'
+      '/opportunity/activities?analysis_status=passed'
     )
   })
 
   it('starts a manual deep-analysis job from the detail page', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities/activity-1']}>
+      <MemoryRouter initialEntries={['/opportunity/activities/activity-1']}>
         <Routes>
-          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+          <Route path="/opportunity/activities/:id" element={<ActivityDetailPage />} />
         </Routes>
       </MemoryRouter>
     )

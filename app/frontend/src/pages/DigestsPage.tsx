@@ -186,7 +186,7 @@ export function DigestsPage() {
           >
             生成今日日报
           </button>
-          <Link to="/workspace" className="btn btn-secondary">
+          <Link to="/opportunity/workspace" className="btn btn-secondary">
             返回工作台
           </Link>
         </div>
@@ -325,7 +325,7 @@ export function DigestsPage() {
                       {digestSummary || '先看三条重点，再决定今天的处理顺序。'}
                     </div>
                   </div>
-                  <Link to="/tracking" className="text-sm text-primary-700 hover:text-primary-800">
+                  <Link to="/opportunity/tracking" className="text-sm text-primary-700 hover:text-primary-800">
                     去跟进列表
                   </Link>
                 </div>
@@ -414,3 +414,4 @@ export function DigestsPage() {
 }
 
 export default DigestsPage
+

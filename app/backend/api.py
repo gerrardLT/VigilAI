@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="VigilAI API",
-    description="Developer opportunity intelligence API",
+    description="开发者机会与选品智能工作台 API",
     version="2.0.0",
 )
 
@@ -326,7 +326,7 @@ async def get_agent_session(request: Request, session_id: str):
     repository = _get_agent_repository(request)
     session = repository.get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Agent session not found")
+        raise HTTPException(status_code=404, detail="Agent 会话不存在")
     return _serialize_model(session)
 
 
@@ -335,7 +335,7 @@ async def post_agent_turn(request: Request, session_id: str, payload: AgentTurnC
     repository = _get_agent_repository(request)
     session = repository.get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Agent session not found")
+        raise HTTPException(status_code=404, detail="Agent 会话不存在")
 
     user_turn = repository.append_turn(session_id, role="user", content=payload.content)
     reply = _get_conversation_engine(request).reply(session=session, user_turn=user_turn)
@@ -363,7 +363,7 @@ async def list_agent_turns(request: Request, session_id: str):
     repository = _get_agent_repository(request)
     session = repository.get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Agent session not found")
+        raise HTTPException(status_code=404, detail="Agent 会话不存在")
     return [_serialize_model(turn) for turn in repository.list_turns(session_id)]
 
 
@@ -372,7 +372,7 @@ async def list_agent_artifacts(request: Request, session_id: str):
     repository = _get_agent_repository(request)
     session = repository.get_session(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Agent session not found")
+        raise HTTPException(status_code=404, detail="Agent 会话不存在")
     return [
         _serialize_model(artifact)
         for artifact in _get_artifact_service(request).list_for_session(session_id)
@@ -440,7 +440,7 @@ async def list_product_selection_opportunities(
 async def get_product_selection_opportunity(request: Request, opportunity_id: str):
     detail = _get_product_selection_service(request).get_opportunity_detail(opportunity_id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="Product selection opportunity not found")
+        raise HTTPException(status_code=404, detail="选品机会不存在")
     return detail
 
 
@@ -492,7 +492,7 @@ async def update_product_selection_tracking(
 async def delete_product_selection_tracking(request: Request, opportunity_id: str):
     deleted = _get_product_selection_repository(request).delete_tracking(opportunity_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Product selection tracking item not found")
+        raise HTTPException(status_code=404, detail="选品跟进项不存在")
     return {"success": True}
 
 
@@ -571,7 +571,7 @@ async def list_activities(
 async def get_activity(request: Request, activity_id: str):
     detail = request.app.state.data_manager.get_activity_detail(activity_id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="Activity not found")
+        raise HTTPException(status_code=404, detail="活动不存在")
     return detail
 
 
@@ -661,14 +661,14 @@ async def list_sources(request: Request):
 async def refresh_source(request: Request, source_id: str):
     success = await request.app.state.scheduler.refresh_source(source_id)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
-    return RefreshResponse(success=True, message=f"Source {source_id} refresh started")
+        raise HTTPException(status_code=404, detail=f"来源 {source_id} 不存在")
+    return RefreshResponse(success=True, message=f"来源 {source_id} 已开始刷新")
 
 
 @app.post("/api/sources/refresh-all", response_model=RefreshResponse)
 async def refresh_all_sources(request: Request):
     await request.app.state.scheduler.refresh_all()
-    return RefreshResponse(success=True, message="All sources refresh started")
+    return RefreshResponse(success=True, message="全部来源已开始刷新")
 
 
 @app.get("/api/stats")
@@ -685,7 +685,7 @@ async def list_analysis_templates(request: Request):
 async def get_default_analysis_template(request: Request):
     template = request.app.state.data_manager.get_default_analysis_template()
     if template is None:
-        raise HTTPException(status_code=404, detail="Default analysis template not found")
+        raise HTTPException(status_code=404, detail="默认分析模板不存在")
     return template
 
 
@@ -790,7 +790,7 @@ async def list_analysis_results(
 async def get_analysis_result_detail(request: Request, activity_id: str):
     detail = request.app.state.data_manager.get_activity_detail(activity_id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="Analysis result not found")
+        raise HTTPException(status_code=404, detail="分析结果不存在")
     return detail
 
 
@@ -804,7 +804,7 @@ async def create_agent_analysis_job(request: Request, payload: AgentAnalysisJobC
     try:
         if payload.scope_type == "single" and payload.trigger_type == "manual":
             if len(payload.activity_ids) != 1:
-                raise HTTPException(status_code=400, detail="Manual single-item jobs require exactly one activity id")
+                raise HTTPException(status_code=400, detail="手动单项任务必须且只能提供一个 activity id")
             return run_manager.run_single_job(
                 activity_id=payload.activity_ids[0],
                 template_id=payload.template_id,
@@ -820,7 +820,7 @@ async def create_agent_analysis_job(request: Request, payload: AgentAnalysisJobC
                 max_items=ANALYSIS_SCHEDULE_MAX_ITEMS,
                 stale_before_hours=ANALYSIS_SCHEDULE_STALE_HOURS,
             )
-        raise HTTPException(status_code=400, detail="Unsupported agent-analysis job mode")
+        raise HTTPException(status_code=400, detail="不支持的 Agent 分析任务模式")
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -834,7 +834,7 @@ async def list_agent_analysis_jobs(request: Request):
 async def get_agent_analysis_job(request: Request, job_id: str):
     detail = request.app.state.data_manager.get_analysis_job_detail(job_id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="Agent analysis job not found")
+        raise HTTPException(status_code=404, detail="Agent 分析任务不存在")
     return detail
 
 
@@ -842,7 +842,7 @@ async def get_agent_analysis_job(request: Request, job_id: str):
 async def get_agent_analysis_item(request: Request, item_id: str):
     detail = request.app.state.data_manager.get_analysis_item_detail(item_id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="Agent analysis item not found")
+        raise HTTPException(status_code=404, detail="Agent 分析项不存在")
     return detail
 
 
@@ -923,7 +923,7 @@ async def update_tracking(request: Request, activity_id: str, payload: TrackingU
 async def delete_tracking(request: Request, activity_id: str):
     deleted = request.app.state.data_manager.delete_tracking_item(activity_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Tracking item not found")
+        raise HTTPException(status_code=404, detail="跟进项不存在")
     return {"success": True}
 
 
@@ -962,7 +962,7 @@ async def remove_digest_candidate(
 ):
     deleted = request.app.state.data_manager.remove_digest_candidate(activity_id, digest_date)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Digest candidate not found")
+        raise HTTPException(status_code=404, detail="日报候选项不存在")
     return {"success": True}
 
 
@@ -970,7 +970,7 @@ async def remove_digest_candidate(
 async def get_digest(request: Request, digest_id: str):
     digest = request.app.state.data_manager.get_digest_by_id(digest_id)
     if digest is None:
-        raise HTTPException(status_code=404, detail="Digest not found")
+        raise HTTPException(status_code=404, detail="日报不存在")
     return digest.model_dump()
 
 
@@ -999,7 +999,7 @@ async def list_categories():
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+    return {"status": "正常", "timestamp": datetime.now().isoformat()}
 
 
 @app.middleware("http")

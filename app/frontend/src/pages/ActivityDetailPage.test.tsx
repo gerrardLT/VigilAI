@@ -399,9 +399,9 @@ describe('ActivityDetailPage agent-analysis workbench', () => {
 
   it('shows evidence and review actions for a completed draft', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities/activity-1']}>
+      <MemoryRouter initialEntries={['/opportunity/activities/activity-1']}>
         <Routes>
-          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+          <Route path="/opportunity/activities/:id" element={<ActivityDetailPage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -416,9 +416,9 @@ describe('ActivityDetailPage agent-analysis workbench', () => {
 
   it('turns add-tracking into a quick close-the-loop flow', async () => {
     render(
-      <MemoryRouter initialEntries={['/activities/activity-1']}>
+      <MemoryRouter initialEntries={['/opportunity/activities/activity-1']}>
         <Routes>
-          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+          <Route path="/opportunity/activities/:id" element={<ActivityDetailPage />} />
         </Routes>
       </MemoryRouter>
     )

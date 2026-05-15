@@ -5,6 +5,7 @@ import { ErrorMessage } from '../components/ErrorMessage'
 import { formatDateTime } from '../utils/formatDate'
 import { CATEGORY_COLOR_MAP, CATEGORY_ICON_MAP } from '../utils/constants'
 import { CATEGORY_LABELS, type Category } from '../types'
+import { opportunityPaths } from '../routes/domainPaths'
 
 /**
  * 仪表盘页面
@@ -59,7 +60,7 @@ export function DashboardPage() {
       {/* 总览卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Link
-          to="/activities"
+          to={opportunityPaths.activities}
           className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
         >
           <div className="flex items-center justify-between">
@@ -74,7 +75,7 @@ export function DashboardPage() {
         </Link>
 
         <Link
-          to="/sources"
+          to={opportunityPaths.sources}
           className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
         >
           <div className="flex items-center justify-between">
@@ -132,7 +133,7 @@ export function DashboardPage() {
                   return (
                     <Link
                       key={category}
-                      to={`/activities?category=${category}`}
+                      to={`${opportunityPaths.activities}?category=${category}`}
                       className="block hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors"
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -179,7 +180,7 @@ export function DashboardPage() {
                   return (
                     <Link
                       key={source}
-                      to={`/activities?source_id=${source}`}
+                      to={`${opportunityPaths.activities}?source_id=${source}`}
                       className="block hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors"
                     >
                       <div className="flex items-center justify-between mb-1">

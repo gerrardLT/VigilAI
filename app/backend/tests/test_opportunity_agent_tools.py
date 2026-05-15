@@ -139,7 +139,7 @@ def test_conversation_engine_executes_registered_opportunity_search_tool(data_ma
     assert reply.tool_calls[0]["status"] == "completed"
     assert reply.artifacts[0].artifact_type == "checklist"
     assert any(artifact.artifact_type == "shortlist" for artifact in reply.artifacts)
-    assert "reward size, deadline, or solo execution" in reply.assistant_turn
+    assert "奖励规模、截止时间，还是个人可执行性" in reply.assistant_turn
     assert "Solo AI Builder Grant" in reply.assistant_turn
 
 

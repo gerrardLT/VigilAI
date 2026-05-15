@@ -29,7 +29,7 @@ export function useAgentAnalysisReview(): UseAgentAnalysisReviewResult {
       try {
         return await api.approveAgentAnalysisItem(itemId, payload)
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to approve agent analysis item'
+        const message = err instanceof Error ? err.message : '通过 Agent 分析项失败'
         setError(message)
         return null
       } finally {
@@ -49,7 +49,7 @@ export function useAgentAnalysisReview(): UseAgentAnalysisReviewResult {
       try {
         return await api.rejectAgentAnalysisItem(itemId, payload)
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to reject agent analysis item'
+        const message = err instanceof Error ? err.message : '驳回 Agent 分析项失败'
         setError(message)
         return null
       } finally {

@@ -58,9 +58,9 @@ describe('ActivityDetailPage text wrapping', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/activities/activity-1']}>
+      <MemoryRouter initialEntries={['/opportunity/activities/activity-1']}>
         <Routes>
-          <Route path="/activities/:id" element={<ActivityDetailPage />} />
+          <Route path="/opportunity/activities/:id" element={<ActivityDetailPage />} />
         </Routes>
       </MemoryRouter>
     )

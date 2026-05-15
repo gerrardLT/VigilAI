@@ -12,6 +12,7 @@ import type { ActivityListItem, TrackingItem } from '../types'
 import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils/activityDisplay'
 import { formatDateOnly, formatDateTime } from '../utils/formatDate'
 import { localizeAnalysisTemplate } from '../utils/analysisI18n'
+import { opportunityPaths } from '../routes/domainPaths'
 
 const DEFAULT_NEXT_ACTION = '先确认参赛要求，再拆出报名和交付准备'
 const TRACKING_UPDATED_EVENT = 'vigilai:tracking-updated'
@@ -224,7 +225,7 @@ export function WorkspacePage() {
               当前模板 {localizedDefaultTemplate?.name ?? '未设置'}，最近批量任务 {batchJob?.finished_at ? formatDateTime(batchJob.finished_at) : '暂无结果'}。
             </p>
           </div>
-          <Link to="/analysis/results" className="text-sm text-primary-700 hover:text-primary-800">
+          <Link to={opportunityPaths.analysisResults} className="text-sm text-primary-700 hover:text-primary-800">
             查看分析结果
           </Link>
         </div>
@@ -236,7 +237,7 @@ export function WorkspacePage() {
           className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
         >
           {closureFeedback}
-          <Link to="/tracking?stage=to_decide" className="ml-2 font-medium underline">
+          <Link to={`${opportunityPaths.tracking}?stage=to_decide`} className="ml-2 font-medium underline">
             去待判断列表
           </Link>
         </section>
@@ -250,31 +251,31 @@ export function WorkspacePage() {
       </section>
 
       <section data-testid="workspace-action-cards" className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
-        <Link to="/activities?sort_by=created_at&sort_order=desc" data-testid="workspace-action-card-recent" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Link to={`${opportunityPaths.activities}?sort_by=created_at&sort_order=desc`} data-testid="workspace-action-card-recent" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">今日新增</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{workspace.overview.recent_activities}</div>
         </Link>
-        <Link to="/activities?sort_by=score&sort_order=desc" data-testid="workspace-action-card-high-value" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Link to={`${opportunityPaths.activities}?sort_by=score&sort_order=desc`} data-testid="workspace-action-card-high-value" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">高价值待看</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{untrackedHighValue.length}</div>
         </Link>
-        <Link to="/tracking?focus=due_soon" data-testid="workspace-action-card-due-soon" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Link to={`${opportunityPaths.tracking}?focus=due_soon`} data-testid="workspace-action-card-due-soon" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">临近截止</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{firstActions.length}</div>
         </Link>
-        <Link to="/tracking?focus=backlog" data-testid="workspace-action-card-backlog" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Link to={`${opportunityPaths.tracking}?focus=backlog`} data-testid="workspace-action-card-backlog" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">推进积压</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{backlogItems.length}</div>
         </Link>
-        <Link to="/tracking?focus=remind_today" data-testid="workspace-action-card-remind-today" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Link to={`${opportunityPaths.tracking}?focus=remind_today`} data-testid="workspace-action-card-remind-today" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">今日提醒</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{reminderTodayItems.length}</div>
         </Link>
-        <Link to="/tracking?focus=remind_overdue" data-testid="workspace-action-card-remind-overdue" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Link to={`${opportunityPaths.tracking}?focus=remind_overdue`} data-testid="workspace-action-card-remind-overdue" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">超时提醒</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{reminderOverdueItems.length}</div>
         </Link>
-        <Link to="/sources" data-testid="workspace-action-card-alerts" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Link to={opportunityPaths.sources} data-testid="workspace-action-card-alerts" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-sm text-slate-500">源告警</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{workspace.alert_sources.length}</div>
         </Link>
@@ -288,7 +289,7 @@ export function WorkspacePage() {
                 <h2 className="text-xl font-semibold text-slate-950">高价值待转化</h2>
                 <p className="mt-1 text-sm text-slate-600">先把高分机会转进推进流，再补下一步动作。</p>
               </div>
-              <Link to="/activities?sort_by=score&sort_order=desc" className="text-sm text-primary-700 hover:text-primary-800">
+              <Link to={`${opportunityPaths.activities}?sort_by=score&sort_order=desc`} className="text-sm text-primary-700 hover:text-primary-800">
                 查看更多
               </Link>
             </div>
@@ -373,7 +374,7 @@ export function WorkspacePage() {
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Link to={`/activities/${activity.id}`} className="btn btn-secondary">
+                    <Link to={opportunityPaths.activityDetail(activity.id)} className="btn btn-secondary">
                       查看详情
                     </Link>
                     <button
@@ -422,10 +423,10 @@ export function WorkspacePage() {
               ))}
             </div>
             <div className="mt-4 flex flex-wrap gap-3 text-sm">
-              <Link to="/tracking?focus=backlog" data-testid="workspace-backlog-link-backlog" className="text-primary-700 hover:text-primary-800">
+              <Link to={`${opportunityPaths.tracking}?focus=backlog`} data-testid="workspace-backlog-link-backlog" className="text-primary-700 hover:text-primary-800">
                 查看全部积压
               </Link>
-              <Link to="/tracking?focus=backlog&stage=to_decide" data-testid="workspace-backlog-link-to-decide" className="text-primary-700 hover:text-primary-800">
+              <Link to={`${opportunityPaths.tracking}?focus=backlog&stage=to_decide`} data-testid="workspace-backlog-link-to-decide" className="text-primary-700 hover:text-primary-800">
                 查看待判断
               </Link>
             </div>
@@ -437,11 +438,11 @@ export function WorkspacePage() {
               <p className="mt-1 text-sm text-slate-600">把“今天该做”和“已经超时”的跟进工作单独拉出来。</p>
             </div>
             <div className="mt-4 grid gap-3">
-              <Link to="/tracking?focus=remind_today" data-testid="workspace-reminder-link-today" className="rounded-2xl bg-sky-50 p-4">
+              <Link to={`${opportunityPaths.tracking}?focus=remind_today`} data-testid="workspace-reminder-link-today" className="rounded-2xl bg-sky-50 p-4">
                 <div className="text-sm text-slate-500">今日提醒</div>
                 <div className="mt-1 text-lg font-semibold text-slate-950">{reminderTodayItems.length}</div>
               </Link>
-              <Link to="/tracking?focus=remind_overdue" data-testid="workspace-reminder-link-overdue" className="rounded-2xl bg-rose-50 p-4">
+              <Link to={`${opportunityPaths.tracking}?focus=remind_overdue`} data-testid="workspace-reminder-link-overdue" className="rounded-2xl bg-rose-50 p-4">
                 <div className="text-sm text-slate-500">超时提醒</div>
                 <div className="mt-1 text-lg font-semibold text-slate-950">{reminderOverdueItems.length}</div>
               </Link>
@@ -454,7 +455,7 @@ export function WorkspacePage() {
                 <h2 className="text-xl font-semibold text-slate-950">今日日报</h2>
                 <p className="mt-1 text-sm text-slate-600">先看清洗后的摘要，再决定今天的处理顺序。</p>
               </div>
-              <Link to="/digests" className="text-sm text-primary-700 hover:text-primary-800">
+              <Link to={opportunityPaths.digests} className="text-sm text-primary-700 hover:text-primary-800">
                 打开日报
               </Link>
             </div>

@@ -216,6 +216,13 @@ def test_activity_detail_includes_analysis_payload(client, data_manager):
     assert payload["analysis_score_breakdown"]
 
 
+def test_missing_activity_returns_localized_error(client):
+    response = client.get(f"/api/activities/{uuid.uuid4().hex}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "活动不存在"
+
+
 def test_activity_list_filters_by_analysis_status(client, data_manager):
     passed_activity = create_activity(data_manager, url="https://example.com/api-analysis-passed")
     rejected_activity = create_activity(data_manager, url="https://example.com/api-analysis-rejected")
@@ -277,6 +284,20 @@ def test_analysis_run_endpoint_recomputes_existing_activities(client, data_manag
     assert payload["processed"] >= 1
     assert repaired is not None
     assert repaired.analysis_status == "passed"
+
+
+def test_agent_analysis_job_mode_validation_returns_localized_error(client):
+    response = client.post(
+        "/api/agent-analysis/jobs",
+        json={
+            "scope_type": "single",
+            "trigger_type": "manual",
+            "activity_ids": [],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "手动单项任务必须且只能提供一个 activity id"
 
 
 def test_analysis_template_preview_endpoint_returns_status_breakdown(client, data_manager):

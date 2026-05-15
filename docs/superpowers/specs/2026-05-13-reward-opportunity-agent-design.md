@@ -82,6 +82,27 @@
 5. 结构化机会库
 6. 结果消费层
 
+### 4.0.1 基础设施选型原则
+
+网页抓取与抽取底座不从零自研，优先直接采用 **Crawl4AI**。
+
+原因：
+
+- 已具备异步 crawler 能力
+- 已支持动态页面处理
+- 已支持 deep crawl
+- 已支持 LLM extraction
+- 已支持 CSS / XPath / schema extraction
+- 已支持对 LLM 友好的 Markdown 输出
+- 已支持较长抓取过程的恢复能力
+
+因此本系统的边界应明确为：
+
+- **Crawl4AI 负责抓取、清洗、抽取**
+- **本系统负责 Agent 决策、追证据、评估、合并、沉淀**
+
+也就是说，不再自造通用 crawler，而是在 Crawl4AI 之上构建你的业务 Agent。
+
 ### 4.0 总体原则
 
 这个系统不能只是：
@@ -209,6 +230,17 @@
 
 - 先拿到尽可能完整的材料
 - 不负责最终判断
+
+实现策略：
+
+- Collector Agent 默认基于 Crawl4AI 实现
+- 使用 Crawl4AI 处理：
+  - 普通详情页抓取
+  - deep crawl
+  - 结构化初步抽取
+  - Markdown 化
+  - 动态页内容获取
+- 必要时再补充浏览器自动化能力处理特殊页面
 
 #### 4.4.3 Investigator Agent
 
@@ -600,8 +632,14 @@ Evaluator 不负责盲目补抓，它依赖 Investigator 补证据后的结果�
 ### 10.1 抓取 / 抽取底座
 
 - Crawl4AI
-  - 适合借鉴：LLM 友好的网页清洗、deep crawl、structured extraction
+  - 不是只做参考，而是推荐直接作为网页抓取与抽取底座
+  - 可直接承接：异步网页抓取、Markdown 清洗、deep crawl、structured extraction、LLM extraction
   - 参考：<https://github.com/unclecode/crawl4ai>
+  - 官方文档：
+    - <https://docs.crawl4ai.com/>
+    - <https://docs.crawl4ai.com/core/quickstart/>
+    - <https://docs.crawl4ai.com/core/deep-crawling/>
+    - <https://docs.crawl4ai.com/extraction/llm-strategies/>
 
 - Firecrawl
   - 适合借鉴：搜索 + 导航 + 网页抽取 + Agent 化网页访问
@@ -644,6 +682,10 @@ Evaluator 不负责盲目补抓，它依赖 Investigator 补证据后的结果�
 这些项目共同说明了一件事：
 
 你要做的系统，技术上更接近“agentic search + web investigation + evidence-based evaluation”，而不是传统爬虫平台。
+
+其中最重要的技术决策是：
+
+**直接采用 Crawl4AI 作为 Collector Agent 底座，而不是从零实现网页抓取框架。**
 
 ## 11. 成功标准
 
@@ -705,3 +747,7 @@ Evaluator 不负责盲目补抓，它依赖 Investigator 补证据后的结果�
 **全网奖励活动自动发现 + Agent 自主追证据 + AI 深筛 + 结构化机会库**
 
 这是与你当前真实目标最一致、工程边界最清楚、产品叙事最干净的方向。
+
+在实现层面，这条路线进一步具体化为：
+
+**Crawl4AI 负责网页获取与抽取，你的业务 Agent 负责召回、调查、评估、合并与沉淀。**

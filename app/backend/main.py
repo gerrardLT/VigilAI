@@ -53,14 +53,14 @@ class VigilAI:
         logger.info("=" * 50)
         logger.info("VigilAI - 开发者搞钱机会监控系统")
         logger.info("=" * 50)
-        logger.info(f"Starting at {datetime.now().isoformat()}")
+        logger.info(f"启动时间：{datetime.now().isoformat()}")
         
         # 初始化数据管理器
-        logger.info("Initializing DataManager...")
+        logger.info("正在初始化 DataManager...")
         self.data_manager = DataManager()
         
         # 初始化调度器
-        logger.info("Initializing TaskScheduler...")
+        logger.info("正在初始化 TaskScheduler...")
         self.scheduler = TaskScheduler(self.data_manager)
         
         # 注入依赖到FastAPI
@@ -77,13 +77,13 @@ class VigilAI:
         # 暂时禁用定时任务调度器，仅支持手动刷新
         # logger.info("Starting scheduler...")
         # self.scheduler.start()
-        logger.info("Scheduler disabled - manual refresh only")
+        logger.info("调度器已禁用，当前仅支持手动刷新")
         
         # 不再自动触发初始数据采集，改为前端手动触发
         # asyncio.create_task(self._initial_refresh())
         
-        logger.info(f"VigilAI started successfully")
-        logger.info(f"API available at http://{API_HOST}:{API_PORT}")
+        logger.info("VigilAI 启动成功")
+        logger.info(f"API 地址：http://{API_HOST}:{API_PORT}")
     
     async def _initial_refresh(self):
         """初始数据采集"""
@@ -91,21 +91,21 @@ class VigilAI:
             await asyncio.sleep(2)  # 等待服务完全启动
             await self.scheduler.refresh_all()
         except Exception as e:
-            logger.error(f"Initial refresh failed: {e}")
+            logger.error(f"初始数据采集失败：{e}")
     
     async def shutdown(self):
         """优雅关闭所有组件"""
-        logger.info("Shutting down VigilAI...")
+        logger.info("正在关闭 VigilAI...")
         
         # 停止调度器
         if self.scheduler:
             self.scheduler.stop()
         
-        logger.info("VigilAI shutdown complete")
+        logger.info("VigilAI 已完成关闭")
     
     def handle_signal(self, sig):
         """处理系统信号"""
-        logger.info(f"Received signal {sig}, initiating shutdown...")
+        logger.info(f"收到信号 {sig}，开始关闭流程...")
         self._shutdown_event.set()
 
 
@@ -140,9 +140,9 @@ async def main():
         await server.serve()
         
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
+        logger.info("收到键盘中断信号")
     except Exception as e:
-        logger.error(f"Application error: {e}")
+        logger.error(f"应用运行异常：{e}")
         raise
     finally:
         await vigilai.shutdown()
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nVigilAI stopped by user")
+        print("\nVigilAI 已由用户停止")
     except Exception as e:
-        print(f"Fatal error: {e}")
+        print(f"致命错误：{e}")
         sys.exit(1)

@@ -26,6 +26,7 @@ import {
 } from '../utils/analysisI18n'
 import { formatDateOnly, formatDateTime } from '../utils/formatDate'
 import { TRACKING_STAGE_OPTIONS, TRACKING_STAGE_STYLES, TRACKING_STAGE_LABELS, mapTrackingStageToStatus } from '../utils/trackingStage'
+import { opportunityPaths } from '../routes/domainPaths'
 
 const DEFAULT_NEXT_ACTION = '先确认参赛要求，再拆出报名和交付准备'
 
@@ -426,7 +427,7 @@ export function ActivityDetailPage() {
                   <div className="mt-2 text-base font-medium leading-7 text-slate-900">{decisionSummary}</div>
                 </div>
               </div>
-              <Link to="/analysis/results" className="text-sm font-medium text-primary-700 hover:text-primary-800">
+              <Link to={opportunityPaths.analysisResults} className="text-sm font-medium text-primary-700 hover:text-primary-800">
                 查看分析结果总表
               </Link>
             </div>
@@ -547,7 +548,7 @@ export function ActivityDetailPage() {
             {activity.analysis_status && (
               <Link
                 data-testid="activity-analysis-adjust-link"
-                to={`/activities?analysis_status=${activity.analysis_status}`}
+                to={`${opportunityPaths.activities}?analysis_status=${activity.analysis_status}`}
                 className="mt-5 inline-flex text-sm font-medium text-primary-700 hover:text-primary-800"
               >
                 查看同类分析结果

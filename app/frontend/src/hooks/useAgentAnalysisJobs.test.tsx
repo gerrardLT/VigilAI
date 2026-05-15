@@ -207,4 +207,32 @@ describe('useAgentAnalysisJobs', () => {
     })
     expect(result.current.activeJob?.id).toBe('job-2')
   })
+
+  it('shows localized fallback errors for load and create failures', async () => {
+    apiMocks.getAgentAnalysisJobs.mockRejectedValueOnce('network-down')
+    apiMocks.getAgentAnalysisJob.mockRejectedValueOnce('detail-miss')
+    apiMocks.createAgentAnalysisJob.mockRejectedValueOnce('create-failed')
+
+    const { result } = renderHook(() => useAgentAnalysisJobs())
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('加载 Agent 分析任务列表失败')
+    })
+
+    await act(async () => {
+      await result.current.loadJob('job-missing')
+    })
+
+    expect(result.current.error).toBe('加载 Agent 分析任务详情失败')
+
+    await act(async () => {
+      await result.current.createJob({
+        scope_type: 'single',
+        trigger_type: 'manual',
+        activity_ids: ['activity-2'],
+      })
+    })
+
+    expect(result.current.error).toBe('创建 Agent 分析任务失败')
+  })
 })

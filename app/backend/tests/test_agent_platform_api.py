@@ -64,6 +64,11 @@ def test_create_agent_session_returns_session_id(client):
     assert payload["status"] == "active"
 
 
+def test_agent_api_metadata_uses_project_primary_language():
+    assert app.title == "VigilAI API"
+    assert app.description == "开发者机会与选品智能工作台 API"
+
+
 def test_post_turn_returns_assistant_reply_and_turns(client):
     session = client.post(
         "/api/agent/sessions",
@@ -103,6 +108,13 @@ def test_get_turns_and_artifacts_for_session(client):
     assert artifacts_response.json()[0]["artifact_type"] == "checklist"
 
 
+def test_missing_agent_session_returns_localized_error(client):
+    response = client.get(f"/api/agent/sessions/{uuid.uuid4().hex}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Agent 会话不存在"
+
+
 def test_list_sessions_returns_recent_history_for_domain(client):
     first = client.post(
         "/api/agent/sessions",
@@ -127,3 +139,21 @@ def test_list_sessions_returns_recent_history_for_domain(client):
     assert payload[0]["turn_count"] == 2
     assert "奖励规模" in payload[0]["last_turn_preview"]
     assert all(item["id"] != second["id"] for item in payload)
+
+
+def test_source_refresh_endpoints_return_localized_messages(client):
+    response = client.post("/api/sources/test-source/refresh")
+    refresh_all_response = client.post("/api/sources/refresh-all")
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "message": "来源 test-source 已开始刷新"}
+    assert refresh_all_response.status_code == 200
+    assert refresh_all_response.json() == {"success": True, "message": "全部来源已开始刷新"}
+
+
+def test_health_check_returns_localized_status(client):
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "正常"
+    assert "timestamp" in response.json()

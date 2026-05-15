@@ -214,7 +214,7 @@ describe('TrackingPage', () => {
 
   it('reads the focus filter from the URL query', () => {
     render(
-      <MemoryRouter initialEntries={['/tracking?focus=remind_overdue']}>
+      <MemoryRouter initialEntries={['/opportunity/tracking?focus=remind_overdue']}>
         <TrackingPage />
       </MemoryRouter>
     )
@@ -229,7 +229,7 @@ describe('TrackingPage', () => {
 
   it('reads the stage filter from the URL query', () => {
     render(
-      <MemoryRouter initialEntries={['/tracking?stage=to_decide']}>
+      <MemoryRouter initialEntries={['/opportunity/tracking?stage=to_decide']}>
         <TrackingPage />
       </MemoryRouter>
     )
@@ -244,7 +244,7 @@ describe('TrackingPage', () => {
 
   it('surfaces backlog context when entering from the workspace backlog link', () => {
     render(
-      <MemoryRouter initialEntries={['/tracking?focus=backlog']}>
+      <MemoryRouter initialEntries={['/opportunity/tracking?focus=backlog']}>
         <TrackingPage />
       </MemoryRouter>
     )
@@ -356,3 +356,4 @@ describe('TrackingPage', () => {
     expect(screen.getByTestId('tracking-closure-feedback')).toHaveTextContent('查看已放弃')
   })
 })
+

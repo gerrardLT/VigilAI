@@ -60,7 +60,7 @@ export function useAgentAnalysisJobs(): UseAgentAnalysisJobsResult {
       setJobs(response.items)
       setTotal(response.total)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load agent analysis jobs'
+      const message = err instanceof Error ? err.message : '加载 Agent 分析任务列表失败'
       setError(message)
       setJobs([])
       setTotal(0)
@@ -81,7 +81,7 @@ export function useAgentAnalysisJobs(): UseAgentAnalysisJobsResult {
       setActiveJob(detail)
       return detail
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load agent analysis job'
+      const message = err instanceof Error ? err.message : '加载 Agent 分析任务详情失败'
       setError(message)
       return null
     }
@@ -102,7 +102,7 @@ export function useAgentAnalysisJobs(): UseAgentAnalysisJobsResult {
         })
         return created
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to create agent analysis job'
+        const message = err instanceof Error ? err.message : '创建 Agent 分析任务失败'
         setError(message)
         return null
       }

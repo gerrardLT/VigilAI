@@ -526,7 +526,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByTestId('workspace-closure-feedback')).toHaveTextContent('已加入收藏')
     expect(screen.getByTestId('workspace-closure-feedback').querySelector('a')).toHaveAttribute(
       'href',
-      '/tracking?stage=to_decide'
+      '/opportunity/tracking?stage=to_decide'
     )
   })
 
@@ -582,13 +582,13 @@ describe('WorkspacePage', () => {
       </MemoryRouter>
     )
 
-    expect(screen.getByTestId('workspace-action-card-recent')).toHaveAttribute('href', '/activities?sort_by=created_at&sort_order=desc')
-    expect(screen.getByTestId('workspace-action-card-high-value')).toHaveAttribute('href', '/activities?sort_by=score&sort_order=desc')
-    expect(screen.getByTestId('workspace-action-card-due-soon')).toHaveAttribute('href', '/tracking?focus=due_soon')
-    expect(screen.getByTestId('workspace-action-card-backlog')).toHaveAttribute('href', '/tracking?focus=backlog')
-    expect(screen.getByTestId('workspace-action-card-remind-today')).toHaveAttribute('href', '/tracking?focus=remind_today')
-    expect(screen.getByTestId('workspace-action-card-remind-overdue')).toHaveAttribute('href', '/tracking?focus=remind_overdue')
-    expect(screen.getByTestId('workspace-action-card-alerts')).toHaveAttribute('href', '/sources')
+    expect(screen.getByTestId('workspace-action-card-recent')).toHaveAttribute('href', '/opportunity/activities?sort_by=created_at&sort_order=desc')
+    expect(screen.getByTestId('workspace-action-card-high-value')).toHaveAttribute('href', '/opportunity/activities?sort_by=score&sort_order=desc')
+    expect(screen.getByTestId('workspace-action-card-due-soon')).toHaveAttribute('href', '/opportunity/tracking?focus=due_soon')
+    expect(screen.getByTestId('workspace-action-card-backlog')).toHaveAttribute('href', '/opportunity/tracking?focus=backlog')
+    expect(screen.getByTestId('workspace-action-card-remind-today')).toHaveAttribute('href', '/opportunity/tracking?focus=remind_today')
+    expect(screen.getByTestId('workspace-action-card-remind-overdue')).toHaveAttribute('href', '/opportunity/tracking?focus=remind_overdue')
+    expect(screen.getByTestId('workspace-action-card-alerts')).toHaveAttribute('href', '/opportunity/sources')
   })
 
   it('surfaces reminder-driven tracking work on the workspace home', () => {
@@ -604,12 +604,12 @@ describe('WorkspacePage', () => {
     expect(screen.getByTestId('workspace-action-card-remind-today')).toHaveTextContent('1')
     expect(screen.getByTestId('workspace-action-card-remind-overdue')).toHaveTextContent('1')
     expect(reminderPanel).toHaveTextContent('今日提醒')
-    expect(screen.getByTestId('workspace-reminder-link-today')).toHaveAttribute('href', '/tracking?focus=remind_today')
-    expect(screen.getByTestId('workspace-reminder-link-overdue')).toHaveAttribute('href', '/tracking?focus=remind_overdue')
-    expect(screen.getByTestId('workspace-backlog-link-backlog')).toHaveAttribute('href', '/tracking?focus=backlog')
+    expect(screen.getByTestId('workspace-reminder-link-today')).toHaveAttribute('href', '/opportunity/tracking?focus=remind_today')
+    expect(screen.getByTestId('workspace-reminder-link-overdue')).toHaveAttribute('href', '/opportunity/tracking?focus=remind_overdue')
+    expect(screen.getByTestId('workspace-backlog-link-backlog')).toHaveAttribute('href', '/opportunity/tracking?focus=backlog')
     expect(screen.getByTestId('workspace-backlog-link-to-decide')).toHaveAttribute(
       'href',
-      '/tracking?focus=backlog&stage=to_decide'
+      '/opportunity/tracking?focus=backlog&stage=to_decide'
     )
   })
 
@@ -645,3 +645,5 @@ describe('WorkspacePage', () => {
     expect(screen.getByTestId('workspace-sync-feedback')).toHaveTextContent('0')
   })
 })
+
+

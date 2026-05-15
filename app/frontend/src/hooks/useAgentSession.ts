@@ -83,7 +83,7 @@ export function useAgentSession(domainType: AgentDomainType): UseAgentSessionRes
         setArtifacts(restoredArtifacts)
       } catch (err) {
         if (requestScope === requestScopeRef.current) {
-          const message = err instanceof Error ? err.message : 'Failed to load agent sessions'
+          const message = err instanceof Error ? err.message : '加载 Agent 会话失败'
           setError(message)
         }
       } finally {
@@ -126,7 +126,7 @@ export function useAgentSession(domainType: AgentDomainType): UseAgentSessionRes
       return createdSession
     } catch (err) {
       if (requestScope === requestScopeRef.current) {
-        const message = err instanceof Error ? err.message : 'Failed to create agent session'
+        const message = err instanceof Error ? err.message : '创建 Agent 会话失败'
         setError(message)
       }
       throw err
@@ -158,7 +158,7 @@ export function useAgentSession(domainType: AgentDomainType): UseAgentSessionRes
       }
     } catch (err) {
       if (requestScope === requestScopeRef.current) {
-        const message = err instanceof Error ? err.message : 'Failed to restore agent session'
+        const message = err instanceof Error ? err.message : '恢复 Agent 会话失败'
         setError(message)
       }
       throw err
@@ -191,7 +191,7 @@ export function useAgentSession(domainType: AgentDomainType): UseAgentSessionRes
       }
     } catch (err) {
       if (requestScope === requestScopeRef.current) {
-        const message = err instanceof Error ? err.message : 'Failed to send agent message'
+        const message = err instanceof Error ? err.message : '发送 Agent 消息失败'
         setError(message)
       }
       throw err

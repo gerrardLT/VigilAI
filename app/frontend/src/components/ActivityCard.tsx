@@ -6,6 +6,7 @@ import { buildActivityDisplayExcerpt, buildActivityDisplayTitle } from '../utils
 import { daysUntil, formatDateOnly, isExpired } from '../utils/formatDate'
 import { getAnalysisStatusLabel, getTrustLevelLabel, localizeAnalysisText } from '../utils/analysisI18n'
 import { deriveTrackingStage, TRACKING_STAGE_LABELS, TRACKING_STAGE_STYLES } from '../utils/trackingStage'
+import { opportunityPaths } from '../routes/domainPaths'
 
 interface ActivityCardProps {
   activity: Activity
@@ -29,7 +30,7 @@ export function ActivityCard({ activity }: ActivityCardProps) {
 
   return (
     <Link
-      to={`/activities/${activity.id}`}
+      to={opportunityPaths.activityDetail(activity.id)}
       className="group flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,250,252,0.98))] p-5 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.35)] transition duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_22px_46px_-26px_rgba(15,23,42,0.42)]"
     >
       {activity.image_url && (

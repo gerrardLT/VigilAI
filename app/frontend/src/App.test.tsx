@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+﻿import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
@@ -114,12 +114,14 @@ describe('App routing', () => {
     window.history.pushState({}, '', '/')
   })
 
-  it('renders the workspace page at the root route and exposes V2 navigation', async () => {
+  it('renders the neutral system home at the root route', async () => {
     render(<App />)
 
-    expect(await screen.findByTestId('workspace-page')).toBeInTheDocument()
-    expect(document.querySelector('a[href="/activities"]')).toBeTruthy()
-    expect(document.querySelector('a[href="/tracking"]')).toBeTruthy()
-    expect(document.querySelector('a[href="/digests"]')).toBeTruthy()
+    expect(await screen.findByTestId('system-home-page')).toBeInTheDocument()
+    expect(document.querySelector('a[href="/opportunity/workspace"]')).toBeTruthy()
+    expect(document.querySelector('a[href="/agent"]')).toBeTruthy()
+    expect(document.querySelector('a[href="/selection/workspace"]')).toBeTruthy()
   })
 })
+
+

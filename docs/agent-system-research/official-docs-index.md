@@ -1,0 +1,60 @@
+# 官方文档本地归档索引
+
+生成时间：2026-05-15T14:55:58.7006847+08:00
+
+| ID | 状态 | 字节 | 来源 | 本地文件 |
+|---|---:|---:|---|---|
+| p0-langgraph-durable-execution | saved | 14192 | <https://docs.langchain.com/oss/python/langgraph/durable-execution> | [official-docs/p0-langgraph-durable-execution.md](official-docs/p0-langgraph-durable-execution.md) |
+| p0-langgraph-github | saved | 40528 | <https://github.com/langchain-ai/langgraph> | [official-docs/p0-langgraph-github.md](official-docs/p0-langgraph-github.md) |
+| p0-langgraph-interrupts | saved | 42569 | <https://docs.langchain.com/oss/python/langgraph/interrupts> | [official-docs/p0-langgraph-interrupts.md](official-docs/p0-langgraph-interrupts.md) |
+| p0-langgraph-overview | saved | 5161 | <https://docs.langchain.com/oss/python/langgraph> | [official-docs/p0-langgraph-overview.md](official-docs/p0-langgraph-overview.md) |
+| p0-langgraph-persistence | saved | 47928 | <https://docs.langchain.com/oss/python/langgraph/persistence> | [official-docs/p0-langgraph-persistence.md](official-docs/p0-langgraph-persistence.md) |
+| p0-pydanticai-durable-execution | saved | 17732 | <https://ai.pydantic.dev/durable_execution/overview/> | [official-docs/p0-pydanticai-durable-execution.md](official-docs/p0-pydanticai-durable-execution.md) |
+| p0-pydanticai-github | saved | 14451 | <https://github.com/pydantic/pydantic-ai> | [official-docs/p0-pydanticai-github.md](official-docs/p0-pydanticai-github.md) |
+| p0-pydanticai-mcp | saved | 19081 | <https://ai.pydantic.dev/mcp/> | [official-docs/p0-pydanticai-mcp.md](official-docs/p0-pydanticai-mcp.md) |
+| p0-pydanticai-output | saved | 48513 | <https://ai.pydantic.dev/output/> | [official-docs/p0-pydanticai-output.md](official-docs/p0-pydanticai-output.md) |
+| p0-pydanticai-overview | saved | 17079 | <https://ai.pydantic.dev/> | [official-docs/p0-pydanticai-overview.md](official-docs/p0-pydanticai-overview.md) |
+| p1-agent-reach-github | saved | 24556 | <https://github.com/Panniantong/Agent-Reach> | [official-docs/p1-agent-reach-github.md](official-docs/p1-agent-reach-github.md) |
+| p1-feedparser-basic | saved | 5589 | <https://feedparser.readthedocs.io/en/latest/basic/> | [official-docs/p1-feedparser-basic.md](official-docs/p1-feedparser-basic.md) |
+| p1-github-cli-manual | saved | 31925 | <https://cli.github.com/manual/> | [official-docs/p1-github-cli-manual.md](official-docs/p1-github-cli-manual.md) |
+| p1-github-cli-search | saved | 32581 | <https://cli.github.com/manual/gh_search> | [official-docs/p1-github-cli-search.md](official-docs/p1-github-cli-search.md) |
+| p1-mcp-architecture | saved | 11384 | <https://modelcontextprotocol.io/docs/learn/architecture> | [official-docs/p1-mcp-architecture.md](official-docs/p1-mcp-architecture.md) |
+| p1-mcp-authorization | saved | 49348 | <https://modelcontextprotocol.io/docs/tutorials/security/authorization> | [official-docs/p1-mcp-authorization.md](official-docs/p1-mcp-authorization.md) |
+| p1-mcp-sdk | saved | 6211 | <https://modelcontextprotocol.io/docs/sdk> | [official-docs/p1-mcp-sdk.md](official-docs/p1-mcp-sdk.md) |
+| p1-mcp-security-best-practices | saved | 24854 | <https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices> | [official-docs/p1-mcp-security-best-practices.md](official-docs/p1-mcp-security-best-practices.md) |
+| p1-mcp-server-concepts | saved | 19598 | <https://modelcontextprotocol.io/docs/learn/server-concepts> | [official-docs/p1-mcp-server-concepts.md](official-docs/p1-mcp-server-concepts.md) |
+| p1-mcp-server-quickstart | saved | 11566 | <https://modelcontextprotocol.io/quickstart/server> | [official-docs/p1-mcp-server-quickstart.md](official-docs/p1-mcp-server-quickstart.md) |
+| p1-mcp-servers-github | saved | 27790 | <https://github.com/modelcontextprotocol/servers> | [official-docs/p1-mcp-servers-github.md](official-docs/p1-mcp-servers-github.md) |
+| p1-mcp-tools | saved | 3696 | <https://modelcontextprotocol.io/docs/tools> | [official-docs/p1-mcp-tools.md](official-docs/p1-mcp-tools.md) |
+| p2-browser-use-api-create-session | saved | 13702 | <https://docs.browser-use.com/cloud/api-v3/sessions/create-session> | [official-docs/p2-browser-use-api-create-session.md](official-docs/p2-browser-use-api-create-session.md) |
+| p2-browser-use-api-get-session | saved | 14070 | <https://docs.browser-use.com/cloud/api-v3/sessions/get-session> | [official-docs/p2-browser-use-api-get-session.md](official-docs/p2-browser-use-api-get-session.md) |
+| p2-browser-use-available-tools | saved | 1972 | <https://docs.browser-use.com/customize/tools/available> | [official-docs/p2-browser-use-available-tools.md](official-docs/p2-browser-use-available-tools.md) |
+| p2-browser-use-cli | saved | 23459 | <https://docs.browser-use.com/open-source/browser-use-cli> | [official-docs/p2-browser-use-cli.md](official-docs/p2-browser-use-cli.md) |
+| p2-browser-use-custom-functions | saved | 5808 | <https://docs.browser-use.com/customize/custom-functions> | [official-docs/p2-browser-use-custom-functions.md](official-docs/p2-browser-use-custom-functions.md) |
+| p2-browser-use-github | saved | 18718 | <https://github.com/browser-use/browser-use> | [official-docs/p2-browser-use-github.md](official-docs/p2-browser-use-github.md) |
+| p2-browser-use-quickstart | saved | 4862 | <https://docs.browser-use.com/cloud/quickstart> | [official-docs/p2-browser-use-quickstart.md](official-docs/p2-browser-use-quickstart.md) |
+| p2-browser-use-sessions | saved | 5211 | <https://docs.browser-use.com/guides/sessions> | [official-docs/p2-browser-use-sessions.md](official-docs/p2-browser-use-sessions.md) |
+| p2-browser-use-tools-basics | saved | 4154 | <https://docs.browser-use.com/customize/tools/basics> | [official-docs/p2-browser-use-tools-basics.md](official-docs/p2-browser-use-tools-basics.md) |
+| p3-langsmith-evaluation | saved | 12132 | <https://docs.langchain.com/langsmith/evaluation> | [official-docs/p3-langsmith-evaluation.md](official-docs/p3-langsmith-evaluation.md) |
+| p3-langsmith-evaluation-concepts | saved | 20653 | <https://docs.langchain.com/langsmith/evaluation-concepts> | [official-docs/p3-langsmith-evaluation-concepts.md](official-docs/p3-langsmith-evaluation-concepts.md) |
+| p3-langsmith-observability-concepts | saved | 5218 | <https://docs.langchain.com/langsmith/observability-concepts> | [official-docs/p3-langsmith-observability-concepts.md](official-docs/p3-langsmith-observability-concepts.md) |
+| p3-langsmith-tracing-quickstart | saved | 15527 | <https://docs.langchain.com/langsmith/observability-quickstart> | [official-docs/p3-langsmith-tracing-quickstart.md](official-docs/p3-langsmith-tracing-quickstart.md) |
+| p3-openai-agents-guardrails | saved | 27425 | <https://openai.github.io/openai-agents-python/guardrails/> | [official-docs/p3-openai-agents-guardrails.md](official-docs/p3-openai-agents-guardrails.md) |
+| p3-openai-agents-tracing | saved | 31157 | <https://openai.github.io/openai-agents-python/tracing/> | [official-docs/p3-openai-agents-tracing.md](official-docs/p3-openai-agents-tracing.md) |
+| p3-pydantic-built-in-evaluators | saved | 14241 | <https://ai.pydantic.dev/evals/evaluators/built-in/> | [official-docs/p3-pydantic-built-in-evaluators.md](official-docs/p3-pydantic-built-in-evaluators.md) |
+| p3-pydantic-evals | saved | 13105 | <https://ai.pydantic.dev/evals/> | [official-docs/p3-pydantic-evals.md](official-docs/p3-pydantic-evals.md) |
+| p3-pydantic-evals-quickstart | saved | 25823 | <https://ai.pydantic.dev/evals/quick-start/> | [official-docs/p3-pydantic-evals-quickstart.md](official-docs/p3-pydantic-evals-quickstart.md) |
+| p3-pydantic-span-based-evaluation | saved | 14309 | <https://ai.pydantic.dev/evals/evaluators/span-based/> | [official-docs/p3-pydantic-span-based-evaluation.md](official-docs/p3-pydantic-span-based-evaluation.md) |
+| p4-a2a-agent-discovery | saved | 9151 | <https://a2a-protocol.org/latest/topics/agent-discovery/> | [official-docs/p4-a2a-agent-discovery.md](official-docs/p4-a2a-agent-discovery.md) |
+| p4-a2a-docs | saved | 9840 | <https://a2a-protocol.org/latest/> | [official-docs/p4-a2a-docs.md](official-docs/p4-a2a-docs.md) |
+| p4-a2a-github | saved | 68775 | <https://github.com/a2aproject/A2A> | [official-docs/p4-a2a-github.md](official-docs/p4-a2a-github.md) |
+| p4-a2a-key-concepts | saved | 13909 | <https://a2a-protocol.org/latest/topics/key-concepts/> | [official-docs/p4-a2a-key-concepts.md](official-docs/p4-a2a-key-concepts.md) |
+| p4-a2a-python-api | saved | 74633 | <https://a2a-protocol.org/latest/sdk/python/api/a2a.html> | [official-docs/p4-a2a-python-api.md](official-docs/p4-a2a-python-api.md) |
+| p4-a2a-python-interact | saved | 6217 | <https://a2a-protocol.org/latest/tutorials/python/6-interact-with-server/> | [official-docs/p4-a2a-python-interact.md](official-docs/p4-a2a-python-interact.md) |
+| p4-a2a-specification | saved | 270424 | <https://a2a-protocol.org/latest/specification/> | [official-docs/p4-a2a-specification.md](official-docs/p4-a2a-specification.md) |
+| security-nist-ai-rmf | saved | 7031 | <https://www.nist.gov/itl/ai-risk-management-framework> | [official-docs/security-nist-ai-rmf.md](official-docs/security-nist-ai-rmf.md) |
+| security-openai-prompt-injections | saved | 9829 | <https://openai.com/safety/prompt-injections/> | [official-docs/security-openai-prompt-injections.md](official-docs/security-openai-prompt-injections.md) |
+| security-openai-resist-prompt-injection | saved | 15386 | <https://openai.com/index/designing-agents-to-resist-prompt-injection/> | [official-docs/security-openai-resist-prompt-injection.md](official-docs/security-openai-resist-prompt-injection.md) |
+| security-owasp-agentic-ai | saved | 8520 | <https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/> | [official-docs/security-owasp-agentic-ai.md](official-docs/security-owasp-agentic-ai.md) |
+| security-owasp-llm-top10 | saved | 22572 | <https://owasp.org/www-project-top-10-for-large-language-model-applications/> | [official-docs/security-owasp-llm-top10.md](official-docs/security-owasp-llm-top10.md) |
+| security-owasp-mcp-top10 | saved | 13886 | <https://owasp.org/www-project-mcp-top-10/> | [official-docs/security-owasp-mcp-top10.md](official-docs/security-owasp-mcp-top10.md) |
