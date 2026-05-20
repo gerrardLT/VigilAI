@@ -36,6 +36,35 @@ class DataManager(DataManagerActivityMixin, DataManagerAnalysisMixin, DataManage
         self._init_sources()
         self._init_analysis_templates()
 
+        # --- New async repository layer (use these for new code) ---
+        from db.connection_pool import SQLitePool
+        from repositories import (
+            AnalysisRepository,
+            DigestRepository,
+            OpportunityRepository,
+            SourceRepository,
+        )
+
+        self._pool = SQLitePool(self.db_path)
+        self.opportunity_repo = OpportunityRepository(self._pool)
+        self.analysis_repo = AnalysisRepository(self._pool)
+        self.digest_repo = DigestRepository(self._pool)
+        self.source_repo = SourceRepository(self._pool)
+
+    # ------------------------------------------------------------------
+    # Deprecation helper – wraps legacy sync calls with a warning
+    # ------------------------------------------------------------------
+    def _deprecated_sync(self, method_name: str):
+        """Emit a DeprecationWarning for callers still using sync DataManager methods."""
+        import warnings
+
+        warnings.warn(
+            f"DataManager.{method_name}() is deprecated. "
+            "Use async repository methods instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
     def _ensure_data_dir(self) -> None:
         data_dir = os.path.dirname(self.db_path)
         if data_dir:

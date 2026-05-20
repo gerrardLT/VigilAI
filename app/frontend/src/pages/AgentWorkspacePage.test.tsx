@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentWorkspacePage from './AgentWorkspacePage'
@@ -13,9 +14,26 @@ vi.mock('../services/agentPlatformApi', () => ({
   agentPlatformApi: agentApiMocks,
 }))
 
+vi.mock('../hooks/useStreamingTurn', () => ({
+  useStreamingTurn: () => ({
+    streaming: false,
+    fullText: '',
+    toolStatus: {},
+    error: null,
+    sessionId: null,
+    sendMessage: vi.fn(),
+    cancel: vi.fn(),
+  }),
+}))
+
 describe('AgentWorkspacePage', () => {
+  let queryClient: QueryClient
+
   beforeEach(() => {
     vi.clearAllMocks()
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
 
     agentApiMocks.createSession.mockImplementation(async (payload: { domain_type: string }) => ({
       id: payload.domain_type === 'product_selection' ? 'session-selection' : 'session-opportunity',
@@ -560,9 +578,11 @@ describe('AgentWorkspacePage', () => {
 
   it('creates an opportunity session and sends a user turn', async () => {
     render(
-      <MemoryRouter>
-        <AgentWorkspacePage />
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AgentWorkspacePage />
+        </MemoryRouter>
+      </QueryClientProvider>
     )
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Opportunity Prompt' }), {
@@ -601,9 +621,11 @@ describe('AgentWorkspacePage', () => {
 
   it('switches domains, clears prior state, and creates a product-selection session', async () => {
     render(
-      <MemoryRouter>
-        <AgentWorkspacePage />
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AgentWorkspacePage />
+        </MemoryRouter>
+      </QueryClientProvider>
     )
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Opportunity Prompt' }), {
@@ -618,9 +640,7 @@ describe('AgentWorkspacePage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Opportunity Intake Checklist')).not.toBeInTheDocument()
     })
-    expect(
-      screen.getByText('No conversation yet. Switch domains at any time to start a fresh session.')
-    ).toBeInTheDocument()
+    expect(screen.getByTestId('onboarding-guide')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Policy Mode'), {
       target: { value: 'strict' },

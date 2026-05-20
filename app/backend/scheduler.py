@@ -460,6 +460,19 @@ class TaskScheduler:
             # 执行爬取
             activities = await scraper.run()
             
+            # Cross-domain dedup check
+            from services.deduplicator import CrossDomainDeduplicator
+            dedup = CrossDomainDeduplicator(self.data_manager._pool)
+            deduped_activities = []
+            for activity in activities:
+                activity_dict = activity.model_dump() if hasattr(activity, 'model_dump') else {"title": getattr(activity, 'title', ''), "url": getattr(activity, 'url', '')}
+                duplicate = await dedup.check_duplicate(activity_dict)
+                if duplicate:
+                    logger.debug("Skipping duplicate activity: %s (matches %s in %s)", activity_dict.get("title", ""), duplicate.get("id"), duplicate.get("domain"))
+                else:
+                    deduped_activities.append(activity)
+            activities = deduped_activities
+            
             # 保存活动
             added_count = 0
             for activity in activities:

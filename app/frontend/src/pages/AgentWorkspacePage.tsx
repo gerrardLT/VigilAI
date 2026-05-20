@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorMessage } from '../components/ErrorMessage'
+import { OnboardingGuide } from '../components/OnboardingGuide'
+import { VirtualList } from '../components/VirtualList'
 import { useAgentSession } from '../hooks/useAgentSession'
+import { useStreamingTurn } from '../hooks/useStreamingTurn'
 import type {
   AgentArtifact,
   AgentDomainType,
@@ -123,6 +126,7 @@ export function AgentWorkspacePage() {
   const [draft, setDraft] = useState('')
   const { session, turns, artifacts, context, loading, sending, error, sendTurn, refreshContext } =
     useAgentSession(domainType, { policyMode, memoryScope })
+  const stream = useStreamingTurn()
   const copy = DOMAIN_COPY[domainType]
   const sessionState = context?.state ?? null
   const latestInsights = context?.insights.slice(0, 4) ?? []
@@ -141,7 +145,11 @@ export function AgentWorkspacePage() {
     }
 
     try {
-      await sendTurn(nextMessage)
+      if (session?.id) {
+        await stream.sendMessage(session.id, nextMessage)
+      } else {
+        await sendTurn(nextMessage)
+      }
       setDraft('')
     } catch {
       // Error state is already managed by the hook.
@@ -244,9 +252,26 @@ export function AgentWorkspacePage() {
 
           <div className="space-y-3" aria-live="polite">
             {turns.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-                {copy.emptyState}
-              </div>
+              <OnboardingGuide
+                domainType={domainType}
+                onSelectPrompt={(prompt) => setDraft(prompt)}
+              />
+            ) : turns.length > 50 ? (
+              <VirtualList
+                items={turns}
+                estimateSize={100}
+                className="h-[600px] overflow-auto"
+                renderItem={(turn) => (
+                  <article className={`rounded-2xl border px-4 py-4 ${getTurnTone(turn.role)}`}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {turn.role === 'assistant' ? 'Assistant' : 'User'}
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
+                      {turn.content}
+                    </p>
+                  </article>
+                )}
+              />
             ) : (
               turns.map(turn => (
                 <article
@@ -261,6 +286,17 @@ export function AgentWorkspacePage() {
                   </p>
                 </article>
               ))
+            )}
+
+            {stream.streaming && (
+              <div className="rounded-2xl border border-sky-100 bg-sky-50/70 px-4 py-4">
+                {Object.entries(stream.toolStatus).map(([tool, status]) => (
+                  <div key={tool} className="text-xs text-sky-600">
+                    {status === 'running' ? '🔧' : '✓'} {tool}
+                  </div>
+                ))}
+                {stream.fullText && <p className="mt-2 text-sm text-slate-700">{stream.fullText}</p>}
+              </div>
             )}
           </div>
 
@@ -278,8 +314,8 @@ export function AgentWorkspacePage() {
             </label>
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-slate-500">Switching domains starts a fresh shared agent session.</p>
-              <button type="submit" className="btn btn-primary" disabled={sending || !draft.trim()}>
-                {sending ? 'Sending...' : 'Send'}
+              <button type="submit" className="btn btn-primary" disabled={sending || stream.streaming || !draft.trim()}>
+                {stream.streaming ? 'Streaming...' : sending ? 'Sending...' : 'Send'}
               </button>
             </div>
           </form>
