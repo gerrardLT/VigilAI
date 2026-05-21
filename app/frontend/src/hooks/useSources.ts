@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../services/api'
 import type { Source } from '../types'
 
@@ -14,69 +14,69 @@ interface UseSourcesResult {
 
 /**
  * 信息源数据Hook
- * 封装信息源数据获取和刷新操作
+ * 使用 React Query 实现数据缓存和自动重新验证
  */
 export function useSources(): UseSourcesResult {
-  const [sources, setSources] = useState<Source[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState<string | null>(null)
+  const queryClient = useQueryClient()
 
-  const fetchSources = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const {
+    data: sources = [],
+    isLoading: loading,
+    error: queryError,
+    refetch: queryRefetch,
+  } = useQuery<Source[], Error>({
+    queryKey: ['sources'],
+    queryFn: ({ signal }) => api.getSources(signal),
+  })
 
+  const refreshSourceMutation = useMutation({
+    mutationFn: (sourceId: string) => api.refreshSource(sourceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] })
+    },
+  })
+
+  const refreshAllMutation = useMutation({
+    mutationFn: () => api.refreshAllSources(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] })
+    },
+  })
+
+  const refreshSource = async (sourceId: string): Promise<boolean> => {
     try {
-      const data = await api.getSources()
-      setSources(data)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '获取信息源列表失败'
-      setError(message)
-      setSources([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchSources()
-  }, [fetchSources])
-
-  const refreshSource = useCallback(async (sourceId: string): Promise<boolean> => {
-    setRefreshing(sourceId)
-    setError(null)
-
-    try {
-      await api.refreshSource(sourceId)
-      // 刷新后重新获取信息源状态
-      await fetchSources()
+      await refreshSourceMutation.mutateAsync(sourceId)
       return true
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '刷新信息源失败'
-      setError(message)
+    } catch {
       return false
-    } finally {
-      setRefreshing(null)
     }
-  }, [fetchSources])
+  }
 
-  const refreshAllSources = useCallback(async (): Promise<boolean> => {
-    setRefreshing('all')
-    setError(null)
-
+  const refreshAllSources = async (): Promise<boolean> => {
     try {
-      await api.refreshAllSources()
-      // 刷新后重新获取信息源状态
-      await fetchSources()
+      await refreshAllMutation.mutateAsync()
       return true
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '刷新所有信息源失败'
-      setError(message)
+    } catch {
       return false
-    } finally {
-      setRefreshing(null)
     }
-  }, [fetchSources])
+  }
+
+  const refetch = async (): Promise<void> => {
+    await queryRefetch()
+  }
+
+  // Determine which source is currently refreshing
+  const refreshing = refreshSourceMutation.isPending
+    ? (refreshSourceMutation.variables ?? null)
+    : refreshAllMutation.isPending
+      ? 'all'
+      : null
+
+  // Combine errors from query and mutations
+  const error = queryError?.message
+    ?? refreshSourceMutation.error?.message
+    ?? refreshAllMutation.error?.message
+    ?? null
 
   return {
     sources,
@@ -85,7 +85,7 @@ export function useSources(): UseSourcesResult {
     refreshing,
     refreshSource,
     refreshAllSources,
-    refetch: fetchSources,
+    refetch,
   }
 }
 

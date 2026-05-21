@@ -13,6 +13,12 @@ import sys
 
 import uvicorn
 
+try:
+    from settings import settings
+except Exception as exc:
+    print(f"Configuration validation failed: {exc}")
+    sys.exit(1)
+
 from agent_platform.artifact_service import ArtifactService
 from agent_platform.conversation_engine import ConversationEngine
 from agent_platform.memory_service import MemoryService
@@ -20,7 +26,7 @@ from agent_platform.reflection_service import ReflectionService
 from agent_platform.repository import AgentPlatformRepository
 from agent_platform.tool_router import ToolRouter, build_default_registry
 from api import app
-from config import API_HOST, API_PORT, APP_SCHEDULER_ENABLED, DATA_DIR, LOG_FORMAT, LOG_LEVEL
+from config import APP_SCHEDULER_ENABLED, DATA_DIR, LOG_FORMAT
 from data_manager import DataManager
 from reward_opportunity.repository import RewardOpportunityRepository
 from reward_opportunity.service import RewardOpportunityService
@@ -29,7 +35,7 @@ from scheduler import TaskScheduler
 os.makedirs(DATA_DIR, exist_ok=True)
 
 logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    level=getattr(logging, settings.log_level, logging.INFO),
     format=LOG_FORMAT,
     handlers=[
         logging.StreamHandler(sys.stdout),
@@ -83,7 +89,7 @@ class VigilAI:
             logger.info("Scheduler disabled via APP_SCHEDULER_ENABLED=false - manual refresh only")
 
         logger.info("VigilAI started successfully")
-        logger.info("API available at http://%s:%s", API_HOST, API_PORT)
+        logger.info("API available at http://%s:%s", settings.api_host, settings.api_port)
 
     async def _initial_refresh(self) -> None:
         try:
@@ -117,8 +123,8 @@ async def main() -> None:
 
         config = uvicorn.Config(
             app,
-            host=API_HOST,
-            port=API_PORT,
+            host=settings.api_host,
+            port=settings.api_port,
             log_level="info",
             access_log=True,
         )

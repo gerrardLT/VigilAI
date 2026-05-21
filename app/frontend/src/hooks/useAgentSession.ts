@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { agentPlatformApi } from '../services/agentPlatformApi'
 import type {
   AgentArtifact,
@@ -37,7 +38,6 @@ export function useAgentSession(
   const [artifacts, setArtifacts] = useState<AgentArtifact[]>([])
   const [context, setContext] = useState<AgentSessionContext | null>(null)
   const [loading, setLoading] = useState(false)
-  const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestScopeRef = useRef(0)
 
@@ -48,7 +48,6 @@ export function useAgentSession(
     setArtifacts([])
     setContext(null)
     setLoading(false)
-    setSending(false)
     setError(null)
   }, [domainType, config.memoryScope, config.policyMode])
 
@@ -113,38 +112,58 @@ export function useAgentSession(
     }
   }
 
-  const sendTurn = async (content: string) => {
-    const trimmed = content.trim()
-    if (!trimmed) {
-      return
-    }
-
-    const requestScope = requestScopeRef.current
-    setSending(true)
-    setError(null)
-
-    try {
+  const sendTurnMutation = useMutation({
+    mutationFn: async (content: string) => {
       const currentSession = session ?? (await createSession())
-      const reply = await agentPlatformApi.postTurn(currentSession.id, { content: trimmed })
+      const reply = await agentPlatformApi.postTurn(currentSession.id, { content })
       const nextContext = await agentPlatformApi.getSessionContext(currentSession.id)
-      if (requestScope === requestScopeRef.current) {
+      return { reply, nextContext }
+    },
+    onMutate: async (content: string) => {
+      // Save previous turns for rollback
+      const previousTurns = turns
+
+      // Optimistic update: append user message immediately
+      const optimisticTurn: AgentTurn = {
+        id: `optimistic-${Date.now()}`,
+        session_id: session?.id ?? '',
+        role: 'user',
+        content,
+        sequence_no: turns.length + 1,
+        tool_name: null,
+        tool_payload: {},
+        created_at: new Date().toISOString(),
+      }
+      setTurns(prev => [...prev, optimisticTurn])
+      setError(null)
+
+      return { previousTurns }
+    },
+    onSuccess: ({ reply, nextContext }) => {
+      if (requestScopeRef.current === requestScopeRef.current) {
         setSession(reply.session)
         setTurns(reply.turns)
         setArtifacts(reply.artifacts)
         setContext(nextContext)
       }
-    } catch (err) {
-      if (requestScope === requestScopeRef.current) {
-        const message = err instanceof Error ? err.message : 'Failed to send agent message'
-        setError(message)
+    },
+    onError: (err, _content, context) => {
+      // Roll back optimistic update
+      if (context?.previousTurns) {
+        setTurns(context.previousTurns)
       }
-      throw err
-    } finally {
-      if (requestScope === requestScopeRef.current) {
-        setSending(false)
-      }
+      const message = err instanceof Error ? err.message : 'Failed to send agent message'
+      setError(message)
+    },
+  })
+
+  const sendTurn = useCallback(async (content: string) => {
+    const trimmed = content.trim()
+    if (!trimmed) {
+      return
     }
-  }
+    await sendTurnMutation.mutateAsync(trimmed)
+  }, [sendTurnMutation])
 
   return {
     session,
@@ -152,7 +171,7 @@ export function useAgentSession(
     artifacts,
     context,
     loading,
-    sending,
+    sending: sendTurnMutation.isPending,
     error,
     createSession,
     refreshContext,
